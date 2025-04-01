@@ -10,17 +10,18 @@ CREATE TABLE student (
     phone VARCHAR(20),
     date_of_birth DATE,
     address TEXT,
-    school_id INTEGER,
-    program_id INTEGER,
+    school_id INTEGER NOT NULL,
+    program_id INTEGER NOT NULL,
     admission_year INTEGER NOT NULL,
     admission_date DATE,
-    current_semester_type VARCHAR(10) CHECK (current_semester_type IN ('fall', 'winter', 'summer')),
-    current_semester_year INTEGER,
-    cgpa DECIMAL(3,2),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (school_id) REFERENCES school(school_id) ON DELETE RESTRICT,
+    FOREIGN KEY (program_id) REFERENCES program(program_id) ON DELETE RESTRICT
 );
 
 -- Add an index on student_eno for faster lookups
 CREATE INDEX idx_student_eno ON student(student_eno);
+CREATE INDEX idx_student_school_id ON student(school_id);
+CREATE INDEX idx_student_program_id ON student(program_id);
