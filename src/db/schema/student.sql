@@ -13,7 +13,7 @@ CREATE TABLE student (
     school_id INTEGER,
     program_id INTEGER,
     admission_year INTEGER NOT NULL,
-    admission_date DATE NOT NULL,
+    admission_date DATE,
     current_semester_type VARCHAR(10) CHECK (current_semester_type IN ('fall', 'winter', 'summer')),
     current_semester_year INTEGER,
     cgpa DECIMAL(3,2),
