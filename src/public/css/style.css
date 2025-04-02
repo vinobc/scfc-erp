@@ -1,0 +1,125 @@
+body {
+  font-size: 0.875rem;
+  background-color: #f8f9fa;
+}
+
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  padding: 0;
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.1);
+  background-color: #212529;
+}
+
+.sidebar .nav-link {
+  color: #ced4da;
+  font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid transparent;
+}
+
+.sidebar .nav-link:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar .nav-link.active {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-left: 3px solid #0d6efd;
+}
+
+.sidebar-sticky {
+  position: relative;
+  top: 0;
+  height: calc(100vh - 48px);
+  padding-top: 0.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Main content */
+main {
+  padding-top: 1.5rem;
+}
+
+/* Card styling */
+.card {
+  border-radius: 5px;
+  box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+}
+
+.card .card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e3e6f0;
+}
+
+.border-left-primary {
+  border-left: 4px solid #4e73df;
+}
+
+.border-left-success {
+  border-left: 4px solid #1cc88a;
+}
+
+.border-left-info {
+  border-left: 4px solid #36b9cc;
+}
+
+.border-left-warning {
+  border-left: 4px solid #f6c23e;
+}
+
+/* Table styling */
+.table {
+  background-color: #fff;
+}
+
+/* Content pages */
+.content-page {
+  display: none;
+}
+
+.content-page.active {
+  display: block;
+}
+
+/* Utility classes */
+.user-info {
+  font-size: 0.9rem;
+}
+
+.text-gray-300 {
+  color: #dddfeb;
+}
+
+.text-gray-800 {
+  color: #5a5c69;
+}
+
+/* Action buttons in tables */
+.action-btn {
+  margin-right: 5px;
+}
+
+/* Status badge styling */
+.status-badge {
+  width: 70px;
+  text-align: center;
+}
+
+@media (max-width: 767.98px) {
+  .sidebar {
+    position: static;
+    height: auto;
+    box-shadow: none;
+  }
+
+  .sidebar-sticky {
+    height: auto;
+  }
+}
