@@ -17,33 +17,14 @@ const PORT = process.env.PORT || 3000;
 // Configure Helmet with custom CSP
 app.use(
   helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          "https://code.jquery.com",
-          "https://cdn.jsdelivr.net",
-          "https://cdnjs.cloudflare.com",
-        ],
-        styleSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          "https://cdn.jsdelivr.net",
-          "https://cdnjs.cloudflare.com",
-        ],
-        imgSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com"],
-        fontSrc: [
-          "'self'",
-          "https://cdn.jsdelivr.net",
-          "https://cdnjs.cloudflare.com",
-        ],
-        connectSrc: ["'self'"],
-      },
-    },
+    contentSecurityPolicy: false,  // Disable CSP
+    crossOriginOpenerPolicy: false, // Disable COOP
+    crossOriginEmbedderPolicy: false, // Disable COEP
+    crossOriginResourcePolicy: false, // Disable CORP
+    originAgentCluster: false // Disable OAC
   })
-); // Security headers with CSP configured
+);
+// Security headers with CSP configured
 app.use(cors()); // Enable CORS
 app.use(morgan("dev")); // Logging
 app.use(express.json()); // Parse JSON bodies

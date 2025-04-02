@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
-  },
-  "keywords": [],
+    "dev": "nodemon src/server.js",
+    "init-db": "node src/db/init-user.js && node src/db/init-school.js && node src/db/init-program.js && node src/db/init-semester.js && node src/db/init-student.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }, 
+ "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
