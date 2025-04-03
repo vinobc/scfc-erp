@@ -4,7 +4,13 @@ if (window.location.protocol === "https:") {
 }
 
 // Global variables
-const API_URL = 'http://35.200.229.112/api';
+window.API_URL =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? `${window.location.protocol}//${window.location.host}/api`
+    : "http://35.200.229.112/api";
+
+console.log("Global API URL set to:", window.API_URL);
 let currentUser = null;
 
 // DOM elements - will be initialized after DOM loads
@@ -16,65 +22,65 @@ let userRoleElement;
 let alertContainer;
 
 // Initialize the application
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
   console.log("main.js: DOM loaded");
-  
+
   // Initialize DOM elements
-  contentPages = document.querySelectorAll('.content-page');
-  navLinks = document.querySelectorAll('.nav-link');
-  pageTitle = document.getElementById('page-title');
-  userNameElement = document.getElementById('user-name');
-  userRoleElement = document.getElementById('user-role');
-  alertContainer = document.getElementById('alert-container');
-  
+  contentPages = document.querySelectorAll(".content-page");
+  navLinks = document.querySelectorAll(".nav-link");
+  pageTitle = document.getElementById("page-title");
+  userNameElement = document.getElementById("user-name");
+  userRoleElement = document.getElementById("user-role");
+  alertContainer = document.getElementById("alert-container");
+
   // Check if user is logged in
   checkAuthStatus();
-  
+
   // Setup navigation
   setupNavigation();
 
   // Setup logout functionality
-  const logoutLink = document.getElementById('logout-link');
+  const logoutLink = document.getElementById("logout-link");
   if (logoutLink) {
-    logoutLink.addEventListener('click', handleLogout);
+    logoutLink.addEventListener("click", handleLogout);
   }
 });
 
 // Authentication status check
 function checkAuthStatus() {
   console.log("main.js: Checking auth status");
-  const token = localStorage.getItem('token');
-  
+  const token = localStorage.getItem("token");
+
   if (!token) {
     showLoginModal();
     return;
   }
-  
+
   // Get current user info
-  fetch(`${API_URL}/auth/me`, {
+  fetch(`${window.API_URL}/auth/me`, {
     headers: {
-      'Authorization': token
-    }
+      Authorization: token,
+    },
   })
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Authentication failed');
-    }
-    return response.json();
-  })
-  .then(user => {
-    currentUser = user;
-    if (userNameElement) userNameElement.textContent = user.full_name;
-    if (userRoleElement) userRoleElement.textContent = user.role;
-    
-    // Load dashboard data
-    loadDashboardData();
-  })
-  .catch(error => {
-    console.error('Auth check error:', error);
-    localStorage.removeItem('token');
-    showLoginModal();
-  });
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Authentication failed");
+      }
+      return response.json();
+    })
+    .then((user) => {
+      currentUser = user;
+      if (userNameElement) userNameElement.textContent = user.full_name;
+      if (userRoleElement) userRoleElement.textContent = user.role;
+
+      // Load dashboard data
+      loadDashboardData();
+    })
+    .catch((error) => {
+      console.error("Auth check error:", error);
+      localStorage.removeItem("token");
+      showLoginModal();
+    });
 }
 
 // Setup navigation between pages
@@ -83,32 +89,32 @@ function setupNavigation() {
     console.error("Navigation links not found");
     return;
   }
-  
-  navLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
+
+  navLinks.forEach((link) => {
+    link.addEventListener("click", (e) => {
       e.preventDefault();
-      
-      const targetId = link.getAttribute('id');
-      if (targetId === 'logout-link') return;
-      
-      const targetPage = targetId.replace('-link', '-page');
-      
+
+      const targetId = link.getAttribute("id");
+      if (targetId === "logout-link") return;
+
+      const targetPage = targetId.replace("-link", "-page");
+
       // Update active navigation
-      navLinks.forEach(navLink => navLink.classList.remove('active'));
-      link.classList.add('active');
-      
+      navLinks.forEach((navLink) => navLink.classList.remove("active"));
+      link.classList.add("active");
+
       // Show target page
       const targetElement = document.getElementById(targetPage);
       if (targetElement) {
-        contentPages.forEach(page => page.classList.remove('active'));
-        targetElement.classList.add('active');
-        
+        contentPages.forEach((page) => page.classList.remove("active"));
+        targetElement.classList.add("active");
+
         // Update page title
         if (pageTitle) pageTitle.textContent = link.textContent.trim();
-        
+
         // Load page-specific data
-        if (targetPage === 'schools-page') {
-          if (typeof loadSchools === 'function') {
+        if (targetPage === "schools-page") {
+          if (typeof loadSchools === "function") {
             loadSchools();
           }
         }
@@ -123,34 +129,34 @@ function setupNavigation() {
 // Load dashboard data
 function loadDashboardData() {
   console.log("main.js: Loading dashboard data");
-  
+
   // Get the counter elements
-  const schoolsCount = document.getElementById('schools-count');
-  const programsCount = document.getElementById('programs-count');
-  const studentsCount = document.getElementById('students-count');
-  const coursesCount = document.getElementById('courses-count');
-  
+  const schoolsCount = document.getElementById("schools-count");
+  const programsCount = document.getElementById("programs-count");
+  const studentsCount = document.getElementById("students-count");
+  const coursesCount = document.getElementById("courses-count");
+
   // For now, just clear the counts
-  if (schoolsCount) schoolsCount.textContent = '...';
-  if (programsCount) programsCount.textContent = '...';
-  if (studentsCount) studentsCount.textContent = '...';
-  if (coursesCount) coursesCount.textContent = '...';
-  
+  if (schoolsCount) schoolsCount.textContent = "...";
+  if (programsCount) programsCount.textContent = "...";
+  if (studentsCount) studentsCount.textContent = "...";
+  if (coursesCount) coursesCount.textContent = "...";
+
   // Fetch schools count for dashboard
-  fetch(`${API_URL}/schools`, {
+  fetch(`${window.API_URL}/schools`, {
     headers: {
-      'Authorization': localStorage.getItem('token')
-    }
+      Authorization: localStorage.getItem("token"),
+    },
   })
-  .then(response => response.json())
-  .then(schools => {
-    if (schoolsCount) schoolsCount.textContent = schools.length;
-  })
-  .catch(error => {
-    console.error('Error fetching schools count:', error);
-    if (schoolsCount) schoolsCount.textContent = '?';
-  });
-  
+    .then((response) => response.json())
+    .then((schools) => {
+      if (schoolsCount) schoolsCount.textContent = schools.length;
+    })
+    .catch((error) => {
+      console.error("Error fetching schools count:", error);
+      if (schoolsCount) schoolsCount.textContent = "?";
+    });
+
   // Other counts would be fetched similarly once those APIs are implemented
 }
 
@@ -158,17 +164,16 @@ function loadDashboardData() {
 function handleLogout(e) {
   e.preventDefault();
   console.log("main.js: Logging out");
-  
+
   // Send logout request to the server
-  fetch(`${API_URL}/auth/logout`, {
-    method: 'POST',
+  fetch(`${window.API_URL}/auth/logout`, {
+    method: "POST",
     headers: {
-      'Authorization': localStorage.getItem('token')
-    }
-  })
-  .finally(() => {
+      Authorization: localStorage.getItem("token"),
+    },
+  }).finally(() => {
     // Clear local storage and redirect to login
-    localStorage.removeItem('token');
+    localStorage.removeItem("token");
     currentUser = null;
     showLoginModal();
   });
@@ -177,46 +182,46 @@ function handleLogout(e) {
 // Show login modal
 function showLoginModal() {
   console.log("main.js: Showing login modal");
-  const loginModalElement = document.getElementById('loginModal');
+  const loginModalElement = document.getElementById("loginModal");
   if (loginModalElement) {
     const loginModal = new bootstrap.Modal(loginModalElement);
     loginModal.show();
   } else {
-    console.error('Login modal element not found');
+    console.error("Login modal element not found");
   }
 }
 
 // Show alert message - made available globally
-window.showAlert = function(message, type = 'info', timeout = 5000) {
+window.showAlert = function (message, type = "info", timeout = 5000) {
   if (!alertContainer) {
-    console.error('Alert container not found');
+    console.error("Alert container not found");
     console.log(message); // Log the message instead
     return;
   }
-  
-  const alertDiv = document.createElement('div');
+
+  const alertDiv = document.createElement("div");
   alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
   alertDiv.innerHTML = `
     ${message}
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
   `;
-  
+
   alertContainer.appendChild(alertDiv);
-  
+
   if (timeout) {
     setTimeout(() => {
-      alertDiv.classList.remove('show');
+      alertDiv.classList.remove("show");
       setTimeout(() => alertDiv.remove(), 150);
     }, timeout);
   }
 };
 
 // Format date string - made available globally
-window.formatDate = function(dateString) {
+window.formatDate = function (dateString) {
   const date = new Date(dateString);
-  return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   }).format(date);
 };

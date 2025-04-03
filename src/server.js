@@ -4,6 +4,7 @@ const morgan = require("morgan");
 const helmet = require("helmet");
 const path = require("path");
 require("dotenv").config();
+const semesterRoutes = require("./routes/semester.routes");
 
 // Import routes
 const authRoutes = require("./routes/auth.routes");
@@ -17,11 +18,11 @@ const PORT = process.env.PORT || 3000;
 // Configure Helmet with custom CSP
 app.use(
   helmet({
-    contentSecurityPolicy: false,  // Disable CSP
+    contentSecurityPolicy: false, // Disable CSP
     crossOriginOpenerPolicy: false, // Disable COOP
     crossOriginEmbedderPolicy: false, // Disable COEP
     crossOriginResourcePolicy: false, // Disable CORP
-    originAgentCluster: false // Disable OAC
+    originAgentCluster: false, // Disable OAC
   })
 );
 // Security headers with CSP configured
@@ -36,6 +37,8 @@ app.use(express.static(path.join(__dirname, "public")));
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/schools", schoolRoutes);
+console.log("Registering semesters routes at /api/semesters");
+app.use("/api/semesters", semesterRoutes);
 
 // Root route
 app.get("/", (req, res) => {
