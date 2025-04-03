@@ -225,9 +225,11 @@ exports.toggleSchoolStatus = async (req, res) => {
 };
 
 // Delete school
+// Delete school
 exports.deleteSchool = async (req, res) => {
   try {
     const schoolId = req.params.id;
+    console.log(`Delete request for school ID: ${schoolId}`);
 
     // Check if school exists
     const schoolExists = await db.query(
@@ -235,7 +237,10 @@ exports.deleteSchool = async (req, res) => {
       [schoolId]
     );
 
+    console.log(`School exists query result:`, schoolExists.rows[0]);
+
     if (parseInt(schoolExists.rows[0].count) === 0) {
+      console.log(`School with ID ${schoolId} not found in database`);
       return res.status(404).json({ message: "School not found" });
     }
 
@@ -245,15 +250,26 @@ exports.deleteSchool = async (req, res) => {
       [schoolId]
     );
 
+    console.log(
+      `Programs count with school_id ${schoolId}:`,
+      programsCount.rows[0]
+    );
+
     const studentsCount = await db.query(
       "SELECT COUNT(*) FROM student WHERE school_id = $1",
       [schoolId]
+    );
+
+    console.log(
+      `Students count with school_id ${schoolId}:`,
+      studentsCount.rows[0]
     );
 
     if (
       parseInt(programsCount.rows[0].count) > 0 ||
       parseInt(studentsCount.rows[0].count) > 0
     ) {
+      console.log(`Cannot delete school ${schoolId} due to dependencies`);
       return res.status(409).json({
         message: "Cannot delete school with existing programs or students",
         programsCount: parseInt(programsCount.rows[0].count),
@@ -262,6 +278,7 @@ exports.deleteSchool = async (req, res) => {
     }
 
     // Delete school
+    console.log(`Executing DELETE for school_id ${schoolId}`);
     await db.query("DELETE FROM school WHERE school_id = $1", [schoolId]);
 
     res.status(200).json({
@@ -269,6 +286,11 @@ exports.deleteSchool = async (req, res) => {
     });
   } catch (error) {
     console.error("Delete school error:", error);
-    res.status(500).json({ message: "Server error while deleting school" });
+    res
+      .status(500)
+      .json({
+        message: "Server error while deleting school",
+        error: error.message,
+      });
   }
 };
