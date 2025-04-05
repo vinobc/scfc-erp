@@ -4,11 +4,12 @@ const morgan = require("morgan");
 const helmet = require("helmet");
 const path = require("path");
 require("dotenv").config();
-const semesterRoutes = require("./routes/semester.routes");
 
 // Import routes
 const authRoutes = require("./routes/auth.routes");
 const schoolRoutes = require("./routes/school.routes");
+const semesterRoutes = require("./routes/semester.routes");
+const programRoutes = require("./routes/program.routes");
 
 // Initialize express app
 const app = express();
@@ -39,6 +40,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/schools", schoolRoutes);
 console.log("Registering semesters routes at /api/semesters");
 app.use("/api/semesters", semesterRoutes);
+console.log("Registering programs routes at /api/programs");
+app.use("/api/programs", programRoutes);
 
 // Root route
 app.get("/", (req, res) => {
