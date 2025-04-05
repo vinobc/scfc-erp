@@ -14,7 +14,6 @@ CREATE TABLE program (
     department_name_short VARCHAR(20),
     specialization_name_long VARCHAR(100),
     specialization_name_short VARCHAR(20),
-    program_name VARCHAR(255) NOT NULL,
     type VARCHAR(10) NOT NULL CHECK (type IN ('UG', 'PG', 'RESEARCH')),
     description TEXT,
     is_active BOOLEAN DEFAULT TRUE,
