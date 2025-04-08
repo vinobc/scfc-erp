@@ -116,9 +116,9 @@ exports.createProgram = async (req, res) => {
     }
 
     // Validate duration_years
-    if (![2, 3, 4, 5].includes(Number(duration_years))) {
+    if (![1, 2, 3, 4, 5].includes(Number(duration_years))) {
       return res.status(400).json({
-        message: "Duration years must be one of: 2, 3, 4, 5",
+        message: "Duration years must be one of: 1, 2, 3, 4, 5",
       });
     }
 
@@ -215,9 +215,9 @@ exports.updateProgram = async (req, res) => {
     }
 
     // Validate duration_years
-    if (![2, 3, 4, 5].includes(Number(duration_years))) {
+    if (![1, 2, 3, 4, 5].includes(Number(duration_years))) {
       return res.status(400).json({
-        message: "Duration years must be one of: 2, 3, 4, 5",
+        message: "Duration years must be one of: 1, 2, 3, 4, 5",
       });
     }
 

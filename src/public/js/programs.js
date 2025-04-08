@@ -290,7 +290,9 @@ function renderPrograms(programs) {
         <small>${program.program_name_long}</small>
       </td>
       <td>${program.type}</td>
-      <td>${program.duration_years} years</td>
+      <td>${program.duration_years} ${
+      program.duration_years === 1 ? "year" : "years"
+    }</td>
       <td>${program.total_credits}</td>
       <td>
         <span class="badge ${
