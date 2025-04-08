@@ -6,7 +6,7 @@ CREATE TABLE program (
     program_id SERIAL PRIMARY KEY,
     program_code VARCHAR(20) NOT NULL UNIQUE,
     school_id INTEGER NOT NULL,
-    duration_years INTEGER NOT NULL CHECK (duration_years IN (2, 3, 4, 5)),
+    duration_years INTEGER NOT NULL CHECK (duration_years IN (1, 2, 3, 4, 5)),
     total_credits INTEGER NOT NULL,
     program_name_long VARCHAR(100) NOT NULL,
     program_name_short VARCHAR(100) NOT NULL,
