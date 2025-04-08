@@ -60,7 +60,9 @@ async function generateProgramCode(schoolCode, type) {
     if (result.rows.length > 0) {
       // Extract the number part
       const currentCode = result.rows[0].program_code;
-      const match = currentCode.match(/-(\d+)$/);
+      const match = currentCode.match(
+        new RegExp(`${schoolCode}-${type}(\\d+)`)
+      );
       if (match && match[1]) {
         nextNumber = parseInt(match[1]) + 1;
       }
