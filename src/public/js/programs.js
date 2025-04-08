@@ -280,6 +280,7 @@ function renderPrograms(programs) {
 
   // Add each program to the table
   filteredPrograms.forEach((program) => {
+    console.log("Program duration:", program.duration_years, "Type:", typeof program.duration_years);
     const row = document.createElement("tr");
 
     row.innerHTML = `
@@ -290,7 +291,7 @@ function renderPrograms(programs) {
         <small>${program.program_name_long}</small>
       </td>
       <td>${program.type}</td>
-      <td>${program.duration_years} ${
+ <td>${program.duration_years} ${
       program.duration_years === 1 ? "year" : "years"
     }</td>
       <td>${program.total_credits}</td>
