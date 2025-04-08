@@ -9,7 +9,7 @@ CREATE TABLE program (
     duration_years INTEGER NOT NULL CHECK (duration_years IN (2, 3, 4, 5)),
     total_credits INTEGER NOT NULL,
     program_name_long VARCHAR(100) NOT NULL,
-    program_name_short VARCHAR(20) NOT NULL,
+    program_name_short VARCHAR(100) NOT NULL,
     department_name_long VARCHAR(100),
     department_name_short VARCHAR(20),
     specialization_name_long VARCHAR(100),
