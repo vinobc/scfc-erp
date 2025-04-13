@@ -77,6 +77,13 @@ exports.createVenue = async (req, res) => {
     });
   } catch (error) {
     console.error("Create venue error:", error);
+    // Check for unique constraint violation
+    if (error.code === "23505" && error.constraint === "venue_venue_key") {
+      return res.status(409).json({
+        message:
+          "A venue with this name already exists. Please use a different name.",
+      });
+    }
     res.status(500).json({ message: "Server error while creating venue" });
   }
 };
@@ -140,6 +147,13 @@ exports.updateVenue = async (req, res) => {
     });
   } catch (error) {
     console.error("Update venue error:", error);
+    // Check for unique constraint violation
+    if (error.code === "23505" && error.constraint === "venue_venue_key") {
+      return res.status(409).json({
+        message:
+          "A venue with this name already exists. Please use a different name.",
+      });
+    }
     res.status(500).json({ message: "Server error while updating venue" });
   }
 };

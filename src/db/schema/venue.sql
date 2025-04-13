@@ -5,7 +5,7 @@ DROP TABLE IF EXISTS venue CASCADE;
 CREATE TABLE venue (
     venue_id SERIAL PRIMARY KEY,
     assigned_to_school VARCHAR(10),
-    venue VARCHAR(10) NOT NULL,
+    venue VARCHAR(10) NOT NULL UNIQUE,
     capacity INTEGER NOT NULL,
     infra_type VARCHAR(20) NOT NULL,
     seats INTEGER,
