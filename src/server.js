@@ -11,6 +11,7 @@ const schoolRoutes = require("./routes/school.routes");
 const semesterRoutes = require("./routes/semester.routes");
 const programRoutes = require("./routes/program.routes");
 const venueRoutes = require("./routes/venue.routes");
+const facultyRoutes = require("./routes/faculty.routes");
 
 // Initialize express app
 const app = express();
@@ -45,6 +46,8 @@ console.log("Registering programs routes at /api/programs");
 app.use("/api/programs", programRoutes);
 console.log("Registering venues routes at /api/venues");
 app.use("/api/venues", venueRoutes);
+console.log("Registering faculty routes at /api/faculty");
+app.use("/api/faculty", facultyRoutes);
 
 // Root route
 app.get("/", (req, res) => {
