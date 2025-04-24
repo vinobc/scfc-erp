@@ -5,7 +5,11 @@ const XLSX = require("xlsx");
 exports.getAllStudents = async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT * FROM student ORDER BY enrollment_no`,
+      `SELECT s.*, p.program_name_short, sc.school_short_name 
+       FROM student s
+       JOIN program p ON s.program_id = p.program_id
+       JOIN school sc ON s.school_id = sc.school_id
+       ORDER BY s.enrollment_no`,
       []
     );
 
@@ -22,7 +26,11 @@ exports.getStudentByEnrollment = async (req, res) => {
     const enrollmentNo = req.params.enrollment_no;
 
     const result = await db.query(
-      `SELECT * FROM student WHERE enrollment_no = $1`,
+      `SELECT s.*, p.program_name_short, sc.school_short_name 
+       FROM student s
+       JOIN program p ON s.program_id = p.program_id
+       JOIN school sc ON s.school_id = sc.school_id
+       WHERE s.enrollment_no = $1`,
       [enrollmentNo]
     );
 
@@ -68,29 +76,31 @@ exports.createStudent = async (req, res) => {
       });
     }
 
-    // Check if the program exists
+    // Check if the program exists and get its ID
     const programResult = await db.query(
-      "SELECT COUNT(*) FROM program WHERE program_name_short = $1",
+      "SELECT program_id FROM program WHERE program_name_short = $1",
       [program_name]
     );
 
-    if (parseInt(programResult.rows[0].count) === 0) {
+    if (programResult.rows.length === 0) {
       return res.status(404).json({
-        message: "Program not found",
+        message: `Program with name '${program_name}' not found`,
       });
     }
+    const program_id = programResult.rows[0].program_id;
 
-    // Check if the school exists
+    // Check if the school exists and get its ID
     const schoolResult = await db.query(
-      "SELECT COUNT(*) FROM school WHERE school_short_name = $1",
+      "SELECT school_id FROM school WHERE school_short_name = $1",
       [school_name]
     );
 
-    if (parseInt(schoolResult.rows[0].count) === 0) {
+    if (schoolResult.rows.length === 0) {
       return res.status(404).json({
-        message: "School not found",
+        message: `School with name '${school_name}' not found`,
       });
     }
+    const school_id = schoolResult.rows[0].school_id;
 
     // Check if enrollment_no already exists
     const enrollmentCheck = await db.query(
@@ -119,13 +129,15 @@ exports.createStudent = async (req, res) => {
     // Insert new student
     const result = await db.query(
       `INSERT INTO student 
-       (enrollment_no, user_id, student_name, program_name, school_name, year_admitted, email_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       (enrollment_no, user_id, student_name, program_id, school_id, program_name, school_name, year_admitted, email_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
        RETURNING *`,
       [
         enrollment_no,
         user_id,
         student_name,
+        program_id,
+        school_id,
         program_name,
         school_name,
         year_admitted,
@@ -133,9 +145,19 @@ exports.createStudent = async (req, res) => {
       ]
     );
 
+    // Get the full student data with joined program and school info
+    const studentData = await db.query(
+      `SELECT s.*, p.program_name_short, sc.school_short_name 
+       FROM student s
+       JOIN program p ON s.program_id = p.program_id
+       JOIN school sc ON s.school_id = sc.school_id
+       WHERE s.enrollment_no = $1`,
+      [enrollment_no]
+    );
+
     res.status(201).json({
       message: "Student created successfully",
-      student: result.rows[0],
+      student: studentData.rows[0],
     });
   } catch (error) {
     console.error("Create student error:", error);
@@ -169,29 +191,31 @@ exports.updateStudent = async (req, res) => {
       });
     }
 
-    // Check if the program exists
+    // Check if the program exists and get its ID
     const programResult = await db.query(
-      "SELECT COUNT(*) FROM program WHERE program_name_short = $1",
+      "SELECT program_id FROM program WHERE program_name_short = $1",
       [program_name]
     );
 
-    if (parseInt(programResult.rows[0].count) === 0) {
+    if (programResult.rows.length === 0) {
       return res.status(404).json({
-        message: "Program not found",
+        message: `Program with name '${program_name}' not found`,
       });
     }
+    const program_id = programResult.rows[0].program_id;
 
-    // Check if the school exists
+    // Check if the school exists and get its ID
     const schoolResult = await db.query(
-      "SELECT COUNT(*) FROM school WHERE school_short_name = $1",
+      "SELECT school_id FROM school WHERE school_short_name = $1",
       [school_name]
     );
 
-    if (parseInt(schoolResult.rows[0].count) === 0) {
+    if (schoolResult.rows.length === 0) {
       return res.status(404).json({
-        message: "School not found",
+        message: `School with name '${school_name}' not found`,
       });
     }
+    const school_id = schoolResult.rows[0].school_id;
 
     // Check if student exists
     const studentExists = await db.query(
@@ -220,16 +244,20 @@ exports.updateStudent = async (req, res) => {
       `UPDATE student 
        SET user_id = $1, 
            student_name = $2, 
-           program_name = $3, 
-           school_name = $4, 
-           year_admitted = $5, 
-           email_id = $6,
+           program_id = $3, 
+           school_id = $4, 
+           program_name = $5, 
+           school_name = $6, 
+           year_admitted = $7, 
+           email_id = $8,
            updated_at = CURRENT_TIMESTAMP
-       WHERE enrollment_no = $7
+       WHERE enrollment_no = $9
        RETURNING *`,
       [
         user_id,
         student_name,
+        program_id,
+        school_id,
         program_name,
         school_name,
         year_admitted,
@@ -238,9 +266,19 @@ exports.updateStudent = async (req, res) => {
       ]
     );
 
+    // Get the full student data with joined program and school info
+    const studentData = await db.query(
+      `SELECT s.*, p.program_name_short, sc.school_short_name 
+       FROM student s
+       JOIN program p ON s.program_id = p.program_id
+       JOIN school sc ON s.school_id = sc.school_id
+       WHERE s.enrollment_no = $1`,
+      [enrollmentNo]
+    );
+
     res.status(200).json({
       message: "Student updated successfully",
-      student: result.rows[0],
+      student: studentData.rows[0],
     });
   } catch (error) {
     console.error("Update student error:", error);
@@ -325,28 +363,37 @@ exports.importStudents = async (req, res) => {
       errors: [],
     };
 
+    // Pre-load all program and school mappings for faster processing
+    const programsResult = await db.query(
+      "SELECT program_id, program_name_short FROM program"
+    );
+    const programMap = {};
+    programsResult.rows.forEach((row) => {
+      programMap[row.program_name_short] = row.program_id;
+    });
+
+    const schoolsResult = await db.query(
+      "SELECT school_id, school_short_name FROM school"
+    );
+    const schoolMap = {};
+    schoolsResult.rows.forEach((row) => {
+      schoolMap[row.school_short_name] = row.school_id;
+    });
+
     // Process each row
     for (let i = 0; i < data.length; i++) {
       try {
         const row = data[i];
 
-        // Check if the program exists
-        const programResult = await db.query(
-          "SELECT COUNT(*) FROM program WHERE program_name_short = $1",
-          [row.program_name]
-        );
-
-        if (parseInt(programResult.rows[0].count) === 0) {
+        // Look up program ID
+        const programId = programMap[row.program_name];
+        if (!programId) {
           throw new Error(`Program '${row.program_name}' not found`);
         }
 
-        // Check if the school exists
-        const schoolResult = await db.query(
-          "SELECT COUNT(*) FROM school WHERE school_short_name = $1",
-          [row.school_name]
-        );
-
-        if (parseInt(schoolResult.rows[0].count) === 0) {
+        // Look up school ID
+        const schoolId = schoolMap[row.school_name];
+        if (!schoolId) {
           throw new Error(`School '${row.school_name}' not found`);
         }
 
@@ -377,12 +424,14 @@ exports.importStudents = async (req, res) => {
         // Insert the student
         await db.query(
           `INSERT INTO student 
-           (enrollment_no, user_id, student_name, program_name, school_name, year_admitted, email_id) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+           (enrollment_no, user_id, student_name, program_id, school_id, program_name, school_name, year_admitted, email_id) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             row.enrollment_no,
             row.user_id,
             row.student_name,
+            programId,
+            schoolId,
             row.program_name,
             row.school_name,
             row.year_admitted,
