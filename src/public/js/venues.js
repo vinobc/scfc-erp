@@ -15,6 +15,12 @@ let venueInfraTypeInput;
 let venueSeatsInput;
 let venueIsActiveInput;
 
+// New infrastructure type elements
+let venueInfraTypeSelect;
+let toggleCustomInfraTypeBtn;
+let clearCustomInfraTypesBtn;
+let isCustomInfraType = false;
+
 // Modal elements
 let venueModal;
 let venueDeleteModal;
@@ -43,6 +49,34 @@ document.addEventListener("DOMContentLoaded", () => {
   venueInfraTypeInput = document.getElementById("venue-infra-type-field");
   venueSeatsInput = document.getElementById("venue-seats-field");
   venueIsActiveInput = document.getElementById("venue-is-active-field");
+
+  // Initialize new infrastructure type elements
+  venueInfraTypeSelect = document.getElementById("venue-infra-type-select");
+  toggleCustomInfraTypeBtn = document.getElementById(
+    "toggle-custom-infra-type"
+  );
+  clearCustomInfraTypesBtn = document.getElementById(
+    "clear-custom-infra-types"
+  );
+
+  // Add event listener for the toggle button
+  if (toggleCustomInfraTypeBtn) {
+    toggleCustomInfraTypeBtn.addEventListener("click", toggleCustomInfraType);
+  }
+
+  // Add event listener for the clear custom types button
+  if (clearCustomInfraTypesBtn) {
+    clearCustomInfraTypesBtn.addEventListener("click", clearCustomInfraTypes);
+  }
+
+  // Add event listener for the select dropdown
+  if (venueInfraTypeSelect) {
+    venueInfraTypeSelect.addEventListener("change", function () {
+      if (venueInfraTypeInput) {
+        venueInfraTypeInput.value = this.value;
+      }
+    });
+  }
 
   // Initialize modal elements
   venueModalLabel = document.getElementById("venueModalLabel");
@@ -102,6 +136,105 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+// Toggle between dropdown and custom input for infrastructure type
+function toggleCustomInfraType() {
+  isCustomInfraType = !isCustomInfraType;
+
+  if (venueInfraTypeSelect) {
+    venueInfraTypeSelect.style.display = isCustomInfraType ? "none" : "block";
+  }
+
+  if (venueInfraTypeInput) {
+    venueInfraTypeInput.style.display = isCustomInfraType ? "block" : "none";
+  }
+
+  if (toggleCustomInfraTypeBtn) {
+    toggleCustomInfraTypeBtn.textContent = isCustomInfraType
+      ? "Select"
+      : "Custom";
+  }
+
+  // If switching to dropdown, update it with the current input value
+  if (!isCustomInfraType && venueInfraTypeInput && venueInfraTypeInput.value) {
+    // Check if the value exists in the dropdown
+    const exists = Array.from(venueInfraTypeSelect.options).some(
+      (option) => option.value === venueInfraTypeInput.value
+    );
+
+    // If it doesn't exist, add it
+    if (!exists && venueInfraTypeInput.value.trim() !== "") {
+      const option = document.createElement("option");
+      option.value = venueInfraTypeInput.value;
+      option.text = venueInfraTypeInput.value;
+      venueInfraTypeSelect.add(option);
+    }
+
+    venueInfraTypeSelect.value = venueInfraTypeInput.value;
+  }
+}
+
+// Clear custom infrastructure types from the dropdown
+function clearCustomInfraTypes() {
+  if (venueInfraTypeSelect) {
+    // Keep only the default option and predefined infrastructure types
+    const defaultOption = venueInfraTypeSelect.options[0]; // The "Select or enter custom type..." option
+    const predefinedOptions = [
+      "Physics Lab",
+      "Chemistry Lab",
+      "Electronics Lab",
+      "Computer Lab",
+      "Classroom",
+      "Design Lab",
+      "Moot Court",
+      "Seminar Hall",
+      "Studio",
+    ];
+
+    // Clear all options
+    venueInfraTypeSelect.innerHTML = "";
+
+    // Add back the default option
+    venueInfraTypeSelect.add(defaultOption);
+
+    // Add back predefined options
+    predefinedOptions.forEach((type) => {
+      const option = document.createElement("option");
+      option.value = type;
+      option.text = type;
+      venueInfraTypeSelect.add(option);
+    });
+
+    // Reset the selected value to default
+    venueInfraTypeSelect.value = "";
+
+    // Also reset the input field
+    if (venueInfraTypeInput) {
+      venueInfraTypeInput.value = "";
+    }
+
+    showAlert("Custom infrastructure types have been cleared", "info");
+  }
+}
+
+// Reset infrastructure type form elements
+function resetInfraTypeFields() {
+  isCustomInfraType = false;
+
+  if (venueInfraTypeSelect) {
+    venueInfraTypeSelect.style.display = "block";
+    venueInfraTypeSelect.value = "";
+  }
+
+  if (venueInfraTypeInput) {
+    venueInfraTypeInput.style.display = "none";
+    venueInfraTypeInput.value = "";
+  }
+
+  if (toggleCustomInfraTypeBtn) {
+    toggleCustomInfraTypeBtn.textContent = "Custom";
+  }
+}
 
 // Load all venues from the API
 function loadVenues() {
@@ -310,6 +443,9 @@ function handleAddVenue() {
   if (venueForm) venueForm.reset();
   if (venueIdInput) venueIdInput.value = "";
 
+  // Reset infrastructure type fields
+  resetInfraTypeFields();
+
   // Update modal title
   if (venueModalLabel) venueModalLabel.textContent = "Add New Venue";
 
@@ -342,7 +478,35 @@ function openEditVenueModal(venueId) {
       if (venueSchoolInput)
         venueSchoolInput.value = venue.assigned_to_school || "";
       if (venueCapacityInput) venueCapacityInput.value = venue.capacity;
+
+      // Handle infrastructure type
       if (venueInfraTypeInput) venueInfraTypeInput.value = venue.infra_type;
+
+      // Check if the value exists in dropdown options
+      let existsInDropdown = false;
+      if (venueInfraTypeSelect) {
+        existsInDropdown = Array.from(venueInfraTypeSelect.options).some(
+          (option) => option.value === venue.infra_type
+        );
+
+        if (!existsInDropdown && venue.infra_type) {
+          // Add it to the dropdown
+          const option = document.createElement("option");
+          option.value = venue.infra_type;
+          option.text = venue.infra_type;
+          venueInfraTypeSelect.add(option);
+        }
+
+        venueInfraTypeSelect.value = venue.infra_type;
+      }
+
+      // Show dropdown by default
+      isCustomInfraType = false;
+      if (venueInfraTypeSelect) venueInfraTypeSelect.style.display = "block";
+      if (venueInfraTypeInput) venueInfraTypeInput.style.display = "none";
+      if (toggleCustomInfraTypeBtn)
+        toggleCustomInfraTypeBtn.textContent = "Custom";
+
       if (venueSeatsInput) venueSeatsInput.value = venue.seats || "";
       if (venueIsActiveInput) venueIsActiveInput.checked = venue.is_active;
 
@@ -397,7 +561,13 @@ function handleSaveVenue() {
   const venueName = venueNameInput ? venueNameInput.value.trim() : "";
   const venueSchool = venueSchoolInput ? venueSchoolInput.value.trim() : "";
   const capacity = venueCapacityInput ? venueCapacityInput.value : "";
-  const infraType = venueInfraTypeInput ? venueInfraTypeInput.value.trim() : "";
+  const infraType = isCustomInfraType
+    ? venueInfraTypeInput
+      ? venueInfraTypeInput.value.trim()
+      : ""
+    : venueInfraTypeSelect
+    ? venueInfraTypeSelect.value.trim()
+    : "";
   const seats = venueSeatsInput ? venueSeatsInput.value : "";
   const isActive = venueIsActiveInput ? venueIsActiveInput.checked : true;
 
