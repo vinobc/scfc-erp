@@ -1312,15 +1312,47 @@
                 <label for="venue-infra-type-field" class="form-label"
                   >Infrastructure Type *</label
                 >
-                <input
-                  type="text"
-                  class="form-control"
-                  id="venue-infra-type-field"
-                  maxlength="20"
-                  required
-                />
+                <div class="input-group">
+                  <select class="form-select" id="venue-infra-type-select">
+                    <option value="">Select or enter custom type...</option>
+                    <option value="Physics Lab">Physics Lab</option>
+                    <option value="Chemistry Lab">Chemistry Lab</option>
+                    <option value="Electronics Lab">Electronics Lab</option>
+                    <option value="Computer Lab">Computer Lab</option>
+                    <option value="Classroom">Classroom</option>
+                    <option value="Design Lab">Design Lab</option>
+                    <option value="Moot Court">Moot Court</option>
+                    <option value="Seminar Hall">Seminar Hall</option>
+                    <option value="Studio">Studio</option>
+                  </select>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="venue-infra-type-field"
+                    maxlength="20"
+                    required
+                    style="display: none"
+                  />
+                  <button
+                    class="btn btn-outline-secondary"
+                    type="button"
+                    id="toggle-custom-infra-type"
+                  >
+                    Custom
+                  </button>
+                  <button
+                    class="btn btn-outline-danger"
+                    type="button"
+                    id="clear-custom-infra-types"
+                  >
+                    Reset
+                  </button>
+                </div>
                 <div class="form-text">
-                  Type of venue (classroom, lab, etc., max 20 characters).
+                  Select a venue type or enter a custom type (max 20
+                  characters). Custom types are saved to the dropdown. "Reset"
+                  button clears all custom infrastructure types from the
+                  dropdown.
                 </div>
               </div>
               <div class="mb-3">
