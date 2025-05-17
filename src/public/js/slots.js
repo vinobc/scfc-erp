@@ -67,6 +67,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize view slot elements
   viewSlotYearSelect = document.getElementById("view-slot-year");
   viewSlotSemesterSelect = document.getElementById("view-slot-semester");
+  console.log("viewSlotYearSelect element:", viewSlotYearSelect);
+  console.log("viewSlotSemesterSelect element:", viewSlotSemesterSelect);
   viewTimetableBtn = document.getElementById("view-timetable-btn");
   timetableContainer = document.getElementById("timetable-container");
   timetableTitle = document.getElementById("timetable-title");
@@ -192,6 +194,38 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const masterSlotViewLink = document.querySelector(
+    "#master-slot-link + ul .nav-item:last-child .nav-link"
+  );
+  if (masterSlotViewLink) {
+    masterSlotViewLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      console.log("Master slot view link clicked from sidebar");
+
+      // Show view slot page
+      document.querySelectorAll(".content-page").forEach((page) => {
+        page.classList.remove("active");
+      });
+      document.getElementById("view-slot-page").classList.add("active");
+
+      // Update page title
+      document.getElementById("page-title").textContent =
+        "View Master Slot TimeTable";
+
+      // Re-initialize the elements
+      viewSlotYearSelect = document.getElementById("view-slot-year");
+      viewSlotSemesterSelect = document.getElementById("view-slot-semester");
+
+      console.log("Elements found:", {
+        yearSelect: viewSlotYearSelect,
+        semesterSelect: viewSlotSemesterSelect,
+      });
+
+      // Load academic years for the dropdown
+      populateAcademicYears();
+    });
+  }
+
   if (viewSlotLink) {
     viewSlotLink.addEventListener("click", () => {
       // Show view slot page
@@ -208,6 +242,69 @@ document.addEventListener("DOMContentLoaded", () => {
       populateAcademicYears();
     });
   }
+  document.addEventListener("click", (e) => {
+    // Check if clicked element is the view slot link
+    if (
+      e.target.id === "view-slot-link" ||
+      e.target.closest("#view-slot-link") ||
+      (e.target.textContent &&
+        e.target.textContent.includes("View") &&
+        e.target.closest("#master-slot-link"))
+    ) {
+      e.preventDefault();
+      console.log("Navigating to view slot page");
+
+      // Show view slot page
+      document.querySelectorAll(".content-page").forEach((page) => {
+        page.classList.remove("active");
+      });
+      document.getElementById("view-slot-page").classList.add("active");
+      document.getElementById("page-title").textContent =
+        "View Master Slot TimeTable";
+
+      // Get the year dropdown
+      const yearDropdown = document.getElementById("view-slot-year");
+      console.log("Year dropdown found:", yearDropdown);
+
+      if (yearDropdown) {
+        // Fetch slots and populate years
+        fetch(`${window.API_URL}/slots`, {
+          headers: {
+            Authorization: localStorage.getItem("token"),
+          },
+        })
+          .then((response) => response.json())
+          .then((slots) => {
+            console.log("Fetched slots for years:", slots);
+
+            // Get unique years
+            const years = [
+              ...new Set(slots.map((slot) => slot.slot_year)),
+            ].sort();
+            console.log("Unique years:", years);
+
+            // Clear and populate dropdown
+            yearDropdown.innerHTML =
+              '<option value="">Select Academic Year</option>';
+            years.forEach((year) => {
+              const option = document.createElement("option");
+              option.value = year;
+              option.textContent = year;
+              yearDropdown.appendChild(option);
+            });
+
+            console.log(
+              "Populated year dropdown with",
+              years.length,
+              "options"
+            );
+          })
+          .catch((error) => {
+            console.error("Error fetching slots:", error);
+          });
+      }
+    }
+  });
 });
 
 // Populate academic years dropdown
