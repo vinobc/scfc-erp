@@ -810,19 +810,50 @@ function handleSlotNameChange(event) {
   })
     .then((response) => response.json())
     .then((slots) => {
-      const matchingSlots = slots.filter((s) => s.slot_name === slotName);
-      if (matchingSlots.length > 0) {
-        const dayTimeDisplay = matchingSlots
-          .map((s) => `${s.slot_day} (${s.slot_time})`)
-          .join(", ");
-        allocationSlotDayDisplay.textContent = dayTimeDisplay;
+      // Check if this is a combined slot (e.g., A1+TA1)
+      if (slotName.includes("+")) {
+        const slotParts = slotName.split("+");
+        const firstSlotName = slotParts[0];
+        const secondSlotName = slotParts[1];
+
+        // Find slots for both parts
+        const firstSlotMatches = slots.filter(
+          (s) => s.slot_name === firstSlotName
+        );
+        const secondSlotMatches = slots.filter(
+          (s) => s.slot_name === secondSlotName
+        );
+
+        // Combine the information from both slot parts
+        const allMatches = [...firstSlotMatches, ...secondSlotMatches];
+
+        if (allMatches.length > 0) {
+          const dayTimeDisplay = allMatches
+            .map((s) => `${s.slot_day} (${s.slot_time})`)
+            .join(", ");
+          allocationSlotDayDisplay.textContent = dayTimeDisplay;
+        } else {
+          allocationSlotDayDisplay.textContent =
+            "Slot day/time information not found";
+        }
+      } else {
+        // Handle regular non-combined slots as before
+        const matchingSlots = slots.filter((s) => s.slot_name === slotName);
+        if (matchingSlots.length > 0) {
+          const dayTimeDisplay = matchingSlots
+            .map((s) => `${s.slot_day} (${s.slot_time})`)
+            .join(", ");
+          allocationSlotDayDisplay.textContent = dayTimeDisplay;
+        } else {
+          allocationSlotDayDisplay.textContent =
+            "Slot day/time information not found";
+        }
       }
     })
     .catch((error) => {
       console.error("Error fetching slot details:", error);
     });
 }
-
 // Handle venue type change
 function handleVenueTypeChange(event) {
   const venueType = event.target.value;
@@ -932,9 +963,32 @@ function handleSaveFacultyAllocation() {
     })
     .then((slots) => {
       console.log("All slots:", slots);
-      const matchingSlots = slots.filter(
-        (s) => s.slot_name === allocationData.slot_name
-      );
+
+      let matchingSlots = [];
+
+      // Check if this is a combined slot (e.g., A1+TA1)
+      if (allocationData.slot_name.includes("+")) {
+        const slotParts = allocationData.slot_name.split("+");
+        const firstSlotName = slotParts[0];
+        const secondSlotName = slotParts[1];
+
+        // Find slots for both parts
+        const firstSlotMatches = slots.filter(
+          (s) => s.slot_name === firstSlotName
+        );
+        const secondSlotMatches = slots.filter(
+          (s) => s.slot_name === secondSlotName
+        );
+
+        // Combine the information from both slot parts
+        matchingSlots = [...firstSlotMatches, ...secondSlotMatches];
+      } else {
+        // Handle regular non-combined slots as before
+        matchingSlots = slots.filter(
+          (s) => s.slot_name === allocationData.slot_name
+        );
+      }
+
       console.log("Matching slots:", matchingSlots);
 
       if (matchingSlots.length === 0) {
@@ -944,10 +998,13 @@ function handleSaveFacultyAllocation() {
 
       // Create allocations for all matching slots (multiple days/times)
       const promises = matchingSlots.map((slot) => {
+        // Create a new allocation with the INDIVIDUAL slot name, not the combined one
         const completeAllocation = {
           ...allocationData,
           slot_day: slot.slot_day,
           slot_time: slot.slot_time,
+          // Use the individual slot name from the database, not the combined one
+          slot_name: slot.slot_name,
         };
 
         console.log("Saving allocation:", completeAllocation);
