@@ -810,8 +810,23 @@ function handleSlotNameChange(event) {
   })
     .then((response) => response.json())
     .then((slots) => {
-      // Check if this is a combined slot (e.g., A1+TA1)
-      if (slotName.includes("+")) {
+      // Check if this is a lab slot (e.g., L1+L2)
+      if (slotName.startsWith("L") && slotName.includes("+")) {
+        // For lab slots, search for the exact combined name
+        const matchingSlots = slots.filter((s) => s.slot_name === slotName);
+
+        if (matchingSlots.length > 0) {
+          const dayTimeDisplay = matchingSlots
+            .map((s) => `${s.slot_day} (${s.slot_time})`)
+            .join(", ");
+          allocationSlotDayDisplay.textContent = dayTimeDisplay;
+        } else {
+          allocationSlotDayDisplay.textContent =
+            "Slot day/time information not found";
+        }
+      }
+      // Check if this is a theory combined slot (e.g., A1+TA1)
+      else if (slotName.includes("+")) {
         const slotParts = slotName.split("+");
         const firstSlotName = slotParts[0];
         const secondSlotName = slotParts[1];
@@ -966,8 +981,18 @@ function handleSaveFacultyAllocation() {
 
       let matchingSlots = [];
 
-      // Check if this is a combined slot (e.g., A1+TA1)
-      if (allocationData.slot_name.includes("+")) {
+      // Check if this is a lab slot (e.g., L1+L2)
+      if (
+        allocationData.slot_name.startsWith("L") &&
+        allocationData.slot_name.includes("+")
+      ) {
+        // For lab slots, search for the exact combined name
+        matchingSlots = slots.filter(
+          (s) => s.slot_name === allocationData.slot_name
+        );
+      }
+      // Check if this is a theory combined slot (e.g., A1+TA1)
+      else if (allocationData.slot_name.includes("+")) {
         const slotParts = allocationData.slot_name.split("+");
         const firstSlotName = slotParts[0];
         const secondSlotName = slotParts[1];
@@ -998,13 +1023,17 @@ function handleSaveFacultyAllocation() {
 
       // Create allocations for all matching slots (multiple days/times)
       const promises = matchingSlots.map((slot) => {
-        // Create a new allocation with the INDIVIDUAL slot name, not the combined one
+        // Create a new allocation with the appropriate slot name
         const completeAllocation = {
           ...allocationData,
           slot_day: slot.slot_day,
           slot_time: slot.slot_time,
-          // Use the individual slot name from the database, not the combined one
-          slot_name: slot.slot_name,
+          // For lab slots, keep the combined name; for theory combined slots, use individual name
+          slot_name:
+            allocationData.slot_name.startsWith("L") &&
+            allocationData.slot_name.includes("+")
+              ? allocationData.slot_name
+              : slot.slot_name,
         };
 
         console.log("Saving allocation:", completeAllocation);
