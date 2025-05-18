@@ -187,6 +187,10 @@ document.addEventListener("DOMContentLoaded", () => {
     allocationVenueTypeInput.addEventListener("change", handleVenueTypeChange);
   }
 
+  if (allocationVenueInput) {
+    allocationVenueInput.addEventListener("change", handleVenueChange);
+  }
+
   if (allocationComponentTypeInput) {
     allocationComponentTypeInput.addEventListener(
       "change",
@@ -677,76 +681,53 @@ function updateAvailableSlots(course) {
 
   const year = allocationYearInput.value;
   const semesterType = allocationSemesterTypeInput.value;
+  const componentType = allocationComponentTypeInput
+    ? allocationComponentTypeInput.value
+    : "";
 
   if (!year || !semesterType) return;
 
-  // Get all slots for the selected year and semester
-  fetch(`${window.API_URL}/slots/${year}/${semesterType}`, {
-    headers: {
-      Authorization: localStorage.getItem("token"),
-    },
-  })
+  // Include the component type in the API call
+  fetch(
+    `${window.API_URL}/faculty-allocations/available-slots?` +
+      `courseCode=${course.course_code}&year=${year}&semesterType=${semesterType}` +
+      `${componentType ? `&componentType=${componentType}` : ""}`,
+    {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    }
+  )
     .then((response) => response.json())
-    .then((slots) => {
-      // Determine which slots to show based on TPC
-      const availableSlotNames = new Set();
-
-      const componentType = allocationComponentTypeInput
-        ? allocationComponentTypeInput.value
-        : null;
-
-      // For TEL courses, check component type
-      if (course.course_type === "TEL" && componentType === "lab") {
-        // Show lab slots for lab component
-        for (let i = 1; i <= 40; i += 2) {
-          availableSlotNames.add(`L${i}+L${i + 1}`);
-        }
-      } else {
-        // Theory slots
-        const theory =
-          course.course_type === "TEL" && componentType === "theory"
-            ? course.theory
-            : course.theory;
-
-        if (theory === 2) {
-          ["D1", "E1", "F1", "G1", "D2", "E2", "F2", "G2"].forEach((s) =>
-            availableSlotNames.add(s)
-          );
-        } else if (theory === 3) {
-          ["A1", "B1", "C1", "A2", "B2", "C2"].forEach((s) =>
-            availableSlotNames.add(s)
-          );
-        } else if (theory === 4) {
-          ["A1+TA1", "B1+TB1", "C1+TC1", "A2+TA2", "B2+TB2", "C2+TC2"].forEach(
-            (s) => availableSlotNames.add(s)
-          );
-        }
-
-        // For practical only courses
-        if (course.theory === 0 && course.practical > 0) {
-          for (let i = 1; i <= 40; i += 2) {
-            availableSlotNames.add(`L${i}+L${i + 1}`);
-          }
-        }
-      }
-
-      // Update slot name dropdown
+    .then((data) => {
+      // Clear the dropdown
       allocationSlotNameInput.innerHTML =
         '<option value="">Select Slot</option>';
-      Array.from(availableSlotNames)
-        .sort()
-        .forEach((slotName) => {
+
+      // Add the slots returned from the API
+      if (data.availableSlots && data.availableSlots.length > 0) {
+        data.availableSlots.sort().forEach((slotName) => {
           const option = document.createElement("option");
           option.value = slotName;
           option.textContent = slotName;
           allocationSlotNameInput.appendChild(option);
         });
+      } else {
+        console.warn("No available slots returned from API");
+        // Add a message to the dropdown
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No slots available";
+        option.disabled = true;
+        allocationSlotNameInput.appendChild(option);
+      }
 
       // Update faculty available slots
       updateFacultyAvailableSlots();
     })
     .catch((error) => {
-      console.error("Error fetching slots:", error);
+      console.error("Error fetching available slots:", error);
+      showAlert("Error fetching available slots. Please try again.", "danger");
     });
 }
 
@@ -774,14 +755,20 @@ function updateFacultyAvailableSlots() {
     .then((response) => response.json())
     .then((data) => {
       const allocatedSlots = new Set();
-      data.allocations.forEach((a) => allocatedSlots.add(a.slot_name));
 
-      // Disable allocated slots in dropdown
+      // Only add slots that this faculty actually has allocated
+      if (data.allocations && data.allocations.length > 0) {
+        data.allocations.forEach((a) => allocatedSlots.add(a.slot_name));
+      }
+
+      console.log("Faculty allocated slots:", allocatedSlots);
+
+      // Only disable slots already allocated to this faculty
       if (allocationSlotNameInput) {
         Array.from(allocationSlotNameInput.options).forEach((option) => {
           if (option.value && allocatedSlots.has(option.value)) {
             option.disabled = true;
-            option.textContent = `${option.value} (Allocated)`;
+            option.textContent = `${option.value} (Already Allocated)`;
           }
         });
       }
@@ -810,22 +797,15 @@ function handleSlotNameChange(event) {
   })
     .then((response) => response.json())
     .then((slots) => {
+      console.log("All slots:", slots);
+      let matchingSlots = [];
+
       // Check if this is a lab slot (e.g., L1+L2)
       if (slotName.startsWith("L") && slotName.includes("+")) {
         // For lab slots, search for the exact combined name
-        const matchingSlots = slots.filter((s) => s.slot_name === slotName);
-
-        if (matchingSlots.length > 0) {
-          const dayTimeDisplay = matchingSlots
-            .map((s) => `${s.slot_day} (${s.slot_time})`)
-            .join(", ");
-          allocationSlotDayDisplay.textContent = dayTimeDisplay;
-        } else {
-          allocationSlotDayDisplay.textContent =
-            "Slot day/time information not found";
-        }
+        matchingSlots = slots.filter((s) => s.slot_name === slotName);
       }
-      // Check if this is a theory combined slot (e.g., A1+TA1)
+      // Check if this is a combined slot (e.g., A1+TA1)
       else if (slotName.includes("+")) {
         const slotParts = slotName.split("+");
         const firstSlotName = slotParts[0];
@@ -840,33 +820,27 @@ function handleSlotNameChange(event) {
         );
 
         // Combine the information from both slot parts
-        const allMatches = [...firstSlotMatches, ...secondSlotMatches];
-
-        if (allMatches.length > 0) {
-          const dayTimeDisplay = allMatches
-            .map((s) => `${s.slot_day} (${s.slot_time})`)
-            .join(", ");
-          allocationSlotDayDisplay.textContent = dayTimeDisplay;
-        } else {
-          allocationSlotDayDisplay.textContent =
-            "Slot day/time information not found";
-        }
+        matchingSlots = [...firstSlotMatches, ...secondSlotMatches];
       } else {
-        // Handle regular non-combined slots as before
-        const matchingSlots = slots.filter((s) => s.slot_name === slotName);
-        if (matchingSlots.length > 0) {
-          const dayTimeDisplay = matchingSlots
-            .map((s) => `${s.slot_day} (${s.slot_time})`)
-            .join(", ");
-          allocationSlotDayDisplay.textContent = dayTimeDisplay;
-        } else {
-          allocationSlotDayDisplay.textContent =
-            "Slot day/time information not found";
-        }
+        // Handle regular non-combined slots
+        matchingSlots = slots.filter((s) => s.slot_name === slotName);
+      }
+
+      console.log("Matching slots:", matchingSlots);
+
+      if (matchingSlots.length > 0) {
+        const dayTimeDisplay = matchingSlots
+          .map((s) => `${s.slot_day} (${s.slot_time})`)
+          .join(", ");
+        allocationSlotDayDisplay.textContent = dayTimeDisplay;
+      } else {
+        allocationSlotDayDisplay.textContent =
+          "Slot day/time information not found";
       }
     })
     .catch((error) => {
       console.error("Error fetching slot details:", error);
+      allocationSlotDayDisplay.textContent = "Error fetching slot information";
     });
 }
 // Handle venue type change
@@ -899,10 +873,22 @@ function handleVenueTypeChange(event) {
     .catch((error) => {
       console.error("Error fetching venues:", error);
     });
+  // If course is selected, refresh slots to clear conflict status
+  if (courseData.course_code) {
+    updateAvailableSlots(courseData);
+  }
+}
+
+function handleVenueChange(event) {
+  // If course is selected, refresh slots to check for conflicts with new venue
+  if (courseData.course_code) {
+    updateAvailableSlots(courseData);
+  }
 }
 
 // Handle component type change
 function handleComponentTypeChange(event) {
+  console.log("Component type changed:", event.target.value);
   // Re-update available slots when component type changes
   if (courseData.course_code) {
     updateAvailableSlots(courseData);
