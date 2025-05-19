@@ -16,6 +16,7 @@ const courseRoutes = require("./routes/course.routes");
 const studentRoutes = require("./routes/student.routes");
 const slotRoutes = require("./routes/slot.routes");
 const facultyAllocationRoutes = require("./routes/faculty-allocation.routes");
+const semesterSlotConfigRoutes = require("./routes/semester-slot-config.routes");
 
 // Initialize express app
 const app = express();
@@ -62,6 +63,10 @@ console.log(
   "Registering faculty allocation routes at /api/faculty-allocations"
 );
 app.use("/api/faculty-allocations", facultyAllocationRoutes);
+console.log(
+  "Registering semester slot config routes at /api/semester-slot-configs"
+);
+app.use("/api/semester-slot-configs", semesterSlotConfigRoutes);
 
 // Root route
 app.get("/", (req, res) => {
