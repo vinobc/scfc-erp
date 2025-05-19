@@ -328,66 +328,132 @@ exports.getAvailableSlotsForCourse = async (req, res) => {
     const theory = course.theory;
     const practical = course.practical;
 
-    // Get all slot definitions for the year and semester
-    const slotsResult = await db.query(
-      `SELECT * FROM slot 
-       WHERE slot_year = $1 AND semester_type = $2 
-       ORDER BY slot_day, slot_time`,
-      [year, semesterType]
-    );
+    // Get available slots based on course T-P-C and semester slot configuration
+    let configQuery = `
+      SELECT ssc.* 
+      FROM semester_slot_config ssc
+      WHERE ssc.slot_year = $1 
+      AND ssc.semester_type = $2 
+      AND ssc.is_active = true
+    `;
 
-    if (slotsResult.rows.length === 0) {
-      return res.status(404).json({
-        message: `No slots found for ${year} ${semesterType} semester`,
-      });
+    const params = [year, semesterType];
+
+    // For Theory-Embedded-Lab (TEL) courses with componentType specified
+    if (course.course_type === "TEL" && componentType) {
+      if (componentType === "theory") {
+        params.push(theory);
+        params.push(0); // No practical component
+        configQuery += ` AND ssc.course_theory = $3 AND ssc.course_practical = $4`;
+      } else if (componentType === "lab") {
+        params.push(0); // No theory component
+        params.push(practical);
+        configQuery += ` AND ssc.course_theory = $3 AND ssc.course_practical = $4`;
+      }
+    } else {
+      // For regular courses, filter based on T-P values
+      if (theory > 0 && practical === 0) {
+        // Theory-only course
+        params.push(theory);
+        configQuery += ` AND ssc.course_theory = $3 AND ssc.course_practical = 0`;
+      } else if (theory === 0 && practical > 0) {
+        // Lab-only course
+        params.push(practical);
+        configQuery += ` AND ssc.course_theory = 0 AND ssc.course_practical = $3`;
+      } else if (theory > 0 && practical > 0 && course.course_type !== "TEL") {
+        // Regular course with both theory and practical
+        params.push(theory);
+        configQuery += ` AND ((ssc.course_theory = $3 AND ssc.course_practical = 0) OR 
+                             (ssc.course_theory = 0 AND ssc.course_practical > 0))`;
+      }
     }
 
-    // Group slots by their names to identify unique slot names
-    const slotsByName = {};
-    slotsResult.rows.forEach((slot) => {
-      if (!slotsByName[slot.slot_name]) {
-        slotsByName[slot.slot_name] = [];
+    configQuery += ` ORDER BY ssc.slot_name`;
+
+    const configResult = await db.query(configQuery, params);
+
+    // Extract slot names and handle linked slots
+    const availableSlots = [];
+    const slotLinks = {}; // to track linked slots
+
+    configResult.rows.forEach((config) => {
+      availableSlots.push(config.slot_name);
+
+      // Track linked slots for 4-credit courses
+      if (config.linked_slots && config.linked_slots.length > 0) {
+        slotLinks[config.slot_name] = config.linked_slots;
       }
-      slotsByName[slot.slot_name].push(slot);
     });
 
-    const availableSlots = [];
-
-    // Filter based on component type
-    if (componentType === "lab") {
-      // If lab component, only include lab slots
-      const labSlots = Object.keys(slotsByName).filter(
-        (name) => name.startsWith("L") && name.includes("+")
+    // If no slots found in the configuration, fall back to legacy behavior
+    if (availableSlots.length === 0) {
+      console.log(
+        `No slot configuration found for course ${courseCode} (${theory}-${practical}-${course.credits}) in ${year} ${semesterType}`
       );
-      availableSlots.push(...labSlots);
-    } else if (componentType === "theory") {
-      // If theory component, only include theory slots
-      const theorySlots = Object.keys(slotsByName).filter(
-        (name) => !name.startsWith("L") && !name.includes("+")
-      );
-      availableSlots.push(...theorySlots);
-    } else {
-      // If no component type specified or for non-TEL courses:
 
-      // Add appropriate slots based on course type
-      if (theory > 0) {
-        const theorySlots = Object.keys(slotsByName).filter(
-          (name) => !name.startsWith("L") && !name.includes("+")
-        );
-        availableSlots.push(...theorySlots);
+      // Get all slot definitions for the year and semester
+      const slotsResult = await db.query(
+        `SELECT * FROM slot 
+         WHERE slot_year = $1 AND semester_type = $2 
+         ORDER BY slot_day, slot_time`,
+        [year, semesterType]
+      );
+
+      if (slotsResult.rows.length === 0) {
+        return res.status(404).json({
+          message: `No slots found for ${year} ${semesterType} semester`,
+        });
       }
 
-      if (practical > 0) {
+      // Group slots by their names to identify unique slot names
+      const slotsByName = {};
+      slotsResult.rows.forEach((slot) => {
+        if (!slotsByName[slot.slot_name]) {
+          slotsByName[slot.slot_name] = [];
+        }
+        slotsByName[slot.slot_name].push(slot);
+      });
+
+      // Filter based on component type
+      if (componentType === "lab") {
+        // If lab component, only include lab slots
         const labSlots = Object.keys(slotsByName).filter(
           (name) => name.startsWith("L") && name.includes("+")
         );
         availableSlots.push(...labSlots);
+      } else if (componentType === "theory") {
+        // If theory component, only include theory slots
+        const theorySlots = Object.keys(slotsByName).filter(
+          (name) => !name.startsWith("L") && !name.includes("+")
+        );
+        availableSlots.push(...theorySlots);
+      } else {
+        // If no component type specified or for non-TEL courses:
+        // Add appropriate slots based on course type
+        if (theory > 0) {
+          const theorySlots = Object.keys(slotsByName).filter(
+            (name) => !name.startsWith("L") && !name.includes("+")
+          );
+          availableSlots.push(...theorySlots);
+        }
+
+        if (practical > 0) {
+          const labSlots = Object.keys(slotsByName).filter(
+            (name) => name.startsWith("L") && name.includes("+")
+          );
+          availableSlots.push(...labSlots);
+        }
       }
+
+      console.log(
+        `Using legacy behavior: Found ${availableSlots.length} slots`
+      );
     }
 
     res.status(200).json({
       course: course,
       availableSlots: availableSlots,
+      slotLinks: slotLinks,
     });
   } catch (error) {
     console.error("Get available slots error:", error);

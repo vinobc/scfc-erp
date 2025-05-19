@@ -83,6 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
   allocationSemesterTypeInput = document.getElementById(
     "allocation-semester-type-field"
   );
+  allocationSemesterInput = allocationSemesterTypeInput; // Create alias for backward compatibility
   allocationEmployeeIdInput = document.getElementById(
     "allocation-employee-id-field"
   );
@@ -680,7 +681,7 @@ function updateAvailableSlots(course) {
   if (!allocationSlotNameInput) return;
 
   const year = allocationYearInput.value;
-  const semesterType = allocationSemesterTypeInput.value;
+  const semesterType = allocationSemesterInput.value;
   const componentType = allocationComponentTypeInput
     ? allocationComponentTypeInput.value
     : "";
@@ -700,6 +701,9 @@ function updateAvailableSlots(course) {
   )
     .then((response) => response.json())
     .then((data) => {
+      // Store linked slots information globally
+      window.slotLinks = data.slotLinks || {};
+
       // Clear the dropdown
       allocationSlotNameInput.innerHTML =
         '<option value="">Select Slot</option>';
@@ -709,7 +713,16 @@ function updateAvailableSlots(course) {
         data.availableSlots.sort().forEach((slotName) => {
           const option = document.createElement("option");
           option.value = slotName;
-          option.textContent = slotName;
+
+          // Check if this slot is part of a linked pair
+          if (data.slotLinks && data.slotLinks[slotName]) {
+            option.textContent = `${slotName} (linked with ${data.slotLinks[
+              slotName
+            ].join(", ")})`;
+          } else {
+            option.textContent = slotName;
+          }
+
           allocationSlotNameInput.appendChild(option);
         });
       } else {
@@ -782,12 +795,18 @@ function updateFacultyAvailableSlots() {
 function handleSlotNameChange(event) {
   const slotName = event.target.value;
   const year = allocationYearInput.value;
-  const semesterType = allocationSemesterTypeInput.value;
+  const semesterType = allocationSemesterInput.value;
 
   if (!slotName || !year || !semesterType) {
     allocationSlotDayDisplay.textContent = "";
     return;
   }
+
+  // Check if this is a linked slot
+  const linkedSlots =
+    window.slotLinks && window.slotLinks[slotName]
+      ? [slotName, ...window.slotLinks[slotName]]
+      : [slotName];
 
   // Get slot details to show days and times
   fetch(`${window.API_URL}/slots/${year}/${semesterType}`, {
@@ -798,40 +817,84 @@ function handleSlotNameChange(event) {
     .then((response) => response.json())
     .then((slots) => {
       console.log("All slots:", slots);
-      let matchingSlots = [];
+      let allMatchingSlots = [];
 
-      // Check if this is a lab slot (e.g., L1+L2)
-      if (slotName.startsWith("L") && slotName.includes("+")) {
-        // For lab slots, search for the exact combined name
-        matchingSlots = slots.filter((s) => s.slot_name === slotName);
-      }
-      // Check if this is a combined slot (e.g., A1+TA1)
-      else if (slotName.includes("+")) {
-        const slotParts = slotName.split("+");
-        const firstSlotName = slotParts[0];
-        const secondSlotName = slotParts[1];
+      // Process each slot in the linked slots array
+      linkedSlots.forEach((currentSlotName) => {
+        let matchingSlots = [];
 
-        // Find slots for both parts
-        const firstSlotMatches = slots.filter(
-          (s) => s.slot_name === firstSlotName
-        );
-        const secondSlotMatches = slots.filter(
-          (s) => s.slot_name === secondSlotName
-        );
+        // Check if this is a lab slot (e.g., L1+L2)
+        if (currentSlotName.startsWith("L") && currentSlotName.includes("+")) {
+          // For lab slots, search for the exact combined name
+          matchingSlots = slots.filter((s) => s.slot_name === currentSlotName);
+        }
+        // Check if this is a combined slot (e.g., A1+TA1)
+        else if (currentSlotName.includes("+")) {
+          const slotParts = currentSlotName.split("+");
+          const firstSlotName = slotParts[0];
+          const secondSlotName = slotParts[1];
 
-        // Combine the information from both slot parts
-        matchingSlots = [...firstSlotMatches, ...secondSlotMatches];
-      } else {
-        // Handle regular non-combined slots
-        matchingSlots = slots.filter((s) => s.slot_name === slotName);
-      }
+          // Find slots for both parts
+          const firstSlotMatches = slots.filter(
+            (s) => s.slot_name === firstSlotName
+          );
+          const secondSlotMatches = slots.filter(
+            (s) => s.slot_name === secondSlotName
+          );
 
-      console.log("Matching slots:", matchingSlots);
+          // Combine the information from both slot parts
+          matchingSlots = [...firstSlotMatches, ...secondSlotMatches];
+        } else {
+          // Handle regular non-combined slots
+          matchingSlots = slots.filter((s) => s.slot_name === currentSlotName);
+        }
 
-      if (matchingSlots.length > 0) {
-        const dayTimeDisplay = matchingSlots
-          .map((s) => `${s.slot_day} (${s.slot_time})`)
-          .join(", ");
+        allMatchingSlots = [...allMatchingSlots, ...matchingSlots];
+      });
+
+      console.log("All matching slots:", allMatchingSlots);
+
+      if (allMatchingSlots.length > 0) {
+        let dayTimeDisplay = "";
+
+        // If there are linked slots, show 'Primary:' and 'Linked:'
+        if (linkedSlots.length > 1) {
+          // Group by slot name
+          const slotsByName = {};
+          allMatchingSlots.forEach((slot) => {
+            if (!slotsByName[slot.slot_name]) {
+              slotsByName[slot.slot_name] = [];
+            }
+            slotsByName[slot.slot_name].push(slot);
+          });
+
+          // Display primary slot
+          dayTimeDisplay += `Primary (${slotName}): `;
+          dayTimeDisplay += slotsByName[slotName]
+            .map((s) => `${s.slot_day} (${s.slot_time})`)
+            .join(", ");
+
+          // Display linked slots
+          linkedSlots
+            .filter((s) => s !== slotName)
+            .forEach((linkedSlot) => {
+              if (
+                slotsByName[linkedSlot] &&
+                slotsByName[linkedSlot].length > 0
+              ) {
+                dayTimeDisplay += `\nLinked (${linkedSlot}): `;
+                dayTimeDisplay += slotsByName[linkedSlot]
+                  .map((s) => `${s.slot_day} (${s.slot_time})`)
+                  .join(", ");
+              }
+            });
+        } else {
+          // Regular slot display
+          dayTimeDisplay = allMatchingSlots
+            .map((s) => `${s.slot_day} (${s.slot_time})`)
+            .join(", ");
+        }
+
         allocationSlotDayDisplay.textContent = dayTimeDisplay;
       } else {
         allocationSlotDayDisplay.textContent =
@@ -925,7 +988,7 @@ function handleSaveFacultyAllocation() {
   // Get form values
   const allocationData = {
     slot_year: allocationYearInput.value,
-    semester_type: allocationSemesterTypeInput.value,
+    semester_type: allocationSemesterInput.value,
     course_code: allocationCourseCodeInput.value,
     employee_id: parseInt(allocationEmployeeIdInput.value),
     venue: allocationVenueInput.value,
@@ -965,74 +1028,90 @@ function handleSaveFacultyAllocation() {
     .then((slots) => {
       console.log("All slots:", slots);
 
-      let matchingSlots = [];
+      // Check if selected slot has linked slots
+      const primarySlot = allocationData.slot_name;
+      const linkedSlots =
+        window.slotLinks && window.slotLinks[primarySlot]
+          ? [primarySlot, ...window.slotLinks[primarySlot]]
+          : [primarySlot];
 
-      // Check if this is a lab slot (e.g., L1+L2)
-      if (
-        allocationData.slot_name.startsWith("L") &&
-        allocationData.slot_name.includes("+")
-      ) {
-        // For lab slots, search for the exact combined name
-        matchingSlots = slots.filter(
-          (s) => s.slot_name === allocationData.slot_name
-        );
-      }
-      // Check if this is a theory combined slot (e.g., A1+TA1)
-      else if (allocationData.slot_name.includes("+")) {
-        const slotParts = allocationData.slot_name.split("+");
-        const firstSlotName = slotParts[0];
-        const secondSlotName = slotParts[1];
+      console.log("Primary slot:", primarySlot);
+      console.log("Linked slots:", linkedSlots);
 
-        // Find slots for both parts
-        const firstSlotMatches = slots.filter(
-          (s) => s.slot_name === firstSlotName
-        );
-        const secondSlotMatches = slots.filter(
-          (s) => s.slot_name === secondSlotName
-        );
+      // Create promises array for all allocations
+      const promises = [];
 
-        // Combine the information from both slot parts
-        matchingSlots = [...firstSlotMatches, ...secondSlotMatches];
-      } else {
-        // Handle regular non-combined slots as before
-        matchingSlots = slots.filter(
-          (s) => s.slot_name === allocationData.slot_name
-        );
-      }
+      // For each slot in the linkedSlots array
+      linkedSlots.forEach((slotName) => {
+        let matchingSlots = [];
 
-      console.log("Matching slots:", matchingSlots);
+        // Check if this is a lab slot (e.g., L1+L2)
+        if (slotName.startsWith("L") && slotName.includes("+")) {
+          // For lab slots, search for the exact combined name
+          matchingSlots = slots.filter((s) => s.slot_name === slotName);
+        }
+        // Check if this is a theory combined slot (e.g., A1+TA1)
+        else if (slotName.includes("+")) {
+          const slotParts = slotName.split("+");
+          const firstSlotName = slotParts[0];
+          const secondSlotName = slotParts[1];
 
-      if (matchingSlots.length === 0) {
-        showAlert("No slots found for the selected slot name", "danger");
-        return;
-      }
+          // Find slots for both parts
+          const firstSlotMatches = slots.filter(
+            (s) => s.slot_name === firstSlotName
+          );
+          const secondSlotMatches = slots.filter(
+            (s) => s.slot_name === secondSlotName
+          );
 
-      // Create allocations for all matching slots (multiple days/times)
-      const promises = matchingSlots.map((slot) => {
-        // Create a new allocation with the appropriate slot name
-        const completeAllocation = {
-          ...allocationData,
-          slot_day: slot.slot_day,
-          slot_time: slot.slot_time,
-          // For lab slots, keep the combined name; for theory combined slots, use individual name
-          slot_name:
-            allocationData.slot_name.startsWith("L") &&
-            allocationData.slot_name.includes("+")
-              ? allocationData.slot_name
-              : slot.slot_name,
-        };
+          // Combine the information from both slot parts
+          matchingSlots = [...firstSlotMatches, ...secondSlotMatches];
+        } else {
+          // Handle regular non-combined slots as before
+          matchingSlots = slots.filter((s) => s.slot_name === slotName);
+        }
 
-        console.log("Saving allocation:", completeAllocation);
+        console.log(`Matching slots for ${slotName}:`, matchingSlots);
 
-        return fetch(`${window.API_URL}/faculty-allocations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: localStorage.getItem("token"),
-          },
-          body: JSON.stringify(completeAllocation),
+        if (matchingSlots.length === 0) {
+          showAlert(`No slots found for ${slotName}`, "danger");
+          return;
+        }
+
+        // Create allocations for all matching slots
+        matchingSlots.forEach((slot) => {
+          // Create a new allocation with the appropriate slot
+          const completeAllocation = {
+            ...allocationData,
+            slot_day: slot.slot_day,
+            slot_time: slot.slot_time,
+            // Keep the slot_name as provided
+            slot_name: slot.slot_name,
+          };
+
+          console.log(
+            `Saving allocation for ${slot.slot_name}:`,
+            completeAllocation
+          );
+
+          promises.push(
+            fetch(`${window.API_URL}/faculty-allocations`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: localStorage.getItem("token"),
+              },
+              body: JSON.stringify(completeAllocation),
+            })
+          );
         });
       });
+
+      // Execute all allocation promises
+      if (promises.length === 0) {
+        showAlert("No valid slots found for allocation", "danger");
+        return;
+      }
 
       Promise.all(promises)
         .then((responses) => {
