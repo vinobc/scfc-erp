@@ -118,6 +118,41 @@ exports.createFacultyAllocation = async (req, res) => {
       });
     }
 
+    // NEW CODE: Check for slot conflicts
+    // Get conflicting slot names
+    const conflictingSlots = await db.query(
+      `SELECT conflicting_slot_name 
+       FROM slot_conflict 
+       WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+      [slot_year, semester_type, slot_name]
+    );
+
+    if (conflictingSlots.rows.length > 0) {
+      const conflictingSlotNames = conflictingSlots.rows.map(
+        (row) => row.conflicting_slot_name
+      );
+
+      // Check if faculty is already allocated in any conflicting slot
+      const slotConflictCheck = await db.query(
+        `SELECT fa.*, c.course_name, v.venue as venue_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN venue v ON fa.venue = v.venue
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+         AND fa.employee_id = $3 AND fa.slot_name = ANY($4)`,
+        [slot_year, semester_type, employee_id, conflictingSlotNames]
+      );
+
+      if (slotConflictCheck.rows.length > 0) {
+        const conflict = slotConflictCheck.rows[0];
+        return res.status(409).json({
+          message: `Slot conflict: Faculty is already assigned to a conflicting slot ${conflict.slot_name} for ${conflict.course_name} in ${conflict.venue_name}`,
+          type: "slot_conflict",
+          existingAllocation: conflict,
+        });
+      }
+    }
+
     // Insert new allocation
     const result = await db.query(
       `INSERT INTO faculty_allocation 

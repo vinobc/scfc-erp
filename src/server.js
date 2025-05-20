@@ -67,6 +67,8 @@ console.log(
   "Registering semester slot config routes at /api/semester-slot-configs"
 );
 app.use("/api/semester-slot-configs", semesterSlotConfigRoutes);
+console.log("Registering slot conflict routes at /api/slot-conflicts");
+app.use("/api/slot-conflicts", require("./routes/slot-conflict.routes"));
 
 // Root route
 app.get("/", (req, res) => {

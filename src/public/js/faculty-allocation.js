@@ -633,6 +633,9 @@ function handleEmployeeIdInput(event) {
 
         // Update available slots by filtering already allocated slots
         updateFacultyAvailableSlots();
+
+        // Check for slot conflicts
+        checkAndDisableConflictingSlots();
       } else {
         allocationFacultyNameDisplay.textContent = "";
       }
@@ -906,6 +909,88 @@ function handleSlotNameChange(event) {
       allocationSlotDayDisplay.textContent = "Error fetching slot information";
     });
 }
+
+// Check and disable conflicting slots
+function checkAndDisableConflictingSlots() {
+  const year = allocationYearInput.value;
+  const semesterType = allocationSemesterInput.value;
+  const employeeId = allocationEmployeeIdInput.value;
+
+  if (!year || !semesterType || !employeeId) return;
+
+  // Get faculty allocations
+  fetch(
+    `${window.API_URL}/faculty-allocations/faculty-timetable?` +
+      `employeeId=${employeeId}&` +
+      `year=${year}&` +
+      `semesterType=${semesterType}`,
+    {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    }
+  )
+    .then((response) => response.json())
+    .then((data) => {
+      // No faculty allocations yet
+      if (!data.allocations || data.allocations.length === 0) return;
+
+      // Get the allocated slot names
+      const allocatedSlots = data.allocations.map((a) => a.slot_name);
+
+      // For each allocated slot, fetch conflicting slots
+      const fetchPromises = allocatedSlots.map((slotName) =>
+        fetch(
+          `${window.API_URL}/slot-conflicts?` +
+            `slotYear=${year}&` +
+            `semesterType=${semesterType}&` +
+            `slotName=${slotName}`,
+          {
+            headers: {
+              Authorization: localStorage.getItem("token"),
+            },
+          }
+        ).then((response) => response.json())
+      );
+
+      // Process all fetched conflicts
+      Promise.all(fetchPromises)
+        .then((results) => {
+          // Collect all conflicting slots
+          const allConflictingSlots = new Set();
+
+          results.forEach((result) => {
+            if (result.conflictingSlots) {
+              result.conflictingSlots.forEach((slot) => {
+                allConflictingSlots.add(slot);
+              });
+            }
+          });
+
+          console.log(
+            "All conflicting slots:",
+            Array.from(allConflictingSlots)
+          );
+
+          // Disable conflicting slots in dropdown
+          if (allocationSlotNameInput) {
+            Array.from(allocationSlotNameInput.options).forEach((option) => {
+              if (option.value && allConflictingSlots.has(option.value)) {
+                option.disabled = true;
+                option.textContent = `${option.value} (Conflicts with allocated slot)`;
+              }
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching conflicting slots:", error);
+        });
+    })
+    .catch((error) => {
+      console.error("Error fetching faculty allocations:", error);
+    });
+}
+
 // Handle venue type change
 function handleVenueTypeChange(event) {
   const venueType = event.target.value;
@@ -1138,10 +1223,19 @@ function handleSaveFacultyAllocation() {
         })
         .catch((error) => {
           console.error("Save faculty allocation error:", error);
-          showAlert(
-            error.message || "Failed to save faculty allocation",
-            "danger"
-          );
+
+          // Check if the error message contains "Slot conflict"
+          if (error.message && error.message.includes("Slot conflict")) {
+            showAlert(
+              "Cannot allocate this slot because it conflicts with another slot already allocated to this faculty",
+              "danger"
+            );
+          } else {
+            showAlert(
+              error.message || "Failed to save faculty allocation",
+              "danger"
+            );
+          }
         });
     })
     .catch((error) => {
