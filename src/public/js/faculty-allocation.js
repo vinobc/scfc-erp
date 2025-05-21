@@ -779,6 +779,9 @@ function updateAvailableSlots(course) {
 
   if (!year || !semesterType) return;
 
+  // Save current selection before clearing dropdown
+  const previouslySelectedSlot = allocationSlotNameInput.value;
+
   // Include the component type in the API call
   fetch(
     `${window.API_URL}/faculty-allocations/available-slots?` +
@@ -816,6 +819,18 @@ function updateAvailableSlots(course) {
 
           allocationSlotNameInput.appendChild(option);
         });
+
+        // Restore previous selection if it exists in the new options
+        if (
+          previouslySelectedSlot &&
+          data.availableSlots.includes(previouslySelectedSlot)
+        ) {
+          allocationSlotNameInput.value = previouslySelectedSlot;
+
+          // Trigger the change event to update slot day display
+          const changeEvent = new Event("change");
+          allocationSlotNameInput.dispatchEvent(changeEvent);
+        }
       } else {
         console.warn("No available slots returned from API");
         // Add a message to the dropdown
