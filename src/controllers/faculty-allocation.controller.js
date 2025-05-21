@@ -76,7 +76,7 @@ exports.createFacultyAllocation = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Check for venue clash
+    // Check for venue clash (different faculty for same venue/time)
     const venueClashCheck = await db.query(
       `SELECT fa.*, c.course_name, f.name as faculty_name
        FROM faculty_allocation fa
@@ -84,8 +84,8 @@ exports.createFacultyAllocation = async (req, res) => {
        JOIN faculty f ON fa.employee_id = f.employee_id
        WHERE fa.slot_year = $1 AND fa.semester_type = $2 
        AND fa.venue = $3 AND fa.slot_day = $4 
-       AND fa.slot_time = $5`,
-      [slot_year, semester_type, venue, slot_day, slot_time]
+       AND fa.slot_time = $5 AND fa.employee_id != $6`,
+      [slot_year, semester_type, venue, slot_day, slot_time, employee_id]
     );
 
     if (venueClashCheck.rows.length > 0) {
@@ -97,7 +97,7 @@ exports.createFacultyAllocation = async (req, res) => {
       });
     }
 
-    // Check for faculty clash
+    // Check for faculty clash (different course at same time)
     const facultyClashCheck = await db.query(
       `SELECT fa.*, c.course_name, v.venue as venue_name
        FROM faculty_allocation fa
@@ -105,8 +105,8 @@ exports.createFacultyAllocation = async (req, res) => {
        JOIN venue v ON fa.venue = v.venue
        WHERE fa.slot_year = $1 AND fa.semester_type = $2 
        AND fa.employee_id = $3 AND fa.slot_day = $4 
-       AND fa.slot_time = $5`,
-      [slot_year, semester_type, employee_id, slot_day, slot_time]
+       AND fa.slot_time = $5 AND fa.course_code != $6`,
+      [slot_year, semester_type, employee_id, slot_day, slot_time, course_code]
     );
 
     if (facultyClashCheck.rows.length > 0) {
@@ -118,7 +118,7 @@ exports.createFacultyAllocation = async (req, res) => {
       });
     }
 
-    // NEW CODE: Check for slot conflicts
+    // Check for slot conflicts
     // Get conflicting slot names
     const conflictingSlots = await db.query(
       `SELECT conflicting_slot_name 
@@ -153,12 +153,107 @@ exports.createFacultyAllocation = async (req, res) => {
       }
     }
 
-    // Insert new allocation
-    const result = await db.query(
-      `INSERT INTO faculty_allocation 
-       (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
+    // Check for summer lab slot linking
+    let linkedSlotName = null;
+    let linkedSlotDetails = null;
+
+    // Only apply the special linking for SUMMER semester and lab slots
+    if (
+      semester_type === "SUMMER" &&
+      slot_name.startsWith("L") &&
+      slot_name.includes("+")
+    ) {
+      // Check for linked slot in semester_slot_config
+      const linkedSlotsResult = await db.query(
+        `SELECT linked_slots FROM semester_slot_config 
+         WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3 
+         AND course_theory = 0 AND course_practical > 0`,
+        [slot_year, semester_type, slot_name]
+      );
+
+      // If there's a linked slot for this lab slot in SUMMER semester
+      if (
+        linkedSlotsResult.rows.length > 0 &&
+        linkedSlotsResult.rows[0].linked_slots &&
+        linkedSlotsResult.rows[0].linked_slots.length > 0
+      ) {
+        linkedSlotName = linkedSlotsResult.rows[0].linked_slots[0];
+
+        // Find the details of the linked slot (day and time)
+        const linkedSlotDetailsResult = await db.query(
+          `SELECT slot_day, slot_time FROM slot 
+           WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+          [slot_year, semester_type, linkedSlotName]
+        );
+
+        if (linkedSlotDetailsResult.rows.length > 0) {
+          linkedSlotDetails = linkedSlotDetailsResult.rows[0];
+
+          // Check if the linked slot is already allocated to another faculty
+          const linkedSlotCheck = await db.query(
+            `SELECT fa.*, c.course_name, f.name as faculty_name
+             FROM faculty_allocation fa
+             JOIN course c ON fa.course_code = c.course_code
+             JOIN faculty f ON fa.employee_id = f.employee_id
+             WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+             AND fa.venue = $3 AND fa.slot_day = $4 
+             AND fa.slot_time = $5 AND fa.employee_id != $6`,
+            [
+              slot_year,
+              semester_type,
+              venue,
+              linkedSlotDetails.slot_day,
+              linkedSlotDetails.slot_time,
+              employee_id,
+            ]
+          );
+
+          if (linkedSlotCheck.rows.length > 0) {
+            const clash = linkedSlotCheck.rows[0];
+            return res.status(409).json({
+              message: `Linked slot clash: The linked slot ${linkedSlotName} is already booked by ${clash.faculty_name} for ${clash.course_name}`,
+              type: "linked_slot_clash",
+              existingAllocation: clash,
+            });
+          }
+
+          // Check if faculty is already allocated in the linked slot for different course
+          const facultyLinkedSlotCheck = await db.query(
+            `SELECT fa.*, c.course_name, v.venue as venue_name
+             FROM faculty_allocation fa
+             JOIN course c ON fa.course_code = c.course_code
+             JOIN venue v ON fa.venue = v.venue
+             WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+             AND fa.employee_id = $3 AND fa.slot_day = $4 
+             AND fa.slot_time = $5 AND fa.course_code != $6`,
+            [
+              slot_year,
+              semester_type,
+              employee_id,
+              linkedSlotDetails.slot_day,
+              linkedSlotDetails.slot_time,
+              course_code,
+            ]
+          );
+
+          if (facultyLinkedSlotCheck.rows.length > 0) {
+            const clash = facultyLinkedSlotCheck.rows[0];
+            return res.status(409).json({
+              message: `Faculty clash in linked slot: Faculty is already assigned to ${clash.course_name} in ${clash.venue_name} during the linked slot time`,
+              type: "faculty_linked_slot_clash",
+              existingAllocation: clash,
+            });
+          }
+        }
+      }
+    }
+
+    // Check if primary allocation already exists
+    const existingPrimaryCheck = await db.query(
+      `SELECT * FROM faculty_allocation
+       WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
+       AND employee_id = $4 AND venue = $5 AND slot_day = $6 
+       AND slot_name = $7 AND slot_time = $8`,
       [
         slot_year,
         semester_type,
@@ -171,15 +266,129 @@ exports.createFacultyAllocation = async (req, res) => {
       ]
     );
 
-    res.status(201).json({
-      message: "Faculty allocation created successfully",
+    let result;
+    let primaryAllocationExists = false;
+
+    if (existingPrimaryCheck.rows.length > 0) {
+      // Primary allocation already exists
+      primaryAllocationExists = true;
+      result = existingPrimaryCheck;
+    } else {
+      // Insert primary allocation
+      result = await db.query(
+        `INSERT INTO faculty_allocation 
+         (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [
+          slot_year,
+          semester_type,
+          course_code,
+          employee_id,
+          venue,
+          slot_day,
+          slot_name,
+          slot_time,
+        ]
+      );
+    }
+
+    // Handle linked slot for SUMMER lab
+    let linkedAllocationExists = false;
+    if (semester_type === "SUMMER" && linkedSlotName && linkedSlotDetails) {
+      // Check if linked allocation already exists
+      const existingLinkedCheck = await db.query(
+        `SELECT * FROM faculty_allocation
+         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
+         AND employee_id = $4 AND venue = $5 AND slot_name = $6`,
+        [
+          slot_year,
+          semester_type,
+          course_code,
+          employee_id,
+          venue,
+          linkedSlotName,
+        ]
+      );
+
+      if (existingLinkedCheck.rows.length > 0) {
+        // Linked allocation already exists
+        linkedAllocationExists = true;
+      } else {
+        try {
+          // Insert linked allocation
+          await db.query(
+            `INSERT INTO faculty_allocation 
+             (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              slot_year,
+              semester_type,
+              course_code,
+              employee_id,
+              venue,
+              linkedSlotDetails.slot_day,
+              linkedSlotName,
+              linkedSlotDetails.slot_time,
+            ]
+          );
+        } catch (error) {
+          console.error("Error creating linked allocation:", error);
+          // Only rollback primary if we just created it
+          if (!primaryAllocationExists) {
+            await db.query(
+              `DELETE FROM faculty_allocation 
+               WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
+               AND employee_id = $4 AND venue = $5 AND slot_day = $6 
+               AND slot_name = $7 AND slot_time = $8`,
+              [
+                slot_year,
+                semester_type,
+                course_code,
+                employee_id,
+                venue,
+                slot_day,
+                slot_name,
+                slot_time,
+              ]
+            );
+          }
+          // We'll still consider it a success if the primary already existed
+          if (primaryAllocationExists) {
+            linkedAllocationExists = true; // Assume it exists to prevent further attempts
+          } else {
+            throw error;
+          }
+        }
+      }
+    }
+
+    // Determine appropriate status code and message
+    const statusCode =
+      primaryAllocationExists && linkedAllocationExists ? 200 : 201;
+    const message = primaryAllocationExists
+      ? "Faculty allocation already exists"
+      : "Faculty allocation created successfully";
+
+    res.status(statusCode).json({
+      message,
       allocation: result.rows[0],
+      primaryAllocationExists,
+      linkedAllocation: linkedSlotName
+        ? {
+            slot_name: linkedSlotName,
+            slot_day: linkedSlotDetails?.slot_day,
+            slot_time: linkedSlotDetails?.slot_time,
+            exists: linkedAllocationExists,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Create faculty allocation error:", error);
-    res
-      .status(500)
-      .json({ message: "Server error while creating faculty allocation" });
+    res.status(500).json({
+      message: "Server error while creating faculty allocation",
+      error: error.message,
+    });
   }
 };
 
@@ -306,11 +515,13 @@ exports.deleteFacultyAllocation = async (req, res) => {
       });
     }
 
+    // Delete the primary allocation
     const result = await db.query(
       `DELETE FROM faculty_allocation 
        WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
        AND employee_id = $4 AND venue = $5 AND slot_day = $6 
-       AND slot_name = $7 AND slot_time = $8`,
+       AND slot_name = $7 AND slot_time = $8
+       RETURNING *`,
       [
         slot_year,
         semester_type,
@@ -327,9 +538,52 @@ exports.deleteFacultyAllocation = async (req, res) => {
       return res.status(404).json({ message: "Faculty allocation not found" });
     }
 
-    res
-      .status(200)
-      .json({ message: "Faculty allocation deleted successfully" });
+    // For SUMMER semester lab slots, check for linked slot to delete as well
+    let linkedSlotDeleted = false;
+    if (
+      semester_type === "SUMMER" &&
+      slot_name.startsWith("L") &&
+      slot_name.includes("+")
+    ) {
+      // Check for linked slot in semester_slot_config
+      const linkedSlotsResult = await db.query(
+        `SELECT linked_slots FROM semester_slot_config 
+         WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3 
+         AND course_theory = 0 AND course_practical > 0`,
+        [slot_year, semester_type, slot_name]
+      );
+
+      // If there's a linked slot for this lab slot in SUMMER semester
+      if (
+        linkedSlotsResult.rows.length > 0 &&
+        linkedSlotsResult.rows[0].linked_slots &&
+        linkedSlotsResult.rows[0].linked_slots.length > 0
+      ) {
+        const linkedSlotName = linkedSlotsResult.rows[0].linked_slots[0];
+
+        // Delete the linked allocation if it exists
+        const linkedResult = await db.query(
+          `DELETE FROM faculty_allocation 
+           WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
+           AND employee_id = $4 AND venue = $5 AND slot_name = $6`,
+          [
+            slot_year,
+            semester_type,
+            course_code,
+            employee_id,
+            venue,
+            linkedSlotName,
+          ]
+        );
+
+        linkedSlotDeleted = linkedResult.rowCount > 0;
+      }
+    }
+
+    res.status(200).json({
+      message: "Faculty allocation deleted successfully",
+      linkedSlotDeleted,
+    });
   } catch (error) {
     console.error("Delete faculty allocation error:", error);
     res
