@@ -2326,6 +2326,53 @@ function setupCourseCodeAutocomplete() {
 }
 
 function setupFacultyNameAutocomplete() {
+  // Find the labels more reliably using parent-child relationships
+  // The label for the input field where faculty name is typed
+  const employeeIdField = document.getElementById(
+    "allocation-employee-id-field"
+  );
+  const employeeIdLabel =
+    employeeIdField && employeeIdField.closest(".mb-3")?.querySelector("label");
+
+  // The label for the display field that shows employee ID
+  const facultyNameDisplay = document.getElementById(
+    "allocation-faculty-name-display"
+  );
+  const facultyNameLabel =
+    facultyNameDisplay &&
+    facultyNameDisplay.closest(".mb-3")?.querySelector("label");
+
+  // Update the labels
+  if (employeeIdLabel) {
+    employeeIdLabel.textContent = "Faculty Name *";
+    console.log("Updated input field label to: Faculty Name *");
+  } else {
+    console.warn("Could not find the label for employee ID field");
+  }
+
+  if (facultyNameLabel) {
+    facultyNameLabel.textContent = "Employee ID";
+    console.log("Updated display field label to: Employee ID");
+  } else {
+    console.warn("Could not find the label for faculty name display");
+  }
+
+  // Add a fallback method using direct DOM selection
+  setTimeout(() => {
+    // Attempt to update labels again after a short delay
+    const labels = document.querySelectorAll("label");
+    labels.forEach((label) => {
+      // Check if the label is for the faculty name display by its proximity to the element
+      if (
+        label.nextElementSibling &&
+        label.nextElementSibling.id === "allocation-faculty-name-display"
+      ) {
+        label.textContent = "Employee ID";
+        console.log("Updated faculty display label via fallback method");
+      }
+    });
+  }, 500);
+
   // Create a new text input for faculty name search
   const facultyNameSearchInput = document.createElement("input");
   facultyNameSearchInput.type = "text";
