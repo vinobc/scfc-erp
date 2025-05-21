@@ -214,6 +214,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Setup navigation for Faculty Slot Timetable
   setupFacultyAllocationNavigation();
+
+  if (allocationCourseCodeInput && allocationEmployeeIdInput) {
+    setupCourseCodeAutocomplete();
+    setupFacultyNameAutocomplete();
+  }
 });
 
 // Setup navigation for faculty allocation
@@ -1182,12 +1187,20 @@ function handleAddFacultyAllocation() {
 function handleSaveFacultyAllocation() {
   console.log("Save button clicked");
 
+  // Get employee ID from the hidden field if it exists
+  const hiddenEmployeeIdInput = document.getElementById(
+    "hidden-employee-id-field"
+  );
+  const employeeId = hiddenEmployeeIdInput
+    ? hiddenEmployeeIdInput.value
+    : allocationEmployeeIdInput.value;
+
   // Get form values
   const allocationData = {
     slot_year: allocationYearInput.value,
     semester_type: allocationSemesterInput.value,
     course_code: allocationCourseCodeInput.value,
-    employee_id: parseInt(allocationEmployeeIdInput.value),
+    employee_id: parseInt(employeeId),
     venue: allocationVenueInput.value,
     slot_name: allocationSlotNameInput.value,
   };
@@ -2204,4 +2217,240 @@ function showAlert(message, type = "info", timeout = 5000) {
       }
     }
   }
+}
+
+// Enhanced autocomplete for course code
+function setupCourseCodeAutocomplete() {
+  // Create a dropdown container for our custom autocomplete
+  const dropdown = document.createElement("div");
+  dropdown.className = "autocomplete-dropdown";
+  dropdown.style.display = "none";
+  dropdown.style.position = "absolute";
+  dropdown.style.zIndex = "1000";
+  dropdown.style.backgroundColor = "#fff";
+  dropdown.style.border = "1px solid #ddd";
+  dropdown.style.maxHeight = "200px";
+  dropdown.style.overflowY = "auto";
+  dropdown.style.width = "100%";
+
+  // Insert the dropdown after the course code input
+  allocationCourseCodeInput.parentNode.style.position = "relative";
+  allocationCourseCodeInput.parentNode.appendChild(dropdown);
+
+  // Replace the existing input handler with our enhanced version
+  allocationCourseCodeInput.removeEventListener("input", handleCourseCodeInput);
+  allocationCourseCodeInput.addEventListener("input", function (event) {
+    const courseCode = event.target.value.trim().toUpperCase();
+
+    if (courseCode.length < 2) {
+      dropdown.style.display = "none";
+      allocationCourseNameDisplay.textContent = "";
+      allocationCourseTpcDisplay.textContent = "";
+      return;
+    }
+
+    // Fetch all courses and filter client-side
+    fetch(`${window.API_URL}/courses`, {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    })
+      .then((response) => response.json())
+      .then((courses) => {
+        // Filter courses that match the typed code
+        const matchingCourses = courses.filter((c) =>
+          c.course_code.toUpperCase().includes(courseCode)
+        );
+
+        if (matchingCourses.length > 0) {
+          // Show dropdown with matching courses
+          dropdown.style.display = "block";
+          dropdown.innerHTML = "";
+
+          matchingCourses.forEach((course) => {
+            const item = document.createElement("div");
+            item.className = "autocomplete-item";
+            item.style.padding = "8px 12px";
+            item.style.cursor = "pointer";
+            item.style.borderBottom = "1px solid #eee";
+            item.textContent = `${course.course_code} - ${course.course_name}`;
+
+            item.addEventListener("mouseover", () => {
+              item.style.backgroundColor = "#f1f1f1";
+            });
+
+            item.addEventListener("mouseout", () => {
+              item.style.backgroundColor = "transparent";
+            });
+
+            item.addEventListener("click", () => {
+              // Set the value in the input field
+              allocationCourseCodeInput.value = course.course_code;
+
+              // Update displays
+              courseData = course;
+              allocationCourseNameDisplay.textContent = course.course_name;
+              allocationCourseTpcDisplay.textContent = `${course.theory}-${course.practical}-${course.credits}`;
+
+              // Update component type options for TEL courses
+              updateComponentTypeOptions(course);
+
+              // Update available slots based on TPC
+              updateAvailableSlots(course);
+
+              // Hide dropdown
+              dropdown.style.display = "none";
+            });
+
+            dropdown.appendChild(item);
+          });
+        } else {
+          dropdown.style.display = "none";
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching course details:", error);
+        dropdown.style.display = "none";
+      });
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", function (event) {
+    if (
+      !allocationCourseCodeInput.contains(event.target) &&
+      !dropdown.contains(event.target)
+    ) {
+      dropdown.style.display = "none";
+    }
+  });
+}
+
+function setupFacultyNameAutocomplete() {
+  // Create a new text input for faculty name search
+  const facultyNameSearchInput = document.createElement("input");
+  facultyNameSearchInput.type = "text";
+  facultyNameSearchInput.className = "form-control";
+  facultyNameSearchInput.placeholder = "Start typing faculty name...";
+  facultyNameSearchInput.id = "faculty-name-search";
+
+  // Get the existing employee ID field and its container
+  const employeeIdContainer = allocationEmployeeIdInput.parentNode;
+
+  // Insert the faculty name search before the employee ID input
+  employeeIdContainer.insertBefore(
+    facultyNameSearchInput,
+    allocationEmployeeIdInput
+  );
+
+  // Hide the original employee ID input
+  allocationEmployeeIdInput.style.display = "none";
+
+  // Create dropdown container
+  const dropdown = document.createElement("div");
+  dropdown.className = "autocomplete-dropdown";
+  dropdown.style.display = "none";
+  dropdown.style.position = "absolute";
+  dropdown.style.zIndex = "1000";
+  dropdown.style.backgroundColor = "#fff";
+  dropdown.style.border = "1px solid #ddd";
+  dropdown.style.maxHeight = "200px";
+  dropdown.style.overflowY = "auto";
+  dropdown.style.width = "100%";
+
+  // Add dropdown to container
+  employeeIdContainer.style.position = "relative";
+  employeeIdContainer.appendChild(dropdown);
+
+  // Add input event listener to faculty name search
+  facultyNameSearchInput.addEventListener("input", function (event) {
+    const searchTerm = event.target.value.trim().toLowerCase();
+    console.log("Faculty search term:", searchTerm);
+
+    if (searchTerm.length < 2) {
+      dropdown.style.display = "none";
+      allocationFacultyNameDisplay.textContent = "";
+      return;
+    }
+
+    // Fetch faculty data
+    fetch(`${window.API_URL}/faculty`, {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    })
+      .then((response) => response.json())
+      .then((facultyList) => {
+        console.log("Faculty list:", facultyList);
+
+        // Filter matching faculty
+        const matchingFaculty = facultyList.filter((f) =>
+          f.name.toLowerCase().includes(searchTerm)
+        );
+        console.log("Matching faculty:", matchingFaculty);
+
+        if (matchingFaculty.length > 0) {
+          // Show dropdown
+          dropdown.style.display = "block";
+          dropdown.innerHTML = "";
+
+          matchingFaculty.forEach((faculty) => {
+            const item = document.createElement("div");
+            item.className = "autocomplete-item";
+            item.style.padding = "8px 12px";
+            item.style.cursor = "pointer";
+            item.style.borderBottom = "1px solid #eee";
+            item.textContent = faculty.name;
+
+            item.addEventListener("mouseover", () => {
+              item.style.backgroundColor = "#f1f1f1";
+            });
+
+            item.addEventListener("mouseout", () => {
+              item.style.backgroundColor = "transparent";
+            });
+
+            item.addEventListener("click", () => {
+              // Set the search input to faculty name
+              facultyNameSearchInput.value = faculty.name;
+
+              // Set the hidden employee ID input
+              allocationEmployeeIdInput.value = faculty.employee_id;
+
+              // Display the faculty name and employee ID
+              allocationFacultyNameDisplay.textContent = faculty.employee_id;
+
+              // Store faculty data
+              facultyData = faculty;
+
+              // Update available slots
+              updateFacultyAvailableSlots();
+
+              // Check for conflicts
+              checkAndDisableConflictingSlots();
+
+              // Hide dropdown
+              dropdown.style.display = "none";
+            });
+
+            dropdown.appendChild(item);
+          });
+        } else {
+          dropdown.style.display = "none";
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching faculty:", error);
+        dropdown.style.display = "none";
+      });
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", function (event) {
+    if (
+      !facultyNameSearchInput.contains(event.target) &&
+      !dropdown.contains(event.target)
+    ) {
+      dropdown.style.display = "none";
+    }
+  });
 }
