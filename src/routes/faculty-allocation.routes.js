@@ -3,7 +3,8 @@ const facultyAllocationController = require("../controllers/faculty-allocation.c
 const {
   verifyToken,
   isAdmin,
-  isStaffOrAdmin,
+  canManageFacultyAllocations,
+  canViewTimetables,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -11,37 +12,45 @@ const router = express.Router();
 // Apply auth middleware to all faculty allocation routes
 router.use(verifyToken);
 
-// Faculty allocation routes
-
-// Read operations - available to staff and admin
+// Faculty allocation management routes (coordinators and admins can manage)
 router.get(
   "/",
-  isStaffOrAdmin,
+  canViewTimetables,
   facultyAllocationController.getAllFacultyAllocations
 );
+router.post(
+  "/",
+  canManageFacultyAllocations,
+  facultyAllocationController.createFacultyAllocation
+);
+router.put(
+  "/:id",
+  canManageFacultyAllocations,
+  facultyAllocationController.updateFacultyAllocation
+);
+router.delete(
+  "/",
+  canManageFacultyAllocations,
+  facultyAllocationController.deleteFacultyAllocation
+);
+
+// Available slots endpoint (coordinators and admins can access)
+router.get(
+  "/available-slots",
+  canManageFacultyAllocations,
+  facultyAllocationController.getAvailableSlotsForCourse
+);
+
+// Timetable viewing routes (faculty, coordinators, and admins can view)
 router.get(
   "/faculty-timetable",
-  isStaffOrAdmin,
+  canViewTimetables,
   facultyAllocationController.getFacultyTimetable
 );
 router.get(
   "/class-timetable",
-  isStaffOrAdmin,
+  canViewTimetables,
   facultyAllocationController.getClassTimetable
-);
-router.get(
-  "/available-slots",
-  isStaffOrAdmin,
-  facultyAllocationController.getAvailableSlotsForCourse
-);
-
-// Write operations - admin only
-router.post("/", isAdmin, facultyAllocationController.createFacultyAllocation);
-router.put("/", isAdmin, facultyAllocationController.updateFacultyAllocation);
-router.delete(
-  "/",
-  isAdmin,
-  facultyAllocationController.deleteFacultyAllocation
 );
 
 module.exports = router;

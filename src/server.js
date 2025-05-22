@@ -17,6 +17,8 @@ const studentRoutes = require("./routes/student.routes");
 const slotRoutes = require("./routes/slot.routes");
 const facultyAllocationRoutes = require("./routes/faculty-allocation.routes");
 const semesterSlotConfigRoutes = require("./routes/semester-slot-config.routes");
+const timetableCoordinatorRoutes = require("./routes/timetable-coordinator.routes");
+const userRoutes = require("./routes/user.routes");
 
 // Initialize express app
 const app = express();
@@ -69,6 +71,12 @@ console.log(
 app.use("/api/semester-slot-configs", semesterSlotConfigRoutes);
 console.log("Registering slot conflict routes at /api/slot-conflicts");
 app.use("/api/slot-conflicts", require("./routes/slot-conflict.routes"));
+console.log(
+  "Registering timetable coordinator routes at /api/timetable-coordinators"
+);
+app.use("/api/timetable-coordinators", timetableCoordinatorRoutes);
+console.log("Registering user routes at /api/users");
+app.use("/api/users", userRoutes);
 
 // Root route
 app.get("/", (req, res) => {

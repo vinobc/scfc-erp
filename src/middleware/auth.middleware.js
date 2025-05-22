@@ -4,7 +4,6 @@ const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-should-be-in-env";
 
 // Verify token middleware
-// Verify token middleware
 exports.verifyToken = (req, res, next) => {
   console.log(
     "DEBUG - Auth headers:",
@@ -30,12 +29,14 @@ exports.verifyToken = (req, res, next) => {
     console.log("DEBUG - Token verified successfully for user ID:", decoded.id);
     req.userId = decoded.id;
     req.userRole = decoded.role;
+    req.username = decoded.username;
     next();
   } catch (error) {
     console.log("DEBUG - Token verification failed:", error.message);
     return res.status(401).json({ message: "Unauthorized - Invalid token" });
   }
 };
+
 // Check if user has admin role
 exports.isAdmin = (req, res, next) => {
   if (req.userRole !== "admin") {
@@ -56,6 +57,56 @@ exports.isStaffOrAdmin = (req, res, next) => {
 exports.isFaculty = (req, res, next) => {
   if (req.userRole !== "faculty" && req.userRole !== "admin") {
     return res.status(403).json({ message: "Require Faculty or Admin Role" });
+  }
+  next();
+};
+
+// Check if user has timetable coordinator role
+exports.isTimetableCoordinator = (req, res, next) => {
+  if (req.userRole !== "timetable_coordinator" && req.userRole !== "admin") {
+    return res.status(403).json({
+      message: "Require Timetable Coordinator or Admin Role",
+    });
+  }
+  next();
+};
+
+// Check if user has faculty or timetable coordinator role
+exports.isFacultyOrCoordinator = (req, res, next) => {
+  if (
+    req.userRole !== "faculty" &&
+    req.userRole !== "timetable_coordinator" &&
+    req.userRole !== "admin"
+  ) {
+    return res.status(403).json({
+      message: "Require Faculty, Timetable Coordinator, or Admin Role",
+    });
+  }
+  next();
+};
+
+// Check if user can access faculty allocation management (coordinators and admins)
+exports.canManageFacultyAllocations = (req, res, next) => {
+  if (req.userRole !== "timetable_coordinator" && req.userRole !== "admin") {
+    return res.status(403).json({
+      message:
+        "Require Timetable Coordinator or Admin Role to manage faculty allocations",
+    });
+  }
+  next();
+};
+
+// Check if user can view timetables (faculty, coordinators, and admins)
+exports.canViewTimetables = (req, res, next) => {
+  if (
+    req.userRole !== "faculty" &&
+    req.userRole !== "timetable_coordinator" &&
+    req.userRole !== "admin"
+  ) {
+    return res.status(403).json({
+      message:
+        "Require Faculty, Timetable Coordinator, or Admin Role to view timetables",
+    });
   }
   next();
 };
