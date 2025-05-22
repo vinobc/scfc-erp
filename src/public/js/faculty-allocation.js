@@ -1779,7 +1779,7 @@ function generateFacultyTimetable(faculty, allocations, year, semester) {
 
   // Generate HTML table
   let tableHtml = `
-      <table class="table table-bordered">
+    <table class="table table-bordered timetable-container">
         <thead>
           <tr class="table-primary">
             <th></th>
@@ -1870,16 +1870,15 @@ function generateFacultyTimetable(faculty, allocations, year, semester) {
   tableHtml += "</tbody></table>";
 
   // Add abbreviations note
-  let abbreviationsNote = "<p><strong>Course Abbreviations:</strong><br>";
+  let courseInfo = "";
   Object.entries(courseAbbreviations).forEach(([code, data]) => {
-    abbreviationsNote += `${data.abbr} - ${data.full}<br>`;
+    courseInfo += `<p><strong>${code}: ${data.full}</strong></p>`;
   });
-  abbreviationsNote += "</p>";
 
   // Update the container
   const facultyTimetableDiv = document.getElementById("faculty-timetable-div");
   if (facultyTimetableDiv) {
-    facultyTimetableDiv.innerHTML = tableHtml + abbreviationsNote;
+    facultyTimetableDiv.innerHTML = tableHtml + courseInfo;
   }
 }
 // Generate class timetable
@@ -2037,7 +2036,7 @@ function generateClassTimetable(venue, allocations, year, semester) {
 
   // Generate HTML table
   let tableHtml = `
-      <table class="table table-bordered">
+      <table class="table table-bordered timetable-container">
         <thead>
           <tr class="table-primary">
             <th></th>
@@ -2117,22 +2116,75 @@ function generateClassTimetable(venue, allocations, year, semester) {
 
   tableHtml += "</tbody></table>";
 
-  // Add abbreviations note
-  let abbreviationsNote = "<p><strong>Abbreviations:</strong><br>";
-  abbreviationsNote += "<strong>Courses:</strong><br>";
-  Object.entries(courseAbbreviations).forEach(([code, data]) => {
-    abbreviationsNote += `${data.abbr} - ${data.full}<br>`;
+  // Create summary table with unique courses only
+  const uniqueCourses = {};
+  allocations.forEach((allocation) => {
+    if (!uniqueCourses[allocation.course_code]) {
+      uniqueCourses[allocation.course_code] = {
+        slot_names: [allocation.slot_name],
+        course_code: allocation.course_code,
+        course_name: allocation.course_name,
+        theory: allocation.theory,
+        practical: allocation.practical,
+        credits: allocation.credits,
+        faculty_name: allocation.faculty_name,
+      };
+    } else {
+      // Add slot name if not already present
+      if (
+        !uniqueCourses[allocation.course_code].slot_names.includes(
+          allocation.slot_name
+        )
+      ) {
+        uniqueCourses[allocation.course_code].slot_names.push(
+          allocation.slot_name
+        );
+      }
+    }
   });
-  abbreviationsNote += "<br><strong>Faculty:</strong><br>";
-  Object.entries(facultyAbbreviations).forEach(([id, data]) => {
-    abbreviationsNote += `${data.abbr} - ${data.full}<br>`;
+
+  let summaryTable = `
+    <div class="mt-4">
+      <table class="table summary-table">
+        <thead>
+          <tr>
+            <th>Sl. No.</th>
+            <th>Slot</th>
+            <th>Course Code</th>
+            <th>Course Title</th>
+            <th>T-P-C</th>
+            <th>Faculty</th>
+          </tr>
+        </thead>
+        <tbody>
+`;
+
+  // Add rows for each unique course
+  let serialNumber = 1;
+  Object.values(uniqueCourses).forEach((course) => {
+    summaryTable += `
+          <tr>
+            <td>${serialNumber}.</td>
+            <td>${course.slot_names.join(", ")}</td>
+            <td>${course.course_code}</td>
+            <td>${course.course_name}</td>
+            <td>${course.theory}-${course.practical}-${course.credits}</td>
+            <td>${course.faculty_name}</td>
+          </tr>
+  `;
+    serialNumber++;
   });
-  abbreviationsNote += "</p>";
+
+  summaryTable += `
+        </tbody>
+      </table>
+    </div>
+`;
 
   // Update the container
   const classTimetableDiv = document.getElementById("class-timetable-div");
   if (classTimetableDiv) {
-    classTimetableDiv.innerHTML = tableHtml + abbreviationsNote;
+    classTimetableDiv.innerHTML = tableHtml + summaryTable;
   }
 }
 

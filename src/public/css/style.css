@@ -123,3 +123,45 @@ main {
     height: auto;
   }
 }
+
+/* Timetable border styling - Enhanced borders for all timetable cells */
+.timetable-container {
+  border: 2px solid black !important; /* Thick outer border */
+}
+
+.timetable-container th,
+.timetable-container td {
+  border: 1px solid black !important; /* All cells have black borders */
+}
+
+/* Summary table styling - For class timetable legend table */
+.summary-table,
+.summary-table th,
+.summary-table td {
+  border: 1px solid black !important;
+  border-collapse: collapse;
+}
+
+.summary-table th {
+  background-color: #f8f9fa;
+  font-weight: bold;
+  text-align: center;
+  padding: 8px;
+}
+
+.summary-table td {
+  padding: 8px;
+  text-align: center;
+}
+
+.summary-table td:first-child {
+  text-align: center; /* Serial number column */
+}
+
+.summary-table td:nth-child(4) {
+  text-align: left; /* Course title column */
+}
+
+.summary-table td:last-child {
+  text-align: left; /* Faculty name column */
+}
