@@ -158,6 +158,35 @@
                 </ul>
               </li>
               <li class="nav-item">
+                <a class="nav-link" href="#" id="timetable-coordinator-link">
+                  <i class="fas fa-user-cog me-2"></i>
+                  Timetable Coordinator
+                </a>
+                <ul
+                  class="nav flex-column ms-3 d-none"
+                  id="timetable-coordinator-submenu"
+                >
+                  <li class="nav-item">
+                    <a class="nav-link" href="#" id="create-coordinator-link">
+                      <i class="fas fa-plus me-2"></i>
+                      Create
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="#" id="manage-coordinators-link">
+                      <i class="fas fa-list me-2"></i>
+                      Manage
+                    </a>
+                  </li>
+                </ul>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="#" id="change-password-link">
+                  <i class="fas fa-key me-2"></i>
+                  Change Password
+                </a>
+              </li>
+              <li class="nav-item">
                 <a class="nav-link" href="#" id="logout-link">
                   <i class="fas fa-sign-out-alt me-2"></i>
                   Logout
@@ -1079,6 +1108,211 @@
                     <div id="class-timetable-div"></div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Timetable Coordinator Pages -->
+
+            <!-- Create Coordinator Page -->
+            <div id="create-coordinator-page" class="content-page">
+              <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                  <h6 class="m-0 font-weight-bold text-primary">
+                    Create Timetable Coordinator Assignment
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <form id="coordinator-assignment-form">
+                    <div class="row">
+                      <div class="col-md-6 mb-3">
+                        <label for="coordinator-employee-id" class="form-label">
+                          Faculty Member *
+                        </label>
+                        <input
+                          type="text"
+                          class="form-control"
+                          id="coordinator-employee-id"
+                          placeholder="Start typing faculty name..."
+                          required
+                        />
+                        <div class="form-text">
+                          Search and select faculty member to assign as
+                          coordinator
+                        </div>
+                      </div>
+                      <div class="col-md-6 mb-3">
+                        <label class="form-label">Employee ID</label>
+                        <div
+                          class="form-control bg-light"
+                          id="coordinator-employee-id-display"
+                        ></div>
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <label for="coordinator-schools" class="form-label">
+                        Assign to Schools *
+                      </label>
+                      <div id="coordinator-schools" class="border p-3 rounded">
+                        <div class="form-text mb-2">
+                          Select one or more schools for this coordinator:
+                        </div>
+                        <!-- Will be populated dynamically with checkboxes -->
+                      </div>
+                    </div>
+                    <div class="text-center">
+                      <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>
+                        Create Coordinator Assignment
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <!-- Manage Coordinators Page -->
+            <div id="manage-coordinators-page" class="content-page">
+              <div class="d-flex justify-content-between mb-4">
+                <h4>Manage Timetable Coordinators</h4>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  id="add-new-coordinator-btn"
+                >
+                  <i class="fas fa-plus"></i> Add New Coordinator
+                </button>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                  <thead>
+                    <tr>
+                      <th>Faculty Name</th>
+                      <th>Employee ID</th>
+                      <th>Username</th>
+                      <th>Schools Assigned</th>
+                      <th>Created Date</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="coordinators-table">
+                    <tr>
+                      <td colspan="6" class="text-center">
+                        Loading coordinators...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Main Timetable Coordinator Page -->
+            <div id="timetable-coordinator-page" class="content-page">
+              <div class="row">
+                <div class="col-lg-12">
+                  <div class="card shadow mb-4">
+                    <div class="card-header py-3">
+                      <h6 class="m-0 font-weight-bold text-primary">
+                        Timetable Coordinator Management
+                      </h6>
+                    </div>
+                    <div class="card-body">
+                      <p>
+                        Welcome to the Timetable Coordinator Management section.
+                        Here you can:
+                      </p>
+                      <div class="row">
+                        <div class="col-md-6">
+                          <div class="card border-primary mb-3">
+                            <div class="card-body">
+                              <h5 class="card-title">
+                                <i class="fas fa-plus text-primary me-2"></i>
+                                Create Coordinator
+                              </h5>
+                              <p class="card-text">
+                                Assign faculty members as timetable coordinators
+                                for specific schools.
+                              </p>
+                              <a
+                                href="#"
+                                class="btn btn-primary"
+                                id="goto-create-coordinator"
+                              >
+                                Go to Create <i class="fas fa-arrow-right"></i>
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="card border-success mb-3">
+                            <div class="card-body">
+                              <h5 class="card-title">
+                                <i class="fas fa-list text-success me-2"></i>
+                                Manage Coordinators
+                              </h5>
+                              <p class="card-text">
+                                View and manage existing timetable coordinator
+                                assignments.
+                              </p>
+                              <a
+                                href="#"
+                                class="btn btn-success"
+                                id="goto-manage-coordinators"
+                              >
+                                Go to Manage <i class="fas fa-arrow-right"></i>
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Users Management Page -->
+            <div id="users-page" class="content-page">
+              <div class="d-flex justify-content-between mb-4">
+                <h4>User Management</h4>
+                <div>
+                  <button
+                    type="button"
+                    class="btn btn-primary me-2"
+                    id="create-faculty-user-btn"
+                  >
+                    <i class="fas fa-user-plus"></i> Create Faculty Account
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-success"
+                    id="create-coordinator-user-btn"
+                  >
+                    <i class="fas fa-user-cog"></i> Create Coordinator Account
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                  <thead>
+                    <tr>
+                      <th>Full Name</th>
+                      <th>Username</th>
+                      <th>Role</th>
+                      <th>Employee ID</th>
+                      <th>School</th>
+                      <th>Last Login</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-table">
+                    <tr>
+                      <td colspan="8" class="text-center">Loading users...</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -3099,5 +3333,7 @@
     <script src="js/students.js"></script>
     <script src="js/slots.js"></script>
     <script src="js/faculty-allocation.js"></script>
+    <script src="js/timetable-coordinator.js"></script>
+    <script src="js/users.js"></script>
   </body>
 </html>
