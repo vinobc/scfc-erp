@@ -125,17 +125,20 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "timetable_coordinator":
-      // Coordinator sees: Dashboard, TimeTable (all), Timetable Coordinator, Logout
-      [
-        navItems.dashboard,
-        navItems.timetable,
-        navItems.timetableCoordinator,
-        navItems.logout,
-      ].forEach((item) => {
-        if (item && item.parentElement) {
-          item.parentElement.style.display = "block";
+      // Coordinator sees: Dashboard, TimeTable (view only), Logout
+      [navItems.dashboard, navItems.timetable, navItems.logout].forEach(
+        (item) => {
+          if (item && item.parentElement) {
+            item.parentElement.style.display = "block";
+          }
         }
-      });
+      );
+
+      // Show timetable but customize submenu for coordinators (view only)
+      if (navItems.timetable && navItems.timetable.parentElement) {
+        navItems.timetable.parentElement.style.display = "block";
+        customizeTimetableMenuForCoordinator();
+      }
       break;
 
     case "faculty":
@@ -191,6 +194,33 @@ function customizeTimetableMenuForFaculty() {
   }
   if (viewFacultySlotLink && viewFacultySlotLink.parentElement) {
     viewFacultySlotLink.parentElement.style.display = "block";
+  }
+  if (viewClassSlotLink && viewClassSlotLink.parentElement) {
+    viewClassSlotLink.parentElement.style.display = "block";
+  }
+}
+
+// Customize timetable menu for coordinators (view only for master slots, full access for faculty allocations)
+function customizeTimetableMenuForCoordinator() {
+  const timetableSubmenu = document.getElementById("timetable-submenu");
+  if (!timetableSubmenu) return;
+
+  // Hide master slot creation options for coordinators
+  const createSlotLink = document.getElementById("create-slot-link");
+  if (createSlotLink && createSlotLink.parentElement) {
+    createSlotLink.parentElement.style.display = "none";
+  }
+
+  // Show all other timetable options (view master slots, faculty allocations, class slots)
+  const viewSlotLink = document.getElementById("view-slot-link");
+  const facultySlotSection = document.getElementById("faculty-slot-link");
+  const viewClassSlotLink = document.getElementById("view-class-slot-link");
+
+  if (viewSlotLink && viewSlotLink.parentElement) {
+    viewSlotLink.parentElement.style.display = "block";
+  }
+  if (facultySlotSection && facultySlotSection.parentElement) {
+    facultySlotSection.parentElement.style.display = "block";
   }
   if (viewClassSlotLink && viewClassSlotLink.parentElement) {
     viewClassSlotLink.parentElement.style.display = "block";

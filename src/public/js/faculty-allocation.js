@@ -469,32 +469,42 @@ function renderFacultyAllocations(allocations) {
     }</td>
         <td>${allocation.venue}</td>
         <td>
-          <button class="btn btn-sm btn-primary edit-allocation-btn" 
-            data-allocation='${JSON.stringify(allocation)}'>
-            <i class="fas fa-edit"></i>
-          </button>
-          <button class="btn btn-sm btn-danger delete-allocation-btn" 
-            data-allocation='${JSON.stringify(allocation)}'>
-            <i class="fas fa-trash"></i>
-          </button>
-        </td>
+  ${
+    currentUser && currentUser.role === "admin"
+      ? `
+    <button class="btn btn-sm btn-primary edit-allocation-btn" 
+      data-allocation='${JSON.stringify(allocation)}'>
+      <i class="fas fa-edit"></i>
+    </button>
+  `
+      : ""
+  }
+  <button class="btn btn-sm btn-danger delete-allocation-btn" 
+    data-allocation='${JSON.stringify(allocation)}'>
+    <i class="fas fa-trash"></i>
+  </button>
+</td>
       `;
     facultyAllocationTableBody.appendChild(row);
   });
 
   console.log("Finished rendering allocations");
 
-  // Add event listeners
+  // Remove any existing event listeners by cloning and replacing elements
   document.querySelectorAll(".edit-allocation-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const allocation = JSON.parse(btn.getAttribute("data-allocation"));
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener("click", () => {
+      const allocation = JSON.parse(newBtn.getAttribute("data-allocation"));
       openEditAllocationModal(allocation);
     });
   });
 
   document.querySelectorAll(".delete-allocation-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const allocation = JSON.parse(btn.getAttribute("data-allocation"));
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener("click", () => {
+      const allocation = JSON.parse(newBtn.getAttribute("data-allocation"));
       openDeleteAllocationModal(allocation);
     });
   });
