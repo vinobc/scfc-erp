@@ -224,3 +224,65 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+
+// Create new admin user
+exports.createAdminUser = async (req, res) => {
+  try {
+    const { admin_name, full_name } = req.body;
+
+    // Validate required fields
+    if (!admin_name || !full_name) {
+      return res.status(400).json({
+        message: "Admin name and full name are required",
+      });
+    }
+
+    // Validate admin_name format (no spaces, special chars except underscore)
+    if (!/^[a-zA-Z0-9_]+$/.test(admin_name)) {
+      return res.status(400).json({
+        message:
+          "Admin name can only contain letters, numbers, and underscores",
+      });
+    }
+
+    // Generate username and email
+    const username = `admin_${admin_name}@blr.amity.edu`;
+    const email = username;
+
+    // Check if username already exists
+    const existingUser = await db.query(
+      'SELECT user_id FROM "user" WHERE username = $1',
+      [username]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        message: "Admin user with this name already exists",
+      });
+    }
+
+    // Generate default password
+    const defaultPassword = `Admin@${admin_name}`;
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+    // Create admin user account
+    const result = await db.query(
+      `INSERT INTO "user" 
+         (username, email, password_hash, full_name, role) 
+         VALUES ($1, $2, $3, $4, $5) 
+         RETURNING user_id, username, email, full_name, role, is_active, created_at`,
+      [username, email, passwordHash, full_name, "admin"]
+    );
+
+    res.status(201).json({
+      message: "Admin user account created successfully",
+      user: result.rows[0],
+      defaultPassword: defaultPassword, // In production, this should be sent via secure channel
+    });
+  } catch (error) {
+    console.error("Create admin user error:", error);
+    res
+      .status(500)
+      .json({ message: "Server error while creating admin account" });
+  }
+};

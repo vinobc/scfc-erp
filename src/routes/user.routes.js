@@ -11,6 +11,7 @@ router.use(verifyToken);
 router.get("/", isAdmin, userController.getAllUsers);
 router.get("/:id", isAdmin, userController.getUserById);
 router.post("/faculty", isAdmin, userController.createFacultyUser);
+router.post("/admin", isAdmin, userController.createAdminUser);
 router.put("/:id", isAdmin, userController.updateUser);
 router.delete("/:id", isAdmin, userController.deleteUser);
 
