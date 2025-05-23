@@ -1647,6 +1647,251 @@ function handleViewClassTimetable() {
     });
 }
 
+// // Generate faculty timetable
+// function generateFacultyTimetable(faculty, allocations, year, semester) {
+//   // Show the container
+//   if (facultyTimetableContainer) {
+//     facultyTimetableContainer.style.display = "block";
+//   }
+
+//   // Set title
+//   if (facultyTimetableTitle) {
+//     facultyTimetableTitle.textContent = `Faculty Slot Timetable of ${faculty.name}`;
+//   }
+
+//   // Create timetable structure
+//   const days = ["MON", "TUE", "WED", "THU", "FRI"];
+//   const timeSlots = [
+//     "9.00-9.50",
+//     "9.55-10.45",
+//     "10.50-11.40",
+//     "11.45-12.35",
+//     "1.15-2.05",
+//     "2.10-3.00",
+//     "3.05-3.55",
+//     "4.00-4.50",
+//   ];
+
+//   // Create slot map and merged slots tracker
+//   const slotMap = {};
+//   const mergedSlots = {}; // Track which slots are merged
+
+//   days.forEach((day) => {
+//     slotMap[day] = {};
+//     mergedSlots[day] = {};
+//   });
+
+//   // Create abbreviation map for course names
+//   const courseAbbreviations = {};
+
+//   allocations.forEach((allocation) => {
+//     console.log("Processing allocation:", allocation);
+
+//     if (!slotMap[allocation.slot_day]) {
+//       slotMap[allocation.slot_day] = {};
+//     }
+
+//     // Create abbreviation for course name
+//     if (!courseAbbreviations[allocation.course_code]) {
+//       const words = allocation.course_name.split(" ");
+//       const abbr = words
+//         .map((w) => w[0])
+//         .join("")
+//         .toUpperCase();
+//       courseAbbreviations[allocation.course_code] = {
+//         abbr: abbr,
+//         full: allocation.course_name,
+//       };
+//     }
+
+//     const content =
+//       `${allocation.slot_name}<br>` +
+//       `${allocation.course_code}<br>` +
+//       `${courseAbbreviations[allocation.course_code].abbr}<br>` +
+//       `${allocation.venue}`;
+
+//     // Check if it's a lab slot
+//     if (allocation.slot_name.startsWith("L")) {
+//       console.log("Lab slot:", allocation.slot_time);
+//       // Handle different time formats and map to our standard slots
+//       if (
+//         allocation.slot_time.includes("9.00") ||
+//         allocation.slot_time.includes("9:00")
+//       ) {
+//         slotMap[allocation.slot_day]["9.00-9.50"] = content;
+//         mergedSlots[allocation.slot_day]["9.00-9.50"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       } else if (
+//         allocation.slot_time.includes("10.55") ||
+//         allocation.slot_time.includes("10:55") ||
+//         allocation.slot_time.includes("10.50")
+//       ) {
+//         slotMap[allocation.slot_day]["10.50-11.40"] = content;
+//         mergedSlots[allocation.slot_day]["10.50-11.40"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       } else if (
+//         allocation.slot_time.includes("1.10") ||
+//         allocation.slot_time.includes("1:10") ||
+//         allocation.slot_time.includes("1.15")
+//       ) {
+//         slotMap[allocation.slot_day]["1.15-2.05"] = content;
+//         mergedSlots[allocation.slot_day]["1.15-2.05"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       } else if (
+//         allocation.slot_time.includes("3.05") ||
+//         allocation.slot_time.includes("3:05")
+//       ) {
+//         slotMap[allocation.slot_day]["3.05-3.55"] = content;
+//         mergedSlots[allocation.slot_day]["3.05-3.55"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       }
+//     } else {
+//       // Regular theory slots - normalize the time format
+//       const normalizedTime = allocation.slot_time.replace(/–/g, "-"); // Replace en-dash with hyphen
+//       console.log(
+//         "Theory slot time:",
+//         allocation.slot_time,
+//         "Normalized:",
+//         normalizedTime
+//       );
+
+//       // Try to find matching time slot
+//       const matchingSlot = timeSlots.find((ts) => {
+//         // Normalize both for comparison
+//         const normalizedTs = ts.replace(/–/g, "-");
+//         return normalizedTs === normalizedTime || ts === allocation.slot_time;
+//       });
+
+//       if (matchingSlot) {
+//         slotMap[allocation.slot_day][matchingSlot] = content;
+//       } else {
+//         console.warn("No matching time slot found for:", allocation.slot_time);
+//         // Try to map based on partial match
+//         for (let ts of timeSlots) {
+//           if (allocation.slot_time.includes(ts.split("-")[0])) {
+//             slotMap[allocation.slot_day][ts] = content;
+//             break;
+//           }
+//         }
+//       }
+//     }
+//   });
+
+//   console.log("Final slot map:", slotMap);
+
+//   // Generate HTML table
+//   let tableHtml = `
+//     <table class="table table-bordered timetable-container">
+//         <thead>
+//           <tr class="table-primary">
+//             <th></th>
+//             <th colspan="4">Morning</th>
+//             <th rowspan="2" class="align-middle">Lunch</th>
+//             <th colspan="4">Afternoon</th>
+//           </tr>
+//           <tr class="table-primary">
+//             <th>Day</th>
+//             ${timeSlots
+//               .slice(0, 4)
+//               .map((ts) => `<th>${ts}</th>`)
+//               .join("")}
+//             ${timeSlots
+//               .slice(4, 8)
+//               .map((ts) => `<th>${ts}</th>`)
+//               .join("")}
+//           </tr>
+//         </thead>
+//         <tbody>
+//     `;
+
+//   days.forEach((day) => {
+//     tableHtml += `<tr><td><strong>${day}</strong></td>`;
+
+//     // Morning slots
+//     for (let i = 0; i < 4; i++) {
+//       const currentSlot = timeSlots[i];
+//       const content = slotMap[day][currentSlot] || "";
+//       const isAllocated = content !== "";
+//       const mergeInfo = mergedSlots[day][currentSlot];
+
+//       if (mergeInfo && mergeInfo.span === 2) {
+//         // This is a merged cell (lab)
+//         tableHtml += `<td colspan="2" class="${
+//           isAllocated ? "table-warning" : ""
+//         }">${content}</td>`;
+//         i++; // Skip the next slot
+//       } else if (
+//         i > 0 &&
+//         mergedSlots[day][timeSlots[i - 1]] &&
+//         mergedSlots[day][timeSlots[i - 1]].span === 2
+//       ) {
+//         // This slot is merged with the previous one, skip it
+//         continue;
+//       } else {
+//         // Regular slot
+//         tableHtml += `<td class="${
+//           isAllocated ? "table-success" : ""
+//         }">${content}</td>`;
+//       }
+//     }
+
+//     // Lunch
+//     tableHtml += `<td class="table-secondary">LUNCH</td>`;
+
+//     // Afternoon slots
+//     for (let i = 4; i < 8; i++) {
+//       const currentSlot = timeSlots[i];
+//       const content = slotMap[day][currentSlot] || "";
+//       const isAllocated = content !== "";
+//       const mergeInfo = mergedSlots[day][currentSlot];
+
+//       if (mergeInfo && mergeInfo.span === 2) {
+//         // This is a merged cell (lab)
+//         tableHtml += `<td colspan="2" class="${
+//           isAllocated ? "table-warning" : ""
+//         }">${content}</td>`;
+//         i++; // Skip the next slot
+//       } else if (
+//         i > 4 &&
+//         mergedSlots[day][timeSlots[i - 1]] &&
+//         mergedSlots[day][timeSlots[i - 1]].span === 2
+//       ) {
+//         // This slot is merged with the previous one, skip it
+//         continue;
+//       } else {
+//         // Regular slot
+//         tableHtml += `<td class="${
+//           isAllocated ? "table-success" : ""
+//         }">${content}</td>`;
+//       }
+//     }
+
+//     tableHtml += "</tr>";
+//   });
+
+//   tableHtml += "</tbody></table>";
+
+//   // Add abbreviations note
+//   let courseInfo = "";
+//   Object.entries(courseAbbreviations).forEach(([code, data]) => {
+//     courseInfo += `<p><strong>${code}: ${data.full}</strong></p>`;
+//   });
+
+//   // Update the container
+//   const facultyTimetableDiv = document.getElementById("faculty-timetable-div");
+//   if (facultyTimetableDiv) {
+//     facultyTimetableDiv.innerHTML = tableHtml + courseInfo;
+//   }
+// }
+
 // Generate faculty timetable
 function generateFacultyTimetable(faculty, allocations, year, semester) {
   // Show the container
@@ -1659,238 +1904,642 @@ function generateFacultyTimetable(faculty, allocations, year, semester) {
     facultyTimetableTitle.textContent = `Faculty Slot Timetable of ${faculty.name}`;
   }
 
-  // Create timetable structure
-  const days = ["MON", "TUE", "WED", "THU", "FRI"];
-  const timeSlots = [
-    "9.00-9.50",
-    "9.55-10.45",
-    "10.50-11.40",
-    "11.45-12.35",
-    "1.15-2.05",
-    "2.10-3.00",
-    "3.05-3.55",
-    "4.00-4.50",
-  ];
-
-  // Create slot map and merged slots tracker
-  const slotMap = {};
-  const mergedSlots = {}; // Track which slots are merged
-
-  days.forEach((day) => {
-    slotMap[day] = {};
-    mergedSlots[day] = {};
-  });
-
-  // Create abbreviation map for course names
-  const courseAbbreviations = {};
-
-  allocations.forEach((allocation) => {
-    console.log("Processing allocation:", allocation);
-
-    if (!slotMap[allocation.slot_day]) {
-      slotMap[allocation.slot_day] = {};
-    }
-
-    // Create abbreviation for course name
-    if (!courseAbbreviations[allocation.course_code]) {
-      const words = allocation.course_name.split(" ");
-      const abbr = words
-        .map((w) => w[0])
-        .join("")
-        .toUpperCase();
-      courseAbbreviations[allocation.course_code] = {
-        abbr: abbr,
-        full: allocation.course_name,
-      };
-    }
-
-    const content =
-      `${allocation.slot_name}<br>` +
-      `${allocation.course_code}<br>` +
-      `${courseAbbreviations[allocation.course_code].abbr}<br>` +
-      `${allocation.venue}`;
-
-    // Check if it's a lab slot
-    if (allocation.slot_name.startsWith("L")) {
-      console.log("Lab slot:", allocation.slot_time);
-      // Handle different time formats and map to our standard slots
-      if (
-        allocation.slot_time.includes("9.00") ||
-        allocation.slot_time.includes("9:00")
-      ) {
-        slotMap[allocation.slot_day]["9.00-9.50"] = content;
-        mergedSlots[allocation.slot_day]["9.00-9.50"] = {
-          span: 2,
-          type: "lab",
-        };
-      } else if (
-        allocation.slot_time.includes("10.55") ||
-        allocation.slot_time.includes("10:55") ||
-        allocation.slot_time.includes("10.50")
-      ) {
-        slotMap[allocation.slot_day]["10.50-11.40"] = content;
-        mergedSlots[allocation.slot_day]["10.50-11.40"] = {
-          span: 2,
-          type: "lab",
-        };
-      } else if (
-        allocation.slot_time.includes("1.10") ||
-        allocation.slot_time.includes("1:10") ||
-        allocation.slot_time.includes("1.15")
-      ) {
-        slotMap[allocation.slot_day]["1.15-2.05"] = content;
-        mergedSlots[allocation.slot_day]["1.15-2.05"] = {
-          span: 2,
-          type: "lab",
-        };
-      } else if (
-        allocation.slot_time.includes("3.05") ||
-        allocation.slot_time.includes("3:05")
-      ) {
-        slotMap[allocation.slot_day]["3.05-3.55"] = content;
-        mergedSlots[allocation.slot_day]["3.05-3.55"] = {
-          span: 2,
-          type: "lab",
-        };
-      }
-    } else {
-      // Regular theory slots - normalize the time format
-      const normalizedTime = allocation.slot_time.replace(/–/g, "-"); // Replace en-dash with hyphen
-      console.log(
-        "Theory slot time:",
-        allocation.slot_time,
-        "Normalized:",
-        normalizedTime
-      );
-
-      // Try to find matching time slot
-      const matchingSlot = timeSlots.find((ts) => {
-        // Normalize both for comparison
-        const normalizedTs = ts.replace(/–/g, "-");
-        return normalizedTs === normalizedTime || ts === allocation.slot_time;
+  // First, fetch the actual slots defined for this year and semester
+  fetch(`${window.API_URL}/slots/${year}/${semester}`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((slots) => {
+      // Create allocation map
+      const allocationMap = {};
+      allocations.forEach((allocation) => {
+        const key = `${allocation.slot_day}-${allocation.slot_name}`;
+        allocationMap[key] = allocation;
       });
 
-      if (matchingSlot) {
-        slotMap[allocation.slot_day][matchingSlot] = content;
-      } else {
-        console.warn("No matching time slot found for:", allocation.slot_time);
-        // Try to map based on partial match
-        for (let ts of timeSlots) {
-          if (allocation.slot_time.includes(ts.split("-")[0])) {
-            slotMap[allocation.slot_day][ts] = content;
-            break;
+      // Use EXACT same logic as master timetable
+      const days = ["MON", "TUE", "WED", "THU", "FRI"];
+      const timeSlots = [
+        "9.00-9.50",
+        "9.55-10.45",
+        "10.50-11.40",
+        "11.45-12.35",
+        "12.35-1.15",
+        "1.15–2.05",
+        "2.10-3.00",
+        "3.05–3.55",
+        "4.00–4.50",
+      ];
+
+      // Create a map of day -> time -> slot (SAME as master timetable)
+      const slotMap = {};
+      days.forEach((day) => {
+        slotMap[day] = {};
+      });
+
+      slots.forEach((slot) => {
+        if (!slotMap[slot.slot_day]) {
+          slotMap[slot.slot_day] = {};
+        }
+
+        // Match the time slot to one of our standard time slots
+        const matchingTimeSlot = timeSlots.find((ts) =>
+          slot.slot_time.includes(ts)
+        );
+        if (matchingTimeSlot) {
+          slotMap[slot.slot_day][matchingTimeSlot] = slot.slot_name;
+        }
+      });
+
+      // Generate HTML table with EXACT same structure as master timetable
+      let tableHtml = `
+        <table class="table table-bordered timetable-container">
+            <thead>
+              <tr class="table-primary">
+                <th></th>
+                <th colspan="4">Morning</th>
+                <th rowspan="2" class="align-middle">Lunch</th>
+                <th colspan="4">Afternoon</th>
+              </tr>
+              <tr class="table-primary">
+                <th>Day</th>
+                <th>9:00 - 9:50</th>
+                <th>9:55 - 10:45</th>
+                <th>10:50 - 11:40</th>
+                <th>11:45 - 12:35</th>
+                <th>1:15 - 2:05</th>
+                <th>2:10 - 3:00</th>
+                <th>3:05 - 3:55</th>
+                <th>4:00 - 4:50</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+      // Generate the timetable HTML using EXACT same logic as master
+      days.forEach((day) => {
+        // Theory row - EXACT same as master timetable
+        let rowHtml = `<tr><td class="table-secondary"><strong>${day}</strong></td>`;
+
+        // Theory slots - Morning (first 4 time slots)
+        for (let i = 0; i < 4; i++) {
+          const timeSlot = timeSlots[i];
+          const slotName = slotMap[day][timeSlot] || "";
+          const allocation = allocationMap[`${day}-${slotName}`];
+
+          if (allocation) {
+            rowHtml += `<td class="text-center table-success">${slotName}<br>${allocation.course_code}<br>${allocation.venue}<br>${allocation.employee_id}</td>`;
+          } else {
+            rowHtml += `<td class="text-center">${slotName}</td>`;
           }
         }
+
+        // Lunch
+        rowHtml += `<td class="table-secondary text-center">LUNCH</td>`;
+
+        // Theory slots - Afternoon (time slots 5-8, skipping index 4 which is lunch)
+        for (let i = 5; i < 9; i++) {
+          const timeSlot = timeSlots[i];
+          const slotName = slotMap[day][timeSlot] || "";
+          const allocation = allocationMap[`${day}-${slotName}`];
+
+          if (allocation) {
+            rowHtml += `<td class="text-center table-success">${slotName}<br>${allocation.course_code}<br>${allocation.venue}<br>${allocation.employee_id}</td>`;
+          } else {
+            rowHtml += `<td class="text-center">${slotName}</td>`;
+          }
+        }
+
+        rowHtml += "</tr>";
+        tableHtml += rowHtml;
+
+        // Lab slots row - EXACT same hardcoded pattern as master timetable
+        let labRowHtml = `<tr><td class="table-warning">Lab</td>`;
+
+        // Morning labs - EXACT same pattern as master
+        const morningLab1 = `L${
+          day === "MON"
+            ? "1+L2"
+            : day === "TUE"
+            ? "5+L6"
+            : day === "WED"
+            ? "9+L10"
+            : day === "THU"
+            ? "13+L14"
+            : "17+L18"
+        }`;
+
+        const morningLab2 = `L${
+          day === "MON"
+            ? "3+L4"
+            : day === "TUE"
+            ? "7+L8"
+            : day === "WED"
+            ? "11+L12"
+            : day === "THU"
+            ? "15+L16"
+            : "19+L20"
+        }`;
+
+        // First morning lab
+        const allocation1 = allocationMap[`${day}-${morningLab1}`];
+        if (allocation1) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab1}<br>${allocation1.course_code}<br>${allocation1.venue}<br>${allocation1.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab1}</td>`;
+        }
+
+        // Second morning lab
+        const allocation2 = allocationMap[`${day}-${morningLab2}`];
+        if (allocation2) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab2}<br>${allocation2.course_code}<br>${allocation2.venue}<br>${allocation2.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab2}</td>`;
+        }
+
+        // Lunch
+        labRowHtml += `<td class="table-secondary"></td>`;
+
+        // Afternoon labs - EXACT same pattern as master
+        const afternoonLab1 = `L${
+          day === "MON"
+            ? "21+L22"
+            : day === "TUE"
+            ? "25+L26"
+            : day === "WED"
+            ? "29+L30"
+            : day === "THU"
+            ? "33+L34"
+            : "37+L38"
+        }`;
+
+        const afternoonLab2 = `L${
+          day === "MON"
+            ? "23+L24"
+            : day === "TUE"
+            ? "27+L28"
+            : day === "WED"
+            ? "31+L32"
+            : day === "THU"
+            ? "35+L36"
+            : "39+L40"
+        }`;
+
+        // First afternoon lab
+        const allocation3 = allocationMap[`${day}-${afternoonLab1}`];
+        if (allocation3) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab1}<br>${allocation3.course_code}<br>${allocation3.venue}<br>${allocation3.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab1}</td>`;
+        }
+
+        // Second afternoon lab
+        const allocation4 = allocationMap[`${day}-${afternoonLab2}`];
+        if (allocation4) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab2}<br>${allocation4.course_code}<br>${allocation4.venue}<br>${allocation4.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab2}</td>`;
+        }
+
+        labRowHtml += "</tr>";
+        tableHtml += labRowHtml;
+      });
+
+      tableHtml += "</tbody></table>";
+
+      // Create summary table with unique allocations only
+      const uniqueAllocations = [];
+      const seen = new Set();
+
+      allocations.forEach((allocation) => {
+        const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueAllocations.push(allocation);
+        }
+      });
+
+      // Custom sorting function for slot names
+      function sortSlotNames(a, b) {
+        const slotA = a.slot_name;
+        const slotB = b.slot_name;
+
+        // Handle lab slots (L1+L2, L3+L4, etc.)
+        if (slotA.startsWith("L") && slotB.startsWith("L")) {
+          const numA = parseInt(slotA.match(/\d+/)[0]);
+          const numB = parseInt(slotB.match(/\d+/)[0]);
+          return numA - numB;
+        }
+
+        // Handle theory slots
+        if (!slotA.startsWith("L") && !slotB.startsWith("L")) {
+          // Extract base letter and number
+          const extractSlotParts = (slot) => {
+            if (slot.includes("TA") || slot.includes("TB")) {
+              return {
+                letter: slot.substring(0, 2),
+                number: parseInt(slot.substring(2)) || 0,
+              };
+            } else {
+              const match = slot.match(/([A-Z]+)(\d*)/);
+              return { letter: match[1], number: parseInt(match[2]) || 0 };
+            }
+          };
+
+          const partsA = extractSlotParts(slotA);
+          const partsB = extractSlotParts(slotB);
+
+          // First compare by letter
+          if (partsA.letter !== partsB.letter) {
+            return partsA.letter.localeCompare(partsB.letter);
+          }
+
+          // Then by number
+          return partsA.number - partsB.number;
+        }
+
+        // Mixed case: lab slots come after theory slots
+        if (slotA.startsWith("L") && !slotB.startsWith("L")) {
+          return 1;
+        }
+        if (!slotA.startsWith("L") && slotB.startsWith("L")) {
+          return -1;
+        }
+
+        // Fallback to alphabetical
+        return slotA.localeCompare(slotB);
       }
-    }
-  });
 
-  console.log("Final slot map:", slotMap);
+      // Sort unique allocations by slot name
+      uniqueAllocations.sort(sortSlotNames);
 
-  // Generate HTML table
-  let tableHtml = `
-    <table class="table table-bordered timetable-container">
-        <thead>
-          <tr class="table-primary">
-            <th></th>
-            <th colspan="4">Morning</th>
-            <th rowspan="2" class="align-middle">Lunch</th>
-            <th colspan="4">Afternoon</th>
-          </tr>
-          <tr class="table-primary">
-            <th>Day</th>
-            ${timeSlots
-              .slice(0, 4)
-              .map((ts) => `<th>${ts}</th>`)
-              .join("")}
-            ${timeSlots
-              .slice(4, 8)
-              .map((ts) => `<th>${ts}</th>`)
-              .join("")}
-          </tr>
-        </thead>
-        <tbody>
+      let summaryTable = `
+        <div class="mt-4">
+          <h6>Summary</h6>
+          <table class="table summary-table">
+            <thead>
+              <tr>
+                <th>Sl. No.</th>
+                <th>Course Code</th>
+                <th>Course Title</th>
+                <th>Slot</th>
+                <th>Venue</th>
+                <th>Employee ID</th>
+                <th>Faculty Name</th>
+              </tr>
+            </thead>
+            <tbody>
     `;
 
-  days.forEach((day) => {
-    tableHtml += `<tr><td><strong>${day}</strong></td>`;
+      // Add rows for each unique allocation
+      uniqueAllocations.forEach((allocation, index) => {
+        summaryTable += `
+              <tr>
+                <td>${index + 1}.</td>
+                <td>${allocation.course_code}</td>
+                <td>${allocation.course_name}</td>
+                <td>${allocation.slot_name}</td>
+                <td>${allocation.venue}</td>
+                <td>${allocation.employee_id}</td>
+                <td>${faculty.name}</td>
+              </tr>
+      `;
+      });
 
-    // Morning slots
-    for (let i = 0; i < 4; i++) {
-      const currentSlot = timeSlots[i];
-      const content = slotMap[day][currentSlot] || "";
-      const isAllocated = content !== "";
-      const mergeInfo = mergedSlots[day][currentSlot];
+      summaryTable += `
+            </tbody>
+          </table>
+        </div>
+    `;
 
-      if (mergeInfo && mergeInfo.span === 2) {
-        // This is a merged cell (lab)
-        tableHtml += `<td colspan="2" class="${
-          isAllocated ? "table-warning" : ""
-        }">${content}</td>`;
-        i++; // Skip the next slot
-      } else if (
-        i > 0 &&
-        mergedSlots[day][timeSlots[i - 1]] &&
-        mergedSlots[day][timeSlots[i - 1]].span === 2
-      ) {
-        // This slot is merged with the previous one, skip it
-        continue;
-      } else {
-        // Regular slot
-        tableHtml += `<td class="${
-          isAllocated ? "table-success" : ""
-        }">${content}</td>`;
+      // Update the container
+      const facultyTimetableDiv = document.getElementById(
+        "faculty-timetable-div"
+      );
+      if (facultyTimetableDiv) {
+        facultyTimetableDiv.innerHTML = tableHtml + summaryTable;
       }
-    }
-
-    // Lunch
-    tableHtml += `<td class="table-secondary">LUNCH</td>`;
-
-    // Afternoon slots
-    for (let i = 4; i < 8; i++) {
-      const currentSlot = timeSlots[i];
-      const content = slotMap[day][currentSlot] || "";
-      const isAllocated = content !== "";
-      const mergeInfo = mergedSlots[day][currentSlot];
-
-      if (mergeInfo && mergeInfo.span === 2) {
-        // This is a merged cell (lab)
-        tableHtml += `<td colspan="2" class="${
-          isAllocated ? "table-warning" : ""
-        }">${content}</td>`;
-        i++; // Skip the next slot
-      } else if (
-        i > 4 &&
-        mergedSlots[day][timeSlots[i - 1]] &&
-        mergedSlots[day][timeSlots[i - 1]].span === 2
-      ) {
-        // This slot is merged with the previous one, skip it
-        continue;
-      } else {
-        // Regular slot
-        tableHtml += `<td class="${
-          isAllocated ? "table-success" : ""
-        }">${content}</td>`;
+    })
+    .catch((error) => {
+      console.error("Error fetching slots for timetable:", error);
+      const facultyTimetableDiv = document.getElementById(
+        "faculty-timetable-div"
+      );
+      if (facultyTimetableDiv) {
+        facultyTimetableDiv.innerHTML = `<div class="alert alert-danger">Error loading timetable slots. Please try again.</div>`;
       }
-    }
-
-    tableHtml += "</tr>";
-  });
-
-  tableHtml += "</tbody></table>";
-
-  // Add abbreviations note
-  let courseInfo = "";
-  Object.entries(courseAbbreviations).forEach(([code, data]) => {
-    courseInfo += `<p><strong>${code}: ${data.full}</strong></p>`;
-  });
-
-  // Update the container
-  const facultyTimetableDiv = document.getElementById("faculty-timetable-div");
-  if (facultyTimetableDiv) {
-    facultyTimetableDiv.innerHTML = tableHtml + courseInfo;
-  }
+    });
 }
+
+// // Generate class timetable
+// function generateClassTimetable(venue, allocations, year, semester) {
+//   // Show the container
+//   if (classTimetableContainer) {
+//     classTimetableContainer.style.display = "block";
+//   }
+
+//   // Set title
+//   if (classTimetableTitle) {
+//     classTimetableTitle.textContent = `Class Slot Timetable of ${venue.venue} : ${venue.infra_type}`;
+//   }
+
+//   // Create timetable structure
+//   const days = ["MON", "TUE", "WED", "THU", "FRI"];
+//   const timeSlots = [
+//     "9.00-9.50",
+//     "9.55-10.45",
+//     "10.50-11.40",
+//     "11.45-12.35",
+//     "1.15-2.05",
+//     "2.10-3.00",
+//     "3.05-3.55",
+//     "4.00-4.50",
+//   ];
+
+//   // Create slot map and merged slots tracker
+//   const slotMap = {};
+//   const mergedSlots = {}; // Track which slots are merged
+
+//   days.forEach((day) => {
+//     slotMap[day] = {};
+//     mergedSlots[day] = {};
+//   });
+
+//   // Create abbreviation maps
+//   const courseAbbreviations = {};
+//   const facultyAbbreviations = {};
+
+//   allocations.forEach((allocation) => {
+//     console.log("Processing allocation:", allocation);
+
+//     if (!slotMap[allocation.slot_day]) {
+//       slotMap[allocation.slot_day] = {};
+//     }
+
+//     // Create abbreviations
+//     if (!courseAbbreviations[allocation.course_code]) {
+//       const words = allocation.course_name.split(" ");
+//       const abbr = words
+//         .map((w) => w[0])
+//         .join("")
+//         .toUpperCase();
+//       courseAbbreviations[allocation.course_code] = {
+//         abbr: abbr,
+//         full: allocation.course_name,
+//       };
+//     }
+
+//     if (!facultyAbbreviations[allocation.employee_id]) {
+//       const nameParts = allocation.faculty_name.split(" ");
+//       const abbr = nameParts
+//         .map((p) => p[0])
+//         .join("")
+//         .toUpperCase();
+//       facultyAbbreviations[allocation.employee_id] = {
+//         abbr: abbr,
+//         full: allocation.faculty_name,
+//       };
+//     }
+
+//     const content =
+//       `${allocation.slot_name}<br>` +
+//       `${allocation.course_code}<br>` +
+//       `${courseAbbreviations[allocation.course_code].abbr}<br>` +
+//       `${facultyAbbreviations[allocation.employee_id].abbr}`;
+
+//     // Check if it's a lab slot
+//     if (allocation.slot_name.startsWith("L")) {
+//       console.log("Lab slot:", allocation.slot_time);
+//       // Handle different time formats and map to our standard slots
+//       if (
+//         allocation.slot_time.includes("9.00") ||
+//         allocation.slot_time.includes("9:00")
+//       ) {
+//         slotMap[allocation.slot_day]["9.00-9.50"] = content;
+//         mergedSlots[allocation.slot_day]["9.00-9.50"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       } else if (
+//         allocation.slot_time.includes("10.55") ||
+//         allocation.slot_time.includes("10:55") ||
+//         allocation.slot_time.includes("10.50")
+//       ) {
+//         slotMap[allocation.slot_day]["10.50-11.40"] = content;
+//         mergedSlots[allocation.slot_day]["10.50-11.40"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       } else if (
+//         allocation.slot_time.includes("1.10") ||
+//         allocation.slot_time.includes("1:10") ||
+//         allocation.slot_time.includes("1.15")
+//       ) {
+//         slotMap[allocation.slot_day]["1.15-2.05"] = content;
+//         mergedSlots[allocation.slot_day]["1.15-2.05"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       } else if (
+//         allocation.slot_time.includes("3.05") ||
+//         allocation.slot_time.includes("3:05")
+//       ) {
+//         slotMap[allocation.slot_day]["3.05-3.55"] = content;
+//         mergedSlots[allocation.slot_day]["3.05-3.55"] = {
+//           span: 2,
+//           type: "lab",
+//         };
+//       }
+//     } else {
+//       // Regular theory slots - normalize the time format
+//       const normalizedTime = allocation.slot_time.replace(/–/g, "-"); // Replace en-dash with hyphen
+//       console.log(
+//         "Theory slot time:",
+//         allocation.slot_time,
+//         "Normalized:",
+//         normalizedTime
+//       );
+
+//       // Try to find matching time slot
+//       const matchingSlot = timeSlots.find((ts) => {
+//         // Normalize both for comparison
+//         const normalizedTs = ts.replace(/–/g, "-");
+//         return normalizedTs === normalizedTime || ts === allocation.slot_time;
+//       });
+
+//       if (matchingSlot) {
+//         slotMap[allocation.slot_day][matchingSlot] = content;
+//       } else {
+//         console.warn("No matching time slot found for:", allocation.slot_time);
+//         // Try to map based on partial match
+//         for (let ts of timeSlots) {
+//           if (allocation.slot_time.includes(ts.split("-")[0])) {
+//             slotMap[allocation.slot_day][ts] = content;
+//             break;
+//           }
+//         }
+//       }
+//     }
+//   });
+
+//   console.log("Final slot map:", slotMap);
+
+//   // Generate HTML table
+//   let tableHtml = `
+//       <table class="table table-bordered timetable-container">
+//         <thead>
+//           <tr class="table-primary">
+//             <th></th>
+//             <th colspan="4">Morning</th>
+//             <th rowspan="2" class="align-middle">Lunch</th>
+//             <th colspan="4">Afternoon</th>
+//           </tr>
+//           <tr class="table-primary">
+//             <th>Day</th>
+//             ${timeSlots
+//               .slice(0, 4)
+//               .map((ts) => `<th>${ts}</th>`)
+//               .join("")}
+//             ${timeSlots
+//               .slice(4, 8)
+//               .map((ts) => `<th>${ts}</th>`)
+//               .join("")}
+//           </tr>
+//         </thead>
+//         <tbody>
+//     `;
+
+//   days.forEach((day) => {
+//     tableHtml += `<tr><td><strong>${day}</strong></td>`;
+
+//     // Morning slots
+//     for (let i = 0; i < 4; i++) {
+//       const currentSlot = timeSlots[i];
+//       const content = slotMap[day][currentSlot] || "";
+//       const mergeInfo = mergedSlots[day][currentSlot];
+
+//       if (mergeInfo && mergeInfo.span === 2) {
+//         // This is a merged cell (lab)
+//         tableHtml += `<td colspan="2" class="table-warning">${content}</td>`;
+//         i++; // Skip the next slot
+//       } else if (
+//         i > 0 &&
+//         mergedSlots[day][timeSlots[i - 1]] &&
+//         mergedSlots[day][timeSlots[i - 1]].span === 2
+//       ) {
+//         // This slot is merged with the previous one, skip it
+//         continue;
+//       } else {
+//         // Regular slot
+//         tableHtml += `<td>${content}</td>`;
+//       }
+//     }
+
+//     // Lunch
+//     tableHtml += `<td class="table-secondary">LUNCH</td>`;
+
+//     // Afternoon slots
+//     for (let i = 4; i < 8; i++) {
+//       const currentSlot = timeSlots[i];
+//       const content = slotMap[day][currentSlot] || "";
+//       const mergeInfo = mergedSlots[day][currentSlot];
+
+//       if (mergeInfo && mergeInfo.span === 2) {
+//         // This is a merged cell (lab)
+//         tableHtml += `<td colspan="2" class="table-warning">${content}</td>`;
+//         i++; // Skip the next slot
+//       } else if (
+//         i > 4 &&
+//         mergedSlots[day][timeSlots[i - 1]] &&
+//         mergedSlots[day][timeSlots[i - 1]].span === 2
+//       ) {
+//         // This slot is merged with the previous one, skip it
+//         continue;
+//       } else {
+//         // Regular slot
+//         tableHtml += `<td>${content}</td>`;
+//       }
+//     }
+
+//     tableHtml += "</tr>";
+//   });
+
+//   tableHtml += "</tbody></table>";
+
+//   // Create summary table with unique courses only
+//   const uniqueCourses = {};
+//   allocations.forEach((allocation) => {
+//     if (!uniqueCourses[allocation.course_code]) {
+//       uniqueCourses[allocation.course_code] = {
+//         slot_names: [allocation.slot_name],
+//         course_code: allocation.course_code,
+//         course_name: allocation.course_name,
+//         theory: allocation.theory,
+//         practical: allocation.practical,
+//         credits: allocation.credits,
+//         faculty_name: allocation.faculty_name,
+//       };
+//     } else {
+//       // Add slot name if not already present
+//       if (
+//         !uniqueCourses[allocation.course_code].slot_names.includes(
+//           allocation.slot_name
+//         )
+//       ) {
+//         uniqueCourses[allocation.course_code].slot_names.push(
+//           allocation.slot_name
+//         );
+//       }
+//     }
+//   });
+
+//   let summaryTable = `
+//     <div class="mt-4">
+//       <table class="table summary-table">
+//         <thead>
+//           <tr>
+//             <th>Sl. No.</th>
+//             <th>Slot</th>
+//             <th>Course Code</th>
+//             <th>Course Title</th>
+//             <th>T-P-C</th>
+//             <th>Faculty</th>
+//           </tr>
+//         </thead>
+//         <tbody>
+// `;
+
+//   // Add rows for each unique course
+//   let serialNumber = 1;
+//   Object.values(uniqueCourses).forEach((course) => {
+//     summaryTable += `
+//           <tr>
+//             <td>${serialNumber}.</td>
+//             <td>${course.slot_names.join(", ")}</td>
+//             <td>${course.course_code}</td>
+//             <td>${course.course_name}</td>
+//             <td>${course.theory}-${course.practical}-${course.credits}</td>
+//             <td>${course.faculty_name}</td>
+//           </tr>
+//   `;
+//     serialNumber++;
+//   });
+
+//   summaryTable += `
+//         </tbody>
+//       </table>
+//     </div>
+// `;
+
+//   // Update the container
+//   const classTimetableDiv = document.getElementById("class-timetable-div");
+//   if (classTimetableDiv) {
+//     classTimetableDiv.innerHTML = tableHtml + summaryTable;
+//   }
+// }
+
 // Generate class timetable
 function generateClassTimetable(venue, allocations, year, semester) {
   // Show the container
@@ -1903,299 +2552,329 @@ function generateClassTimetable(venue, allocations, year, semester) {
     classTimetableTitle.textContent = `Class Slot Timetable of ${venue.venue} : ${venue.infra_type}`;
   }
 
-  // Create timetable structure
-  const days = ["MON", "TUE", "WED", "THU", "FRI"];
-  const timeSlots = [
-    "9.00-9.50",
-    "9.55-10.45",
-    "10.50-11.40",
-    "11.45-12.35",
-    "1.15-2.05",
-    "2.10-3.00",
-    "3.05-3.55",
-    "4.00-4.50",
-  ];
-
-  // Create slot map and merged slots tracker
-  const slotMap = {};
-  const mergedSlots = {}; // Track which slots are merged
-
-  days.forEach((day) => {
-    slotMap[day] = {};
-    mergedSlots[day] = {};
-  });
-
-  // Create abbreviation maps
-  const courseAbbreviations = {};
-  const facultyAbbreviations = {};
-
-  allocations.forEach((allocation) => {
-    console.log("Processing allocation:", allocation);
-
-    if (!slotMap[allocation.slot_day]) {
-      slotMap[allocation.slot_day] = {};
-    }
-
-    // Create abbreviations
-    if (!courseAbbreviations[allocation.course_code]) {
-      const words = allocation.course_name.split(" ");
-      const abbr = words
-        .map((w) => w[0])
-        .join("")
-        .toUpperCase();
-      courseAbbreviations[allocation.course_code] = {
-        abbr: abbr,
-        full: allocation.course_name,
-      };
-    }
-
-    if (!facultyAbbreviations[allocation.employee_id]) {
-      const nameParts = allocation.faculty_name.split(" ");
-      const abbr = nameParts
-        .map((p) => p[0])
-        .join("")
-        .toUpperCase();
-      facultyAbbreviations[allocation.employee_id] = {
-        abbr: abbr,
-        full: allocation.faculty_name,
-      };
-    }
-
-    const content =
-      `${allocation.slot_name}<br>` +
-      `${allocation.course_code}<br>` +
-      `${courseAbbreviations[allocation.course_code].abbr}<br>` +
-      `${facultyAbbreviations[allocation.employee_id].abbr}`;
-
-    // Check if it's a lab slot
-    if (allocation.slot_name.startsWith("L")) {
-      console.log("Lab slot:", allocation.slot_time);
-      // Handle different time formats and map to our standard slots
-      if (
-        allocation.slot_time.includes("9.00") ||
-        allocation.slot_time.includes("9:00")
-      ) {
-        slotMap[allocation.slot_day]["9.00-9.50"] = content;
-        mergedSlots[allocation.slot_day]["9.00-9.50"] = {
-          span: 2,
-          type: "lab",
-        };
-      } else if (
-        allocation.slot_time.includes("10.55") ||
-        allocation.slot_time.includes("10:55") ||
-        allocation.slot_time.includes("10.50")
-      ) {
-        slotMap[allocation.slot_day]["10.50-11.40"] = content;
-        mergedSlots[allocation.slot_day]["10.50-11.40"] = {
-          span: 2,
-          type: "lab",
-        };
-      } else if (
-        allocation.slot_time.includes("1.10") ||
-        allocation.slot_time.includes("1:10") ||
-        allocation.slot_time.includes("1.15")
-      ) {
-        slotMap[allocation.slot_day]["1.15-2.05"] = content;
-        mergedSlots[allocation.slot_day]["1.15-2.05"] = {
-          span: 2,
-          type: "lab",
-        };
-      } else if (
-        allocation.slot_time.includes("3.05") ||
-        allocation.slot_time.includes("3:05")
-      ) {
-        slotMap[allocation.slot_day]["3.05-3.55"] = content;
-        mergedSlots[allocation.slot_day]["3.05-3.55"] = {
-          span: 2,
-          type: "lab",
-        };
-      }
-    } else {
-      // Regular theory slots - normalize the time format
-      const normalizedTime = allocation.slot_time.replace(/–/g, "-"); // Replace en-dash with hyphen
-      console.log(
-        "Theory slot time:",
-        allocation.slot_time,
-        "Normalized:",
-        normalizedTime
-      );
-
-      // Try to find matching time slot
-      const matchingSlot = timeSlots.find((ts) => {
-        // Normalize both for comparison
-        const normalizedTs = ts.replace(/–/g, "-");
-        return normalizedTs === normalizedTime || ts === allocation.slot_time;
+  // First, fetch the actual slots defined for this year and semester
+  fetch(`${window.API_URL}/slots/${year}/${semester}`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((slots) => {
+      // Create allocation map
+      const allocationMap = {};
+      allocations.forEach((allocation) => {
+        const key = `${allocation.slot_day}-${allocation.slot_name}`;
+        allocationMap[key] = allocation;
       });
 
-      if (matchingSlot) {
-        slotMap[allocation.slot_day][matchingSlot] = content;
-      } else {
-        console.warn("No matching time slot found for:", allocation.slot_time);
-        // Try to map based on partial match
-        for (let ts of timeSlots) {
-          if (allocation.slot_time.includes(ts.split("-")[0])) {
-            slotMap[allocation.slot_day][ts] = content;
-            break;
+      // Use EXACT same logic as master timetable
+      const days = ["MON", "TUE", "WED", "THU", "FRI"];
+      const timeSlots = [
+        "9.00-9.50",
+        "9.55-10.45",
+        "10.50-11.40",
+        "11.45-12.35",
+        "12.35-1.15",
+        "1.15–2.05",
+        "2.10-3.00",
+        "3.05–3.55",
+        "4.00–4.50",
+      ];
+
+      // Create a map of day -> time -> slot (SAME as master timetable)
+      const slotMap = {};
+      days.forEach((day) => {
+        slotMap[day] = {};
+      });
+
+      slots.forEach((slot) => {
+        if (!slotMap[slot.slot_day]) {
+          slotMap[slot.slot_day] = {};
+        }
+
+        // Match the time slot to one of our standard time slots
+        const matchingTimeSlot = timeSlots.find((ts) =>
+          slot.slot_time.includes(ts)
+        );
+        if (matchingTimeSlot) {
+          slotMap[slot.slot_day][matchingTimeSlot] = slot.slot_name;
+        }
+      });
+
+      // Generate HTML table with EXACT same structure as master timetable
+      let tableHtml = `
+        <table class="table table-bordered timetable-container">
+            <thead>
+              <tr class="table-primary">
+                <th></th>
+                <th colspan="4">Morning</th>
+                <th rowspan="2" class="align-middle">Lunch</th>
+                <th colspan="4">Afternoon</th>
+              </tr>
+              <tr class="table-primary">
+                <th>Day</th>
+                <th>9:00 - 9:50</th>
+                <th>9:55 - 10:45</th>
+                <th>10:50 - 11:40</th>
+                <th>11:45 - 12:35</th>
+                <th>1:15 - 2:05</th>
+                <th>2:10 - 3:00</th>
+                <th>3:05 - 3:55</th>
+                <th>4:00 - 4:50</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+      // Generate the timetable HTML using EXACT same logic as master
+      days.forEach((day) => {
+        // Theory row - EXACT same as master timetable
+        let rowHtml = `<tr><td class="table-secondary"><strong>${day}</strong></td>`;
+
+        // Theory slots - Morning (first 4 time slots)
+        for (let i = 0; i < 4; i++) {
+          const timeSlot = timeSlots[i];
+          const slotName = slotMap[day][timeSlot] || "";
+          const allocation = allocationMap[`${day}-${slotName}`];
+
+          if (allocation) {
+            rowHtml += `<td class="text-center table-success">${slotName}<br>${allocation.course_code}<br>${allocation.venue}<br>${allocation.employee_id}</td>`;
+          } else {
+            rowHtml += `<td class="text-center">${slotName}</td>`;
           }
         }
+
+        // Lunch
+        rowHtml += `<td class="table-secondary text-center">LUNCH</td>`;
+
+        // Theory slots - Afternoon (time slots 5-8, skipping index 4 which is lunch)
+        for (let i = 5; i < 9; i++) {
+          const timeSlot = timeSlots[i];
+          const slotName = slotMap[day][timeSlot] || "";
+          const allocation = allocationMap[`${day}-${slotName}`];
+
+          if (allocation) {
+            rowHtml += `<td class="text-center table-success">${slotName}<br>${allocation.course_code}<br>${allocation.venue}<br>${allocation.employee_id}</td>`;
+          } else {
+            rowHtml += `<td class="text-center">${slotName}</td>`;
+          }
+        }
+
+        rowHtml += "</tr>";
+        tableHtml += rowHtml;
+
+        // Lab slots row - EXACT same hardcoded pattern as master timetable
+        let labRowHtml = `<tr><td class="table-warning">Lab</td>`;
+
+        // Morning labs - EXACT same pattern as master
+        const morningLab1 = `L${
+          day === "MON"
+            ? "1+L2"
+            : day === "TUE"
+            ? "5+L6"
+            : day === "WED"
+            ? "9+L10"
+            : day === "THU"
+            ? "13+L14"
+            : "17+L18"
+        }`;
+
+        const morningLab2 = `L${
+          day === "MON"
+            ? "3+L4"
+            : day === "TUE"
+            ? "7+L8"
+            : day === "WED"
+            ? "11+L12"
+            : day === "THU"
+            ? "15+L16"
+            : "19+L20"
+        }`;
+
+        // First morning lab
+        const allocation1 = allocationMap[`${day}-${morningLab1}`];
+        if (allocation1) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab1}<br>${allocation1.course_code}<br>${allocation1.venue}<br>${allocation1.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab1}</td>`;
+        }
+
+        // Second morning lab
+        const allocation2 = allocationMap[`${day}-${morningLab2}`];
+        if (allocation2) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab2}<br>${allocation2.course_code}<br>${allocation2.venue}<br>${allocation2.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${morningLab2}</td>`;
+        }
+
+        // Lunch
+        labRowHtml += `<td class="table-secondary"></td>`;
+
+        // Afternoon labs - EXACT same pattern as master
+        const afternoonLab1 = `L${
+          day === "MON"
+            ? "21+L22"
+            : day === "TUE"
+            ? "25+L26"
+            : day === "WED"
+            ? "29+L30"
+            : day === "THU"
+            ? "33+L34"
+            : "37+L38"
+        }`;
+
+        const afternoonLab2 = `L${
+          day === "MON"
+            ? "23+L24"
+            : day === "TUE"
+            ? "27+L28"
+            : day === "WED"
+            ? "31+L32"
+            : day === "THU"
+            ? "35+L36"
+            : "39+L40"
+        }`;
+
+        // First afternoon lab
+        const allocation3 = allocationMap[`${day}-${afternoonLab1}`];
+        if (allocation3) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab1}<br>${allocation3.course_code}<br>${allocation3.venue}<br>${allocation3.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab1}</td>`;
+        }
+
+        // Second afternoon lab
+        const allocation4 = allocationMap[`${day}-${afternoonLab2}`];
+        if (allocation4) {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab2}<br>${allocation4.course_code}<br>${allocation4.venue}<br>${allocation4.employee_id}</td>`;
+        } else {
+          labRowHtml += `<td class="text-center table-warning" colspan="2">${afternoonLab2}</td>`;
+        }
+
+        labRowHtml += "</tr>";
+        tableHtml += labRowHtml;
+      });
+
+      tableHtml += "</tbody></table>";
+
+      // Create summary table with unique allocations only
+      const uniqueAllocations = [];
+      const seen = new Set();
+
+      allocations.forEach((allocation) => {
+        const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueAllocations.push(allocation);
+        }
+      });
+
+      // Custom sorting function for slot names
+      function sortSlotNames(a, b) {
+        const slotA = a.slot_name;
+        const slotB = b.slot_name;
+
+        // Handle lab slots (L1+L2, L3+L4, etc.)
+        if (slotA.startsWith("L") && slotB.startsWith("L")) {
+          const numA = parseInt(slotA.match(/\d+/)[0]);
+          const numB = parseInt(slotB.match(/\d+/)[0]);
+          return numA - numB;
+        }
+
+        // Handle theory slots
+        if (!slotA.startsWith("L") && !slotB.startsWith("L")) {
+          // Extract base letter and number
+          const extractSlotParts = (slot) => {
+            if (slot.includes("TA") || slot.includes("TB")) {
+              return {
+                letter: slot.substring(0, 2),
+                number: parseInt(slot.substring(2)) || 0,
+              };
+            } else {
+              const match = slot.match(/([A-Z]+)(\d*)/);
+              return { letter: match[1], number: parseInt(match[2]) || 0 };
+            }
+          };
+
+          const partsA = extractSlotParts(slotA);
+          const partsB = extractSlotParts(slotB);
+
+          // First compare by letter
+          if (partsA.letter !== partsB.letter) {
+            return partsA.letter.localeCompare(partsB.letter);
+          }
+
+          // Then by number
+          return partsA.number - partsB.number;
+        }
+
+        // Mixed case: lab slots come after theory slots
+        if (slotA.startsWith("L") && !slotB.startsWith("L")) {
+          return 1;
+        }
+        if (!slotA.startsWith("L") && slotB.startsWith("L")) {
+          return -1;
+        }
+
+        // Fallback to alphabetical
+        return slotA.localeCompare(slotB);
       }
-    }
-  });
 
-  console.log("Final slot map:", slotMap);
+      // Sort unique allocations by slot name
+      uniqueAllocations.sort(sortSlotNames);
 
-  // Generate HTML table
-  let tableHtml = `
-      <table class="table table-bordered timetable-container">
-        <thead>
-          <tr class="table-primary">
-            <th></th>
-            <th colspan="4">Morning</th>
-            <th rowspan="2" class="align-middle">Lunch</th>
-            <th colspan="4">Afternoon</th>
-          </tr>
-          <tr class="table-primary">
-            <th>Day</th>
-            ${timeSlots
-              .slice(0, 4)
-              .map((ts) => `<th>${ts}</th>`)
-              .join("")}
-            ${timeSlots
-              .slice(4, 8)
-              .map((ts) => `<th>${ts}</th>`)
-              .join("")}
-          </tr>
-        </thead>
-        <tbody>
+      let summaryTable = `
+        <div class="mt-4">
+          <h6>Summary</h6>
+          <table class="table summary-table">
+            <thead>
+              <tr>
+                <th>Sl. No.</th>
+                <th>Course Code</th>
+                <th>Course Title</th>
+                <th>Slot</th>
+                <th>Venue</th>
+                <th>Employee ID</th>
+                <th>Faculty Name</th>
+              </tr>
+            </thead>
+            <tbody>
     `;
 
-  days.forEach((day) => {
-    tableHtml += `<tr><td><strong>${day}</strong></td>`;
+      // Add rows for each unique allocation
+      uniqueAllocations.forEach((allocation, index) => {
+        summaryTable += `
+              <tr>
+                <td>${index + 1}.</td>
+                <td>${allocation.course_code}</td>
+                <td>${allocation.course_name}</td>
+                <td>${allocation.slot_name}</td>
+                <td>${allocation.venue}</td>
+                <td>${allocation.employee_id}</td>
+                <td>${allocation.faculty_name}</td>
+              </tr>
+      `;
+      });
 
-    // Morning slots
-    for (let i = 0; i < 4; i++) {
-      const currentSlot = timeSlots[i];
-      const content = slotMap[day][currentSlot] || "";
-      const mergeInfo = mergedSlots[day][currentSlot];
+      summaryTable += `
+            </tbody>
+          </table>
+        </div>
+    `;
 
-      if (mergeInfo && mergeInfo.span === 2) {
-        // This is a merged cell (lab)
-        tableHtml += `<td colspan="2" class="table-warning">${content}</td>`;
-        i++; // Skip the next slot
-      } else if (
-        i > 0 &&
-        mergedSlots[day][timeSlots[i - 1]] &&
-        mergedSlots[day][timeSlots[i - 1]].span === 2
-      ) {
-        // This slot is merged with the previous one, skip it
-        continue;
-      } else {
-        // Regular slot
-        tableHtml += `<td>${content}</td>`;
+      // Update the container
+      const classTimetableDiv = document.getElementById("class-timetable-div");
+      if (classTimetableDiv) {
+        classTimetableDiv.innerHTML = tableHtml + summaryTable;
       }
-    }
-
-    // Lunch
-    tableHtml += `<td class="table-secondary">LUNCH</td>`;
-
-    // Afternoon slots
-    for (let i = 4; i < 8; i++) {
-      const currentSlot = timeSlots[i];
-      const content = slotMap[day][currentSlot] || "";
-      const mergeInfo = mergedSlots[day][currentSlot];
-
-      if (mergeInfo && mergeInfo.span === 2) {
-        // This is a merged cell (lab)
-        tableHtml += `<td colspan="2" class="table-warning">${content}</td>`;
-        i++; // Skip the next slot
-      } else if (
-        i > 4 &&
-        mergedSlots[day][timeSlots[i - 1]] &&
-        mergedSlots[day][timeSlots[i - 1]].span === 2
-      ) {
-        // This slot is merged with the previous one, skip it
-        continue;
-      } else {
-        // Regular slot
-        tableHtml += `<td>${content}</td>`;
+    })
+    .catch((error) => {
+      console.error("Error fetching slots for class timetable:", error);
+      const classTimetableDiv = document.getElementById("class-timetable-div");
+      if (classTimetableDiv) {
+        classTimetableDiv.innerHTML = `<div class="alert alert-danger">Error loading timetable slots. Please try again.</div>`;
       }
-    }
-
-    tableHtml += "</tr>";
-  });
-
-  tableHtml += "</tbody></table>";
-
-  // Create summary table with unique courses only
-  const uniqueCourses = {};
-  allocations.forEach((allocation) => {
-    if (!uniqueCourses[allocation.course_code]) {
-      uniqueCourses[allocation.course_code] = {
-        slot_names: [allocation.slot_name],
-        course_code: allocation.course_code,
-        course_name: allocation.course_name,
-        theory: allocation.theory,
-        practical: allocation.practical,
-        credits: allocation.credits,
-        faculty_name: allocation.faculty_name,
-      };
-    } else {
-      // Add slot name if not already present
-      if (
-        !uniqueCourses[allocation.course_code].slot_names.includes(
-          allocation.slot_name
-        )
-      ) {
-        uniqueCourses[allocation.course_code].slot_names.push(
-          allocation.slot_name
-        );
-      }
-    }
-  });
-
-  let summaryTable = `
-    <div class="mt-4">
-      <table class="table summary-table">
-        <thead>
-          <tr>
-            <th>Sl. No.</th>
-            <th>Slot</th>
-            <th>Course Code</th>
-            <th>Course Title</th>
-            <th>T-P-C</th>
-            <th>Faculty</th>
-          </tr>
-        </thead>
-        <tbody>
-`;
-
-  // Add rows for each unique course
-  let serialNumber = 1;
-  Object.values(uniqueCourses).forEach((course) => {
-    summaryTable += `
-          <tr>
-            <td>${serialNumber}.</td>
-            <td>${course.slot_names.join(", ")}</td>
-            <td>${course.course_code}</td>
-            <td>${course.course_name}</td>
-            <td>${course.theory}-${course.practical}-${course.credits}</td>
-            <td>${course.faculty_name}</td>
-          </tr>
-  `;
-    serialNumber++;
-  });
-
-  summaryTable += `
-        </tbody>
-      </table>
-    </div>
-`;
-
-  // Update the container
-  const classTimetableDiv = document.getElementById("class-timetable-div");
-  if (classTimetableDiv) {
-    classTimetableDiv.innerHTML = tableHtml + summaryTable;
-  }
+    });
 }
 
 // Populate view dropdowns
