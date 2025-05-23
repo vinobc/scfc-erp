@@ -1037,7 +1037,7 @@ function generateTimetable(slots, year, semester) {
         ? "9+L10"
         : day === "THU"
         ? "13+L14"
-        : "17-L18"
+        : "17+L18"
     }</td>`;
     labRowHtml += `<td class="text-center table-warning" colspan="2">L${
       day === "MON"
