@@ -102,6 +102,46 @@ exports.getCurrentUser = async (req, res) => {
   }
 };
 
+// Password complexity validation function
+const validatePasswordComplexity = (password) => {
+  if (password.length < 8) {
+    return {
+      isValid: false,
+      message: "Password must be at least 8 characters long",
+    };
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    return {
+      isValid: false,
+      message: "Password must contain at least one uppercase letter",
+    };
+  }
+
+  if (!/[a-z]/.test(password)) {
+    return {
+      isValid: false,
+      message: "Password must contain at least one lowercase letter",
+    };
+  }
+
+  if (!/\d/.test(password)) {
+    return {
+      isValid: false,
+      message: "Password must contain at least one digit",
+    };
+  }
+
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return {
+      isValid: false,
+      message: "Password must contain at least one special character",
+    };
+  }
+
+  return { isValid: true };
+};
+
 // Change password
 exports.changePassword = async (req, res) => {
   try {
@@ -112,6 +152,14 @@ exports.changePassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         message: "Current password and new password are required",
+      });
+    }
+
+    // Validate password complexity
+    const complexityCheck = validatePasswordComplexity(newPassword);
+    if (!complexityCheck.isValid) {
+      return res.status(400).json({
+        message: complexityCheck.message,
       });
     }
 

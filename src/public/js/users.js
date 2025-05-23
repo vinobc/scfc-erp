@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   createCoordinatorUserBtn = document.getElementById(
     "create-coordinator-user-btn"
   );
+  const createAdminUserBtn = document.getElementById("create-admin-user-btn");
 
   // Setup event listeners
   if (createFacultyUserBtn) {
@@ -27,6 +28,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (createCoordinatorUserBtn) {
     createCoordinatorUserBtn.addEventListener("click", () => {
       showCreateCoordinatorUserModal();
+    });
+  }
+
+  if (createAdminUserBtn) {
+    createAdminUserBtn.addEventListener("click", () => {
+      showCreateAdminUserModal();
     });
   }
 
@@ -215,6 +222,19 @@ function showCreateCoordinatorUserModal() {
   }
 }
 
+// Show create admin user modal
+function showCreateAdminUserModal() {
+  const adminName = prompt(
+    "Enter admin name (letters, numbers, underscore only):"
+  );
+  if (!adminName) return;
+
+  const fullName = prompt("Enter full name for the admin:");
+  if (!fullName) return;
+
+  createAdminUser(adminName, fullName);
+}
+
 // Create faculty user
 function createFacultyUser(employeeId, role) {
   const userData = {
@@ -249,6 +269,43 @@ function createFacultyUser(employeeId, role) {
     .catch((error) => {
       console.error("Create user error:", error);
       showAlert(error.message || "Failed to create user account", "danger");
+    });
+}
+
+// Create admin user
+function createAdminUser(adminName, fullName) {
+  const userData = {
+    admin_name: adminName,
+    full_name: fullName,
+  };
+
+  fetch(`${window.API_URL}/users/admin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: localStorage.getItem("token"),
+    },
+    body: JSON.stringify(userData),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then((data) => {
+          throw new Error(data.message);
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      showAlert(
+        `Admin account created successfully! Username: ${data.user.username}, Password: ${data.defaultPassword}`,
+        "success",
+        15000
+      );
+      loadUsers(); // Refresh the table
+    })
+    .catch((error) => {
+      console.error("Create admin user error:", error);
+      showAlert(error.message || "Failed to create admin account", "danger");
     });
 }
 
