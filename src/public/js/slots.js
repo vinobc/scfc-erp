@@ -191,6 +191,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Load academic years for filter
       populateAcademicYears();
+
+      // Hide "Add New Slot" button for coordinators
+      const addSlotBtn = document.getElementById("add-slot-btn");
+      if (addSlotBtn && currentUser && currentUser.role !== "admin") {
+        addSlotBtn.style.display = "none";
+      }
     });
   }
 
@@ -549,29 +555,36 @@ function renderSlots(slots) {
         </span>
       </td>
       <td>
-        <button class="btn btn-sm btn-primary action-btn edit-slot-btn" data-id="${
-          slot.slot_id
-        }">
-          <i class="fas fa-edit"></i>
-        </button>
-        <button class="btn btn-sm btn-${
-          slot.is_active ? "warning" : "success"
-        } action-btn toggle-status-btn" data-id="${
+  ${
+    currentUser && currentUser.role === "admin"
+      ? `
+    <button class="btn btn-sm btn-primary action-btn edit-slot-btn" data-id="${
       slot.slot_id
-    }" data-active="${slot.is_active}">
-          <i class="fas fa-${slot.is_active ? "pause" : "play"}"></i>
-        </button>
-        <button class="btn btn-sm btn-danger action-btn delete-slot-btn" 
-          data-id="${slot.slot_id}" 
-          data-year="${slot.slot_year}" 
-          data-semester="${slot.semester_type}" 
-          data-day="${slot.slot_day}" 
-          data-name="${slot.slot_name}" 
-          data-time="${slot.slot_time}">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
-    `;
+    }">
+      <i class="fas fa-edit"></i>
+    </button>
+    <button class="btn btn-sm btn-${
+      slot.is_active ? "warning" : "success"
+    } action-btn toggle-status-btn" data-id="${slot.slot_id}" data-active="${
+          slot.is_active
+        }">
+      <i class="fas fa-${slot.is_active ? "pause" : "play"}"></i>
+    </button>
+    <button class="btn btn-sm btn-danger action-btn delete-slot-btn" 
+      data-id="${slot.slot_id}" 
+      data-year="${slot.slot_year}" 
+      data-semester="${slot.semester_type}" 
+      data-day="${slot.slot_day}" 
+      data-name="${slot.slot_name}" 
+      data-time="${slot.slot_time}">
+      <i class="fas fa-trash"></i>
+    </button>
+  `
+      : `
+    <span class="text-muted">View Only</span>
+  `
+  }
+</td>    `;
 
     slotsTableBody.appendChild(row);
   });
