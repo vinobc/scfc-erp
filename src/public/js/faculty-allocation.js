@@ -364,133 +364,245 @@ function renderFacultyAllocations(allocations) {
 
   facultyAllocationTableBody.innerHTML = "";
 
-  // Group allocations by linked pairs for summer lab slots
+  // Group allocations by course, faculty, and venue to identify linked sets
   const processedIds = new Set();
+  const allocationGroups = new Map();
 
-  allocations.forEach((allocation, index) => {
-    // Skip if we've already processed this allocation as part of a linked pair
-    if (
-      processedIds.has(
-        `${allocation.slot_year}-${allocation.semester_type}-${allocation.course_code}-${allocation.employee_id}-${allocation.slot_name}`
-      )
-    ) {
+  // First pass: group related allocations
+  allocations.forEach((allocation) => {
+    const baseKey = `${allocation.slot_year}-${allocation.semester_type}-${allocation.course_code}-${allocation.employee_id}-${allocation.venue}`;
+
+    if (!allocationGroups.has(baseKey)) {
+      allocationGroups.set(baseKey, []);
+    }
+    allocationGroups.get(baseKey).push(allocation);
+  });
+
+  // Second pass: render grouped allocations
+  allocationGroups.forEach((group, baseKey) => {
+    if (processedIds.has(baseKey)) {
       return;
     }
 
-    console.log(`Rendering allocation ${index}:`, allocation);
+    // Check if this is a 4-hour lab course allocation
+    const firstAllocation = group[0];
+    let is4HourLab = false;
+    let morningSlots = [];
+    let afternoonSlots = [];
 
-    // Check if this is a summer lab slot that might be linked
-    let linkedAllocation = null;
-    let isLinkedPair = false;
-
+    // Detect 4-hour lab pattern: compound slots + linked afternoon slots
     if (
-      allocation.semester_type === "SUMMER" &&
-      allocation.slot_name.startsWith("L") &&
-      allocation.slot_name.includes("+")
+      firstAllocation.semester_type === "SUMMER" &&
+      firstAllocation.practical === 4 &&
+      group.some((a) => a.slot_name.includes(","))
     ) {
-      // Determine linked slot name pattern (L1+L2 -> L21+L22 or vice versa)
-      let linkedSlotName = null;
+      is4HourLab = true;
 
-      if (
-        allocation.slot_name.match(/L\d+\+L\d+/) &&
-        parseInt(allocation.slot_name.match(/\d+/)[0]) < 21
-      ) {
-        // This is a morning lab slot, find afternoon equivalent
-        const slotNumbers = allocation.slot_name.match(/L(\d+)\+L(\d+)/);
-        if (slotNumbers && slotNumbers.length === 3) {
-          const firstNum = parseInt(slotNumbers[1]) + 20;
-          const secondNum = parseInt(slotNumbers[2]) + 20;
-          linkedSlotName = `L${firstNum}+L${secondNum}`;
+      // Separate morning and afternoon slots
+      group.forEach((allocation) => {
+        if (allocation.slot_name.includes(",")) {
+          // This is the compound slot entry
+          const slots = allocation.slot_name.split(", ");
+          slots.forEach((slot) => {
+            if (slot.startsWith("L") && parseInt(slot.match(/\d+/)[0]) < 21) {
+              morningSlots.push({ ...allocation, individual_slot: slot });
+            } else if (
+              slot.startsWith("L") &&
+              parseInt(slot.match(/\d+/)[0]) >= 21
+            ) {
+              afternoonSlots.push({ ...allocation, individual_slot: slot });
+            }
+          });
+        } else {
+          // Individual slot allocations
+          if (
+            allocation.slot_name.startsWith("L") &&
+            parseInt(allocation.slot_name.match(/\d+/)[0]) < 21
+          ) {
+            morningSlots.push(allocation);
+          } else if (
+            allocation.slot_name.startsWith("L") &&
+            parseInt(allocation.slot_name.match(/\d+/)[0]) >= 21
+          ) {
+            afternoonSlots.push(allocation);
+          }
         }
-      } else if (
-        allocation.slot_name.match(/L\d+\+L\d+/) &&
-        parseInt(allocation.slot_name.match(/\d+/)[0]) >= 21
-      ) {
-        // This is an afternoon lab slot, find morning equivalent
-        const slotNumbers = allocation.slot_name.match(/L(\d+)\+L(\d+)/);
-        if (slotNumbers && slotNumbers.length === 3) {
-          const firstNum = parseInt(slotNumbers[1]) - 20;
-          const secondNum = parseInt(slotNumbers[2]) - 20;
-          linkedSlotName = `L${firstNum}+L${secondNum}`;
-        }
-      }
+      });
 
-      // If we found a linked slot name, look for it in allocations
-      if (linkedSlotName) {
-        linkedAllocation = allocations.find(
-          (a) =>
-            a.slot_year === allocation.slot_year &&
-            a.semester_type === allocation.semester_type &&
-            a.course_code === allocation.course_code &&
-            a.employee_id === allocation.employee_id &&
-            a.slot_name === linkedSlotName
-        );
-
-        if (linkedAllocation) {
-          isLinkedPair = true;
-          // Mark the linked allocation as processed
-          processedIds.add(
-            `${linkedAllocation.slot_year}-${linkedAllocation.semester_type}-${linkedAllocation.course_code}-${linkedAllocation.employee_id}-${linkedAllocation.slot_name}`
-          );
-        }
-      }
+      console.log(
+        `4-hour lab detected: ${morningSlots.length} morning + ${afternoonSlots.length} afternoon slots`
+      );
     }
 
-    // Mark current allocation as processed
-    processedIds.add(
-      `${allocation.slot_year}-${allocation.semester_type}-${allocation.course_code}-${allocation.employee_id}-${allocation.slot_name}`
-    );
+    // Render based on allocation type
+    if (is4HourLab) {
+      // Render 4-hour lab as a single grouped row
+      const row = document.createElement("tr");
+      row.classList.add("table-warning"); // Different highlight for 4-hour labs
 
-    const row = document.createElement("tr");
+      // Collect all slot names for display
+      const allSlotNames = [
+        ...morningSlots.map((s) => s.individual_slot || s.slot_name),
+        ...afternoonSlots.map((s) => s.individual_slot || s.slot_name),
+      ];
+      const uniqueSlotNames = [...new Set(allSlotNames)];
 
-    // Highlight linked pairs
-    if (isLinkedPair) {
-      row.classList.add("table-info");
-    }
+      // Collect all day/time combinations
+      const allDayTimes = group.map((a) => `${a.slot_day} ${a.slot_time}`);
+      const uniqueDayTimes = [...new Set(allDayTimes)];
 
-    row.innerHTML = `
-        <td>${allocation.slot_year}</td>
-        <td>${allocation.semester_type}</td>
-        <td>${allocation.course_code}</td>
-        <td>${allocation.course_name || "N/A"}</td>
-        <td>${allocation.theory || "0"}-${allocation.practical || "0"}-${
-      allocation.credits || "0"
-    }</td>
-        <td>${allocation.faculty_name || "N/A"}</td>
-        <td>${
-          isLinkedPair
-            ? `${allocation.slot_name} <br><span class="badge bg-info">Linked with ${linkedAllocation.slot_name}</span>`
-            : allocation.slot_name
-        }</td>
-        <td>${allocation.slot_day} ${allocation.slot_time} ${
-      isLinkedPair
-        ? `<br><span class="badge bg-light text-dark">${linkedAllocation.slot_day} ${linkedAllocation.slot_time}</span>`
-        : ""
-    }</td>
-        <td>${allocation.venue}</td>
+      row.innerHTML = `
+        <td>${firstAllocation.slot_year}</td>
+        <td>${firstAllocation.semester_type}</td>
+        <td>${firstAllocation.course_code}</td>
+        <td>${firstAllocation.course_name || "N/A"}</td>
+        <td>${firstAllocation.theory || "0"}-${
+        firstAllocation.practical || "0"
+      }-${firstAllocation.credits || "0"}</td>
+        <td>${firstAllocation.faculty_name || "N/A"}</td>
         <td>
-  ${
-    currentUser && currentUser.role === "admin"
-      ? `
-    <button class="btn btn-sm btn-primary edit-allocation-btn" 
-      data-allocation='${JSON.stringify(allocation)}'>
-      <i class="fas fa-edit"></i>
-    </button>
-  `
-      : ""
-  }
-  <button class="btn btn-sm btn-danger delete-allocation-btn" 
-    data-allocation='${JSON.stringify(allocation)}'>
-    <i class="fas fa-trash"></i>
-  </button>
-</td>
+          <span class="badge bg-warning text-dark">4-Hour Lab</span><br>
+          <small>${uniqueSlotNames.join(", ")}</small>
+        </td>
+        <td>
+          <small>${uniqueDayTimes.join("<br>")}</small>
+        </td>
+        <td>${firstAllocation.venue}</td>
+        <td>
+          ${
+            currentUser && currentUser.role === "admin"
+              ? `
+            <button class="btn btn-sm btn-primary edit-allocation-btn" 
+              data-allocation='${JSON.stringify(firstAllocation)}'>
+              <i class="fas fa-edit"></i>
+            </button>
+          `
+              : ""
+          }
+          <button class="btn btn-sm btn-danger delete-allocation-btn" 
+            data-allocation='${JSON.stringify(firstAllocation)}'>
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
       `;
-    facultyAllocationTableBody.appendChild(row);
+      facultyAllocationTableBody.appendChild(row);
+    } else {
+      // Render regular allocations (existing logic)
+      group.forEach((allocation, index) => {
+        const allocationKey = `${baseKey}-${allocation.slot_name}`;
+
+        if (processedIds.has(allocationKey)) {
+          return;
+        }
+
+        // Check for regular 2-hour summer lab linking
+        let linkedAllocation = null;
+        let isLinkedPair = false;
+
+        if (
+          allocation.semester_type === "SUMMER" &&
+          allocation.slot_name.startsWith("L") &&
+          allocation.slot_name.includes("+") &&
+          !allocation.slot_name.includes(",") // Not a compound slot
+        ) {
+          // Determine linked slot name pattern (L1+L2 -> L21+L22 or vice versa)
+          let linkedSlotName = null;
+
+          if (
+            allocation.slot_name.match(/L\d+\+L\d+/) &&
+            parseInt(allocation.slot_name.match(/\d+/)[0]) < 21
+          ) {
+            // This is a morning lab slot, find afternoon equivalent
+            const slotNumbers = allocation.slot_name.match(/L(\d+)\+L(\d+)/);
+            if (slotNumbers && slotNumbers.length === 3) {
+              const firstNum = parseInt(slotNumbers[1]) + 20;
+              const secondNum = parseInt(slotNumbers[2]) + 20;
+              linkedSlotName = `L${firstNum}+L${secondNum}`;
+            }
+          } else if (
+            allocation.slot_name.match(/L\d+\+L\d+/) &&
+            parseInt(allocation.slot_name.match(/\d+/)[0]) >= 21
+          ) {
+            // This is an afternoon lab slot, find morning equivalent
+            const slotNumbers = allocation.slot_name.match(/L(\d+)\+L(\d+)/);
+            if (slotNumbers && slotNumbers.length === 3) {
+              const firstNum = parseInt(slotNumbers[1]) - 20;
+              const secondNum = parseInt(slotNumbers[2]) - 20;
+              linkedSlotName = `L${firstNum}+L${secondNum}`;
+            }
+          }
+
+          // If we found a linked slot name, look for it in the same group
+          if (linkedSlotName) {
+            linkedAllocation = group.find(
+              (a) => a.slot_name === linkedSlotName
+            );
+
+            if (linkedAllocation) {
+              isLinkedPair = true;
+              // Mark the linked allocation as processed
+              processedIds.add(`${baseKey}-${linkedAllocation.slot_name}`);
+            }
+          }
+        }
+
+        // Mark current allocation as processed
+        processedIds.add(allocationKey);
+
+        const row = document.createElement("tr");
+
+        // Highlight linked pairs
+        if (isLinkedPair) {
+          row.classList.add("table-info");
+        }
+
+        row.innerHTML = `
+          <td>${allocation.slot_year}</td>
+          <td>${allocation.semester_type}</td>
+          <td>${allocation.course_code}</td>
+          <td>${allocation.course_name || "N/A"}</td>
+          <td>${allocation.theory || "0"}-${allocation.practical || "0"}-${
+          allocation.credits || "0"
+        }</td>
+          <td>${allocation.faculty_name || "N/A"}</td>
+          <td>${
+            isLinkedPair
+              ? `${allocation.slot_name} <br><span class="badge bg-info">Linked with ${linkedAllocation.slot_name}</span>`
+              : allocation.slot_name
+          }</td>
+          <td>${allocation.slot_day} ${allocation.slot_time} ${
+          isLinkedPair
+            ? `<br><span class="badge bg-light text-dark">${linkedAllocation.slot_day} ${linkedAllocation.slot_time}</span>`
+            : ""
+        }</td>
+          <td>${allocation.venue}</td>
+          <td>
+            ${
+              currentUser && currentUser.role === "admin"
+                ? `
+              <button class="btn btn-sm btn-primary edit-allocation-btn" 
+                data-allocation='${JSON.stringify(allocation)}'>
+                <i class="fas fa-edit"></i>
+              </button>
+            `
+                : ""
+            }
+            <button class="btn btn-sm btn-danger delete-allocation-btn" 
+              data-allocation='${JSON.stringify(allocation)}'>
+              <i class="fas fa-trash"></i>
+            </button>
+          </td>
+        `;
+        facultyAllocationTableBody.appendChild(row);
+      });
+    }
+
+    processedIds.add(baseKey);
   });
 
   console.log("Finished rendering allocations");
 
-  // Remove any existing event listeners by cloning and replacing elements
+  // Setup event listeners for edit and delete buttons (existing logic)
   document.querySelectorAll(".edit-allocation-btn").forEach((btn) => {
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
@@ -509,7 +621,6 @@ function renderFacultyAllocations(allocations) {
     });
   });
 }
-
 // Add search functionality
 function setupSearchFunctionality() {
   const searchInput = document.getElementById("faculty-allocation-search");
@@ -819,21 +930,64 @@ function updateAvailableSlots(course) {
 
       // Add the slots returned from the API
       if (data.availableSlots && data.availableSlots.length > 0) {
-        data.availableSlots.sort().forEach((slotName) => {
+        // Sort slots: regular lab slots first, then compound 4-hour lab slots
+        const regularSlots = data.availableSlots.filter(
+          (slot) => !slot.includes(",")
+        );
+        const compoundSlots = data.availableSlots.filter((slot) =>
+          slot.includes(",")
+        );
+
+        const sortedSlots = [...regularSlots.sort(), ...compoundSlots.sort()];
+
+        sortedSlots.forEach((slotName) => {
           const option = document.createElement("option");
           option.value = slotName;
 
-          // Check if this slot is part of a linked pair
-          if (data.slotLinks && data.slotLinks[slotName]) {
+          // Enhanced display for different slot types
+          if (slotName.includes(",") && slotName.startsWith("L")) {
+            // 4-hour compound lab slot
+            const linkedSlots =
+              data.slotLinks && data.slotLinks[slotName]
+                ? data.slotLinks[slotName]
+                : [];
+
+            if (linkedSlots.length > 0) {
+              option.textContent = `🕐 4-Hour Lab: ${slotName} ↔ ${linkedSlots.join(
+                ", "
+              )}`;
+              option.style.fontWeight = "bold";
+              option.style.color = "#d63384"; // Bootstrap pink for 4-hour labs
+            } else {
+              option.textContent = `🕐 4-Hour Lab: ${slotName}`;
+              option.style.fontWeight = "bold";
+            }
+          } else if (data.slotLinks && data.slotLinks[slotName]) {
+            // Regular slot with linking
             option.textContent = `${slotName} (linked with ${data.slotLinks[
               slotName
             ].join(", ")})`;
           } else {
+            // Regular slot without linking
             option.textContent = slotName;
           }
 
           allocationSlotNameInput.appendChild(option);
         });
+
+        // Add separator if both types exist
+        if (regularSlots.length > 0 && compoundSlots.length > 0) {
+          // Find the first compound slot option and add a visual separator before it
+          const firstCompoundIndex = regularSlots.length + 1; // +1 for the "Select Slot" option
+          if (allocationSlotNameInput.options[firstCompoundIndex]) {
+            allocationSlotNameInput.options[
+              firstCompoundIndex
+            ].style.borderTop = "2px solid #dee2e6";
+            allocationSlotNameInput.options[
+              firstCompoundIndex
+            ].style.marginTop = "4px";
+          }
+        }
 
         // Restore previous selection if it exists in the new options
         if (
@@ -944,12 +1098,31 @@ function handleSlotNameChange(event) {
       linkedSlots.forEach((currentSlotName) => {
         let matchingSlots = [];
 
-        // Check if this is a lab slot (e.g., L1+L2)
-        if (currentSlotName.startsWith("L") && currentSlotName.includes("+")) {
+        // Check if this is a compound 4-hour lab slot (e.g., "L1+L2, L3+L4")
+        if (currentSlotName.includes(",") && currentSlotName.startsWith("L")) {
+          console.log(
+            `Processing compound 4-hour lab slot: ${currentSlotName}`
+          );
+
+          // Parse individual slot pairs from compound slot
+          const slotPairs = currentSlotName.split(", "); // ["L1+L2", "L3+L4"]
+
+          slotPairs.forEach((pairName) => {
+            const pairSlots = slots.filter(
+              (s) => s.slot_name === pairName.trim()
+            );
+            matchingSlots = [...matchingSlots, ...pairSlots];
+          });
+        }
+        // Check if this is a regular lab slot (e.g., L1+L2)
+        else if (
+          currentSlotName.startsWith("L") &&
+          currentSlotName.includes("+")
+        ) {
           // For lab slots, search for the exact combined name
           matchingSlots = slots.filter((s) => s.slot_name === currentSlotName);
         }
-        // Check if this is a combined slot (e.g., A1+TA1)
+        // Check if this is a combined theory slot (e.g., A1+TA1)
         else if (currentSlotName.includes("+")) {
           const slotParts = currentSlotName.split("+");
           const firstSlotName = slotParts[0];
@@ -978,8 +1151,49 @@ function handleSlotNameChange(event) {
       if (allMatchingSlots.length > 0) {
         let dayTimeDisplay = "";
 
-        // If there are linked slots, show 'Primary:' and 'Linked:'
-        if (linkedSlots.length > 1) {
+        // For 4-hour lab compound slots, show structured display
+        if (slotName.includes(",") && slotName.startsWith("L")) {
+          const morningSlots = slotName.split(", "); // ["L1+L2", "L3+L4"]
+          const linkedAfternoonSlots = linkedSlots.filter(
+            (s) => s !== slotName
+          ); // ["L21+L22, L23+L24"]
+
+          // Display morning slots
+          dayTimeDisplay += `🌅 Morning Slots (${slotName}):\n`;
+          morningSlots.forEach((morningSlot) => {
+            const morningSlotData = allMatchingSlots.filter(
+              (s) => s.slot_name === morningSlot.trim()
+            );
+            if (morningSlotData.length > 0) {
+              dayTimeDisplay += `  • ${morningSlot}: ${morningSlotData
+                .map((s) => `${s.slot_day} (${s.slot_time})`)
+                .join(", ")}\n`;
+            }
+          });
+
+          // Display afternoon slots if they exist
+          if (linkedAfternoonSlots.length > 0) {
+            linkedAfternoonSlots.forEach((afternoonCompound) => {
+              const afternoonSlots = afternoonCompound.split(", "); // ["L21+L22", "L23+L24"]
+              dayTimeDisplay += `\n🌆 Afternoon Slots (${afternoonCompound}):\n`;
+
+              afternoonSlots.forEach((afternoonSlot) => {
+                const afternoonSlotData = slots.filter(
+                  (s) => s.slot_name === afternoonSlot.trim()
+                );
+                if (afternoonSlotData.length > 0) {
+                  dayTimeDisplay += `  • ${afternoonSlot}: ${afternoonSlotData
+                    .map((s) => `${s.slot_day} (${s.slot_time})`)
+                    .join(", ")}\n`;
+                }
+              });
+            });
+
+            dayTimeDisplay += `\n⚡ Note: This is a 4-hour lab course. Selecting this slot will automatically allocate both morning and afternoon sessions.`;
+          }
+        }
+        // If there are regular linked slots, show 'Primary:' and 'Linked:'
+        else if (linkedSlots.length > 1) {
           // Group by slot name
           const slotsByName = {};
           allMatchingSlots.forEach((slot) => {
@@ -1233,6 +1447,7 @@ function handleSaveFacultyAllocation() {
   // Get slot details for the selected slot name
   const year = allocationData.slot_year;
   const semesterType = allocationData.semester_type;
+  const primarySlot = allocationData.slot_name;
 
   console.log("Fetching slots for:", year, semesterType);
 
@@ -1249,7 +1464,6 @@ function handleSaveFacultyAllocation() {
       console.log("All slots:", slots);
 
       // Check if selected slot has linked slots
-      const primarySlot = allocationData.slot_name;
       const linkedSlots =
         window.slotLinks && window.slotLinks[primarySlot]
           ? [primarySlot, ...window.slotLinks[primarySlot]]
@@ -1264,59 +1478,69 @@ function handleSaveFacultyAllocation() {
         primarySlot.startsWith("L") &&
         primarySlot.includes("+");
 
+      // Check if this is a 4-hour compound lab slot
+      const is4HourLab = primarySlot.includes(",") && isSummerLabSlot;
+
+      // Parse all individual slot names that need to be allocated
+      const allIndividualSlots = [];
+
+      linkedSlots.forEach((slotName) => {
+        if (slotName.includes(",")) {
+          // This is a compound slot - parse individual slots
+          const individualSlots = slotName.split(", ").map((s) => s.trim());
+          allIndividualSlots.push(...individualSlots);
+        } else {
+          // This is already an individual slot
+          allIndividualSlots.push(slotName);
+        }
+      });
+
+      console.log("All individual slots to allocate:", allIndividualSlots);
+
       // Create promises array for all allocations
       const promises = [];
 
-      // For each slot in the linkedSlots array
-      linkedSlots.forEach((slotName) => {
-        let matchingSlots = [];
+      // For each individual slot that needs to be allocated
+      for (const individualSlot of allIndividualSlots) {
+        // Find the slot details for this individual slot
+        const matchingSlots = slots.filter(
+          (s) => s.slot_name === individualSlot
+        );
 
-        // Check if this is a lab slot (e.g., L1+L2)
-        if (slotName.startsWith("L") && slotName.includes("+")) {
-          // For lab slots, search for the exact combined name
-          matchingSlots = slots.filter((s) => s.slot_name === slotName);
-        }
-        // Check if this is a theory combined slot (e.g., A1+TA1)
-        else if (slotName.includes("+")) {
-          const slotParts = slotName.split("+");
-          const firstSlotName = slotParts[0];
-          const secondSlotName = slotParts[1];
-
-          // Find slots for both parts
-          const firstSlotMatches = slots.filter(
-            (s) => s.slot_name === firstSlotName
-          );
-          const secondSlotMatches = slots.filter(
-            (s) => s.slot_name === secondSlotName
-          );
-
-          // Combine the information from both slot parts
-          matchingSlots = [...firstSlotMatches, ...secondSlotMatches];
-        } else {
-          // Handle regular non-combined slots as before
-          matchingSlots = slots.filter((s) => s.slot_name === slotName);
-        }
-
-        console.log(`Matching slots for ${slotName}:`, matchingSlots);
+        console.log(`Matching slots for ${individualSlot}:`, matchingSlots);
 
         if (matchingSlots.length === 0) {
-          showAlert(`No slots found for ${slotName}`, "danger");
+          showAlert(`No slots found for ${individualSlot}`, "danger");
           return;
         }
 
-        // Create allocations for all matching slots
+        // For compound primary slots, we need to create just one allocation with the compound name
+        // For individual slots, create allocation with individual slot name
         matchingSlots.forEach((slot) => {
-          // Create a new allocation with the appropriate slot
+          let slotNameToUse;
+
+          if (is4HourLab && individualSlot === allIndividualSlots[0]) {
+            // For the first slot of a 4-hour lab, use the compound name
+            slotNameToUse = primarySlot;
+          } else if (is4HourLab) {
+            // For subsequent slots of a 4-hour lab, skip individual allocations
+            // The backend will handle creating all related allocations
+            return;
+          } else {
+            // For regular slots, use the individual slot name
+            slotNameToUse = slot.slot_name;
+          }
+
+          // Create allocation with the appropriate slot name
           const completeAllocation = {
             ...allocationData,
             slot_day: slot.slot_day,
             slot_time: slot.slot_time,
-            // Keep the slot_name as provided
-            slot_name: slot.slot_name,
+            slot_name: slotNameToUse,
           };
 
           console.log(
-            `Saving allocation for ${slot.slot_name}:`,
+            `Saving allocation for ${slotNameToUse}:`,
             completeAllocation
           );
 
@@ -1331,7 +1555,7 @@ function handleSaveFacultyAllocation() {
             })
           );
         });
-      });
+      }
 
       // Execute all allocation promises
       if (promises.length === 0) {
@@ -1354,8 +1578,22 @@ function handleSaveFacultyAllocation() {
         .then((results) => {
           console.log("Save results:", results);
 
-          // Check if this is a summer lab slot to provide appropriate message
-          if (isSummerLabSlot) {
+          // Provide appropriate success message based on allocation type
+          if (is4HourLab) {
+            const morningSlots = primarySlot.split(", ");
+            const linkedAfternoonSlots =
+              window.slotLinks && window.slotLinks[primarySlot]
+                ? window.slotLinks[primarySlot]
+                : [];
+
+            showAlert(
+              `✅ 4-Hour Lab allocation created successfully!\n\n` +
+                `🌅 Morning slots: ${morningSlots.join(", ")}\n` +
+                `🌆 Afternoon slots: ${linkedAfternoonSlots.join(", ")}\n\n` +
+                `All related slots have been automatically allocated.`,
+              "success"
+            );
+          } else if (isSummerLabSlot) {
             showAlert(
               "Faculty allocation saved successfully! The linked lab slot has also been automatically allocated.",
               "success"
@@ -1375,7 +1613,7 @@ function handleSaveFacultyAllocation() {
         .catch((error) => {
           console.error("Save faculty allocation error:", error);
 
-          // Check if the error message contains "Slot conflict"
+          // Check if the error message contains specific conflict types
           if (error.message && error.message.includes("Slot conflict")) {
             showAlert(
               "Cannot allocate this slot because it conflicts with another slot already allocated to this faculty",
@@ -1395,6 +1633,22 @@ function handleSaveFacultyAllocation() {
           ) {
             showAlert(
               "Cannot allocate this lab slot because you already have a different course allocated to the faculty in the linked slot time",
+              "danger"
+            );
+          } else if (
+            error.message &&
+            error.message.includes("4-hour lab slot clash")
+          ) {
+            showAlert(
+              "Cannot allocate this 4-hour lab because one or more of the required slots is already booked by another faculty",
+              "danger"
+            );
+          } else if (
+            error.message &&
+            error.message.includes("Faculty clash in 4-hour lab")
+          ) {
+            showAlert(
+              "Cannot allocate this 4-hour lab because you already have different courses allocated during some of the required slot times",
               "danger"
             );
           } else {
@@ -1505,21 +1759,49 @@ function openEditAllocationModal(allocation) {
 function openDeleteAllocationModal(allocation) {
   currentEditData = allocation;
 
-  // Determine if this is a summer lab slot that will delete a linked slot too
   let warningMessage = "";
-  if (
+  let slotCount = 1;
+
+  // Check if this is a 4-hour lab course
+  const is4HourLab =
+    allocation.semester_type === "SUMMER" &&
+    allocation.practical === 4 &&
+    allocation.slot_name.startsWith("L");
+
+  if (is4HourLab) {
+    if (allocation.slot_name.includes(",")) {
+      // This is a compound slot - count all related slots
+      const morningSlots = allocation.slot_name.split(", ");
+      slotCount = morningSlots.length * 2; // Each morning slot has an afternoon counterpart
+
+      warningMessage =
+        `\n\n⚠️  4-HOUR LAB DELETION WARNING:\n` +
+        `This will delete ALL ${slotCount} related lab slots:\n` +
+        `🌅 Morning: ${morningSlots.join(", ")}\n` +
+        `🌆 Afternoon: Corresponding linked afternoon slots\n\n` +
+        `This action cannot be undone!`;
+    } else {
+      // Individual slot from a 4-hour lab
+      slotCount = 4; // All 4 slots will be deleted
+      warningMessage =
+        `\n\n⚠️  4-HOUR LAB DELETION WARNING:\n` +
+        `This will delete ALL 4 related lab slots for this course.\n` +
+        `This action cannot be undone!`;
+    }
+  } else if (
     allocation.semester_type === "SUMMER" &&
     allocation.slot_name.startsWith("L") &&
     allocation.slot_name.includes("+")
   ) {
-    // Determine linked slot name pattern (L1+L2 -> L21+L22 or vice versa)
-    let linkedSlotName = null;
+    // Regular 2-hour summer lab with linking
+    slotCount = 2;
 
+    // Determine linked slot name pattern
+    let linkedSlotName = null;
     if (
       allocation.slot_name.match(/L\d+\+L\d+/) &&
       parseInt(allocation.slot_name.match(/\d+/)[0]) < 21
     ) {
-      // This is a morning lab slot, find afternoon equivalent
       const slotNumbers = allocation.slot_name.match(/L(\d+)\+L(\d+)/);
       if (slotNumbers && slotNumbers.length === 3) {
         const firstNum = parseInt(slotNumbers[1]) + 20;
@@ -1530,7 +1812,6 @@ function openDeleteAllocationModal(allocation) {
       allocation.slot_name.match(/L\d+\+L\d+/) &&
       parseInt(allocation.slot_name.match(/\d+/)[0]) >= 21
     ) {
-      // This is an afternoon lab slot, find morning equivalent
       const slotNumbers = allocation.slot_name.match(/L(\d+)\+L(\d+)/);
       if (slotNumbers && slotNumbers.length === 3) {
         const firstNum = parseInt(slotNumbers[1]) - 20;
@@ -1540,16 +1821,19 @@ function openDeleteAllocationModal(allocation) {
     }
 
     if (linkedSlotName) {
-      warningMessage = `\n\nWARNING: This is a Summer lab slot. Deleting this will also delete the linked slot ${linkedSlotName}.`;
+      warningMessage =
+        `\n\n⚠️  SUMMER LAB DELETION WARNING:\n` +
+        `This will also delete the linked slot: ${linkedSlotName}`;
     }
   }
 
   // Show confirmation modal
   const confirmMessage = `Are you sure you want to delete the allocation for:
-    Course: ${allocation.course_code} - ${allocation.course_name}
-    Faculty: ${allocation.faculty_name}
-    Slot: ${allocation.slot_name} on ${allocation.slot_day} at ${allocation.slot_time}
-    Venue: ${allocation.venue}${warningMessage}`;
+
+📚 Course: ${allocation.course_code} - ${allocation.course_name}
+👤 Faculty: ${allocation.faculty_name}
+🕐 Slot: ${allocation.slot_name} on ${allocation.slot_day} at ${allocation.slot_time}
+🏢 Venue: ${allocation.venue}${warningMessage}`;
 
   if (confirm(confirmMessage)) {
     deleteFacultyAllocation(allocation);
