@@ -41,6 +41,13 @@ router.get(
   facultyAllocationController.getAvailableSlotsForCourse
 );
 
+// Real-time conflict checking endpoint
+router.get(
+  "/check-conflicts",
+  canManageFacultyAllocations,
+  facultyAllocationController.checkConflicts
+);
+
 // Timetable viewing routes (faculty, coordinators, and admins can view)
 router.get(
   "/faculty-timetable",
