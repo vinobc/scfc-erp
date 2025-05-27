@@ -337,7 +337,7 @@ function loadFacultyAllocations() {
     })
     .catch((error) => {
       console.error("Load faculty allocations error:", error);
-      showAlert("Failed to load faculty allocations", "danger");
+      localShowAlert("Failed to load faculty allocations", "danger");
 
       if (facultyAllocationTableBody) {
         facultyAllocationTableBody.innerHTML =
@@ -1015,7 +1015,10 @@ function updateAvailableSlots(course) {
     })
     .catch((error) => {
       console.error("Error fetching available slots:", error);
-      showAlert("Error fetching available slots. Please try again.", "danger");
+      localShowAlert(
+        "Error fetching available slots. Please try again.",
+        "danger"
+      );
     });
 }
 
@@ -1440,7 +1443,7 @@ function handleSaveFacultyAllocation() {
     !allocationData.venue ||
     !allocationData.slot_name
   ) {
-    showAlert("Please fill all required fields", "danger");
+    localShowAlert("Please fill all required fields", "danger");
     return;
   }
 
@@ -1510,7 +1513,7 @@ function handleSaveFacultyAllocation() {
         console.log(`Matching slots for ${individualSlot}:`, matchingSlots);
 
         if (matchingSlots.length === 0) {
-          showAlert(`No slots found for ${individualSlot}`, "danger");
+          localShowAlert(`No slots found for ${individualSlot}`, "danger");
           return;
         }
 
@@ -1559,20 +1562,34 @@ function handleSaveFacultyAllocation() {
 
       // Execute all allocation promises
       if (promises.length === 0) {
-        showAlert("No valid slots found for allocation", "danger");
+        localShowAlert("No valid slots found for allocation", "danger");
         return;
       }
 
+      // Execute all allocation promises with improved error handling
       Promise.all(promises)
-        .then((responses) => {
+        .then(async (responses) => {
           console.log("Save responses:", responses);
 
+          // Check for failed responses
           const failedResponses = responses.filter((r) => !r.ok);
+
           if (failedResponses.length > 0) {
-            return failedResponses[0].json().then((data) => {
-              throw new Error(data.message);
-            });
+            console.log("Failed responses found:", failedResponses);
+
+            // Extract error from the first failed response
+            const errorData = await failedResponses[0].json();
+            console.log("Error data from backend:", errorData);
+
+            // Throw error with the backend message
+            const errorMessage =
+              errorData.message || "Failed to save faculty allocation";
+            const error = new Error(errorMessage);
+            error.conflictType = errorData.type; // Preserve conflict type
+            throw error;
           }
+
+          // All responses successful - parse them
           return Promise.all(responses.map((r) => r.json()));
         })
         .then((results) => {
@@ -1586,7 +1603,7 @@ function handleSaveFacultyAllocation() {
                 ? window.slotLinks[primarySlot]
                 : [];
 
-            showAlert(
+            localShowAlert(
               `✅ 4-Hour Lab allocation created successfully!\n\n` +
                 `🌅 Morning slots: ${morningSlots.join(", ")}\n` +
                 `🌆 Afternoon slots: ${linkedAfternoonSlots.join(", ")}\n\n` +
@@ -1594,12 +1611,12 @@ function handleSaveFacultyAllocation() {
               "success"
             );
           } else if (isSummerLabSlot) {
-            showAlert(
+            localShowAlert(
               "Faculty allocation saved successfully! The linked lab slot has also been automatically allocated.",
               "success"
             );
           } else {
-            showAlert("Faculty allocation saved successfully", "success");
+            localShowAlert("Faculty allocation saved successfully", "success");
           }
 
           if (facultyAllocationModal) facultyAllocationModal.hide();
@@ -1612,56 +1629,52 @@ function handleSaveFacultyAllocation() {
         })
         .catch((error) => {
           console.error("Save faculty allocation error:", error);
+          console.log("Error message:", error.message);
 
-          // Check if the error message contains specific conflict types
-          if (error.message && error.message.includes("Slot conflict")) {
-            showAlert(
-              "Cannot allocate this slot because it conflicts with another slot already allocated to this faculty",
-              "danger"
-            );
-          } else if (
-            error.message &&
-            error.message.includes("Linked slot clash")
-          ) {
-            showAlert(
-              "Cannot allocate this lab slot because its linked slot is already allocated to another faculty",
-              "danger"
-            );
-          } else if (
-            error.message &&
-            error.message.includes("Faculty clash in linked slot")
-          ) {
-            showAlert(
-              "Cannot allocate this lab slot because you already have a different course allocated to the faculty in the linked slot time",
-              "danger"
-            );
-          } else if (
-            error.message &&
-            error.message.includes("4-hour lab slot clash")
-          ) {
-            showAlert(
-              "Cannot allocate this 4-hour lab because one or more of the required slots is already booked by another faculty",
-              "danger"
-            );
-          } else if (
-            error.message &&
-            error.message.includes("Faculty clash in 4-hour lab")
-          ) {
-            showAlert(
-              "Cannot allocate this 4-hour lab because you already have different courses allocated during some of the required slot times",
-              "danger"
-            );
+          // Enhanced error message handling with better pattern matching
+          let displayMessage = "";
+
+          if (error.message) {
+            const errorMsg = error.message.toLowerCase();
+
+            // Check for specific conflict types and provide user-friendly messages
+            if (
+              errorMsg.includes("venue clash") ||
+              (errorMsg.includes("venue") &&
+                errorMsg.includes("already booked"))
+            ) {
+              displayMessage = `❌ Venue Conflict!\n\n${error.message}\n\nPlease select a different venue or time slot.`;
+            } else if (
+              errorMsg.includes("faculty clash") ||
+              (errorMsg.includes("faculty") &&
+                errorMsg.includes("already assigned"))
+            ) {
+              displayMessage = `❌ Faculty Conflict!\n\n${error.message}\n\nThis faculty member is already teaching another course at this time.`;
+            } else if (errorMsg.includes("slot conflict")) {
+              displayMessage = `❌ Slot Conflict!\n\n${error.message}\n\nThis slot conflicts with another slot already allocated to this faculty.`;
+            } else if (errorMsg.includes("linked slot clash")) {
+              displayMessage = `❌ Linked Slot Conflict!\n\n${error.message}\n\nThe afternoon session for this lab is already occupied.`;
+            } else if (
+              errorMsg.includes("4-hour lab") &&
+              errorMsg.includes("clash")
+            ) {
+              displayMessage = `❌ 4-Hour Lab Conflict!\n\n${error.message}\n\nOne or more required time slots are unavailable.`;
+            } else {
+              // For any other backend error message, show it directly
+              displayMessage = `❌ Allocation Failed!\n\n${error.message}`;
+            }
           } else {
-            showAlert(
-              error.message || "Failed to save faculty allocation",
-              "danger"
-            );
+            displayMessage =
+              "❌ Unknown error occurred while saving faculty allocation. Please try again.";
           }
+
+          // Show the error message to user
+          localShowAlert(displayMessage, "danger", 10000); // Show for 8 seconds for longer error messages
         });
     })
     .catch((error) => {
       console.error("Error fetching slot details:", error);
-      showAlert("Failed to fetch slot details", "danger");
+      localShowAlert("Failed to fetch slot details", "danger");
     });
 }
 
@@ -1715,7 +1728,7 @@ function checkTELCourseCompletion(allocation) {
 
       if (courseData.theory > 0 && courseData.practical > 0) {
         if (!hasTheory || !hasLab) {
-          showAlert(
+          localShowAlert(
             `TEL course ${allocation.course_code} requires both theory and lab allocation. ` +
               `Currently has: ${hasTheory ? "Theory" : ""} ${
                 hasLab ? "Lab" : ""
@@ -1859,12 +1872,12 @@ function deleteFacultyAllocation(allocation) {
       return response.json();
     })
     .then((data) => {
-      showAlert("Faculty allocation deleted successfully", "success");
+      localShowAlert("Faculty allocation deleted successfully", "success");
       loadFacultyAllocations();
     })
     .catch((error) => {
       console.error("Delete faculty allocation error:", error);
-      showAlert(
+      localShowAlert(
         error.message || "Failed to delete faculty allocation",
         "danger"
       );
@@ -1878,7 +1891,7 @@ function handleViewFacultyTimetable() {
   const employeeId = viewFacultySelect.value;
 
   if (!year || !semester || !employeeId) {
-    showAlert("Please select year, semester, and faculty", "warning");
+    localShowAlert("Please select year, semester, and faculty", "warning");
     return;
   }
 
@@ -1897,7 +1910,7 @@ function handleViewFacultyTimetable() {
     })
     .catch((error) => {
       console.error("Error fetching faculty timetable:", error);
-      showAlert("Failed to load faculty timetable", "danger");
+      localShowAlert("Failed to load faculty timetable", "danger");
     });
 }
 
@@ -1908,7 +1921,7 @@ function handleViewClassTimetable() {
   const venue = viewClassVenueSelect.value;
 
   if (!year || !semester || !venue) {
-    showAlert("Please select year, semester, and venue", "warning");
+    localShowAlert("Please select year, semester, and venue", "warning");
     return;
   }
 
@@ -1927,7 +1940,7 @@ function handleViewClassTimetable() {
     })
     .catch((error) => {
       console.error("Error fetching class timetable:", error);
-      showAlert("Failed to load class timetable", "danger");
+      localShowAlert("Failed to load class timetable", "danger");
     });
 }
 
@@ -2661,34 +2674,49 @@ function populateViewDropdowns() {
     });
 }
 
-// Show alert message
-function showAlert(message, type = "info", timeout = 5000) {
-  // Use the global showAlert function from main.js
-  if (window.showAlert && showAlert !== window.showAlert) {
-    window.showAlert(message, type, timeout);
-  } else {
-    // Fallback to console if global showAlert is not available
-    console.log(`${type}: ${message}`);
+// Local alert function - bypasses global showAlert completely
+function localShowAlert(message, type = "info", timeout = 8000) {
+  console.log(`[LOCAL ALERT] Creating alert: ${type} - ${message}`);
 
-    // Try to create alert manually
-    const alertContainer = document.getElementById("alert-container");
-    if (alertContainer) {
-      const alertDiv = document.createElement("div");
-      alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-      alertDiv.innerHTML = `
-          ${message}
-          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        `;
+  const alertContainer = document.getElementById("alert-container");
+  if (!alertContainer) {
+    console.error("Alert container not found!");
+    alert(message); // Fallback to browser alert
+    return;
+  }
 
-      alertContainer.appendChild(alertDiv);
+  // Create alert element
+  const alertDiv = document.createElement("div");
+  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.style.margin = "10px 0";
+  alertDiv.style.whiteSpace = "pre-line";
+  alertDiv.style.zIndex = "9999";
+  alertDiv.style.position = "relative";
 
-      if (timeout) {
+  alertDiv.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  `;
+
+  // Add alert to container
+  alertContainer.appendChild(alertDiv);
+  console.log("Local alert added to DOM:", alertDiv);
+
+  // Force scroll to top and focus on alert
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  // Auto-remove after timeout
+  if (timeout && timeout > 0) {
+    setTimeout(() => {
+      if (alertDiv.parentNode) {
+        alertDiv.classList.remove("show");
         setTimeout(() => {
-          alertDiv.classList.remove("show");
-          setTimeout(() => alertDiv.remove(), 150);
-        }, timeout);
+          if (alertDiv.parentNode) {
+            alertDiv.remove();
+          }
+        }, 150);
       }
-    }
+    }, timeout);
   }
 }
 
