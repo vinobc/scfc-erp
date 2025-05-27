@@ -866,11 +866,15 @@ function handleEmployeeIdInput(event) {
         console.log("Setting faculty name display:", matchingFaculty.name);
         allocationFacultyNameDisplay.textContent = matchingFaculty.name;
 
-        // Update available slots by filtering already allocated slots
-        updateFacultyAvailableSlots();
-
-        // Check for slot conflicts
-        checkAndDisableConflictingSlots();
+        // If course is already selected, refresh slots with faculty-specific logic
+        if (courseData && courseData.course_code) {
+          console.log("Faculty selected, refreshing slots with enhanced API");
+          updateAvailableSlots(courseData);
+        } else {
+          // Fallback to original logic if course not selected yet
+          updateFacultyAvailableSlots();
+          checkAndDisableConflictingSlots();
+        }
       } else {
         allocationFacultyNameDisplay.textContent = "";
       }
@@ -914,7 +918,7 @@ function updateComponentTypeOptions(course) {
   }
 }
 
-// Update available slots based on course TPC
+// Update available slots based on course TPC and faculty availability
 function updateAvailableSlots(course) {
   if (!allocationSlotNameInput) return;
 
@@ -923,13 +927,64 @@ function updateAvailableSlots(course) {
   const componentType = allocationComponentTypeInput
     ? allocationComponentTypeInput.value
     : "";
+  const facultyId = allocationEmployeeIdInput.value;
 
   if (!year || !semesterType) return;
 
   // Save current selection before clearing dropdown
   const previouslySelectedSlot = allocationSlotNameInput.value;
 
-  // Include the component type in the API call
+  // If both course and faculty are selected, use the enhanced API
+  if (facultyId && facultyData && facultyData.employee_id) {
+    console.log("Using enhanced faculty-specific slot API");
+
+    fetch(
+      `${window.API_URL}/faculty-allocations/available-slots-for-faculty?` +
+        `facultyId=${facultyId}&courseCode=${course.course_code}&year=${year}&semesterType=${semesterType}` +
+        `${componentType ? `&componentType=${componentType}` : ""}`,
+      {
+        headers: {
+          Authorization: localStorage.getItem("token"),
+        },
+      }
+    )
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Enhanced API response:", data);
+        populateSlotDropdownWithAvailability(data, previouslySelectedSlot);
+      })
+      .catch((error) => {
+        console.error("Error fetching enhanced available slots:", error);
+        // Fallback to original API
+        useOriginalSlotAPI(
+          course,
+          year,
+          semesterType,
+          componentType,
+          previouslySelectedSlot
+        );
+      });
+  } else {
+    // Use original API when faculty is not selected yet
+    console.log("Using original slot API (faculty not selected)");
+    useOriginalSlotAPI(
+      course,
+      year,
+      semesterType,
+      componentType,
+      previouslySelectedSlot
+    );
+  }
+}
+
+// Original slot API logic (fallback)
+function useOriginalSlotAPI(
+  course,
+  year,
+  semesterType,
+  componentType,
+  previouslySelectedSlot
+) {
   fetch(
     `${window.API_URL}/faculty-allocations/available-slots?` +
       `courseCode=${course.course_code}&year=${year}&semesterType=${semesterType}` +
@@ -949,90 +1004,21 @@ function updateAvailableSlots(course) {
       allocationSlotNameInput.innerHTML =
         '<option value="">Select Slot</option>';
 
-      // Add the slots returned from the API
+      // Add the slots returned from the API (existing logic)
       if (data.availableSlots && data.availableSlots.length > 0) {
-        // Sort slots: regular lab slots first, then compound 4-hour lab slots
-        const regularSlots = data.availableSlots.filter(
-          (slot) => !slot.includes(",")
+        populateBasicSlotDropdown(
+          data.availableSlots,
+          data.slotLinks,
+          previouslySelectedSlot
         );
-        const compoundSlots = data.availableSlots.filter((slot) =>
-          slot.includes(",")
-        );
-
-        const sortedSlots = [...regularSlots.sort(), ...compoundSlots.sort()];
-
-        sortedSlots.forEach((slotName) => {
-          const option = document.createElement("option");
-          option.value = slotName;
-
-          // Enhanced display for different slot types
-          if (slotName.includes(",") && slotName.startsWith("L")) {
-            // 4-hour compound lab slot
-            const linkedSlots =
-              data.slotLinks && data.slotLinks[slotName]
-                ? data.slotLinks[slotName]
-                : [];
-
-            if (linkedSlots.length > 0) {
-              option.textContent = `🕐 4-Hour Lab: ${slotName} ↔ ${linkedSlots.join(
-                ", "
-              )}`;
-              option.style.fontWeight = "bold";
-              option.style.color = "#d63384"; // Bootstrap pink for 4-hour labs
-            } else {
-              option.textContent = `🕐 4-Hour Lab: ${slotName}`;
-              option.style.fontWeight = "bold";
-            }
-          } else if (data.slotLinks && data.slotLinks[slotName]) {
-            // Regular slot with linking
-            option.textContent = `${slotName} (linked with ${data.slotLinks[
-              slotName
-            ].join(", ")})`;
-          } else {
-            // Regular slot without linking
-            option.textContent = slotName;
-          }
-
-          allocationSlotNameInput.appendChild(option);
-        });
-
-        // Add separator if both types exist
-        if (regularSlots.length > 0 && compoundSlots.length > 0) {
-          // Find the first compound slot option and add a visual separator before it
-          const firstCompoundIndex = regularSlots.length + 1; // +1 for the "Select Slot" option
-          if (allocationSlotNameInput.options[firstCompoundIndex]) {
-            allocationSlotNameInput.options[
-              firstCompoundIndex
-            ].style.borderTop = "2px solid #dee2e6";
-            allocationSlotNameInput.options[
-              firstCompoundIndex
-            ].style.marginTop = "4px";
-          }
-        }
-
-        // Restore previous selection if it exists in the new options
-        if (
-          previouslySelectedSlot &&
-          data.availableSlots.includes(previouslySelectedSlot)
-        ) {
-          allocationSlotNameInput.value = previouslySelectedSlot;
-
-          // Trigger the change event to update slot day display
-          const changeEvent = new Event("change");
-          allocationSlotNameInput.dispatchEvent(changeEvent);
-        }
       } else {
-        console.warn("No available slots returned from API");
-        // Add a message to the dropdown
+        console.warn("No available slots returned from original API");
         const option = document.createElement("option");
         option.value = "";
         option.textContent = "No slots available";
         option.disabled = true;
         allocationSlotNameInput.appendChild(option);
       }
-
-      // Update faculty available slots
-      updateFacultyAvailableSlots();
     })
     .catch((error) => {
       console.error("Error fetching available slots:", error);
@@ -1041,6 +1027,171 @@ function updateAvailableSlots(course) {
         "danger"
       );
     });
+}
+
+// Populate dropdown with availability information (NEW ENHANCED VERSION)
+function populateSlotDropdownWithAvailability(data, previouslySelectedSlot) {
+  // Store linked slots information globally
+  window.slotLinks = data.slotLinks || {};
+
+  // Clear the dropdown
+  allocationSlotNameInput.innerHTML = '<option value="">Select Slot</option>';
+
+  const availableSlots = data.availableSlots || [];
+  const disabledSlots = data.disabledSlots || [];
+  const allSlots = [...availableSlots];
+
+  // Add disabled slot names to show them as disabled options
+  disabledSlots.forEach((disabled) => {
+    if (!allSlots.includes(disabled.slotName)) {
+      allSlots.push(disabled.slotName);
+    }
+  });
+
+  if (allSlots.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No slots available";
+    option.disabled = true;
+    allocationSlotNameInput.appendChild(option);
+    return;
+  }
+
+  // Sort slots: available first, then disabled
+  allSlots.sort((a, b) => {
+    const aDisabled = disabledSlots.find((d) => d.slotName === a);
+    const bDisabled = disabledSlots.find((d) => d.slotName === b);
+
+    if (aDisabled && !bDisabled) return 1;
+    if (!aDisabled && bDisabled) return -1;
+
+    // Sort by slot name within each group
+    return a.localeCompare(b);
+  });
+
+  // Add options to dropdown
+  allSlots.forEach((slotName) => {
+    const option = document.createElement("option");
+    option.value = slotName;
+
+    // Check if this slot is disabled
+    const disabledInfo = disabledSlots.find((d) => d.slotName === slotName);
+
+    if (disabledInfo) {
+      // Disabled slot - show with reason
+      option.disabled = true;
+      option.style.color = "#dc3545";
+      option.style.fontStyle = "italic";
+
+      // Enhanced display with conflict reason
+      if (slotName.includes(",") && slotName.startsWith("L")) {
+        option.textContent = `❌ 4-Hour Lab: ${slotName} - ${disabledInfo.reason}`;
+      } else if (data.slotLinks && data.slotLinks[slotName]) {
+        option.textContent = `❌ ${slotName} (+ ${data.slotLinks[slotName].join(
+          ", "
+        )}) - ${disabledInfo.reason}`;
+      } else {
+        option.textContent = `❌ ${slotName} - ${disabledInfo.reason}`;
+      }
+
+      // Add detailed reason as title for tooltip
+      option.title = disabledInfo.details || disabledInfo.reason;
+    } else {
+      // Available slot - show normally
+      option.style.color = "#198754";
+
+      if (slotName.includes(",") && slotName.startsWith("L")) {
+        const linkedSlots =
+          data.slotLinks && data.slotLinks[slotName]
+            ? data.slotLinks[slotName]
+            : [];
+        if (linkedSlots.length > 0) {
+          option.textContent = `✅ 4-Hour Lab: ${slotName} ↔ ${linkedSlots.join(
+            ", "
+          )}`;
+          option.style.fontWeight = "bold";
+        } else {
+          option.textContent = `✅ 4-Hour Lab: ${slotName}`;
+          option.style.fontWeight = "bold";
+        }
+      } else if (data.slotLinks && data.slotLinks[slotName]) {
+        option.textContent = `✅ ${slotName} (linked with ${data.slotLinks[
+          slotName
+        ].join(", ")})`;
+      } else {
+        option.textContent = `✅ ${slotName}`;
+      }
+    }
+
+    allocationSlotNameInput.appendChild(option);
+  });
+
+  // Restore previous selection if it's still available
+  if (
+    previouslySelectedSlot &&
+    availableSlots.includes(previouslySelectedSlot)
+  ) {
+    allocationSlotNameInput.value = previouslySelectedSlot;
+
+    // Trigger the change event to update slot day display
+    const changeEvent = new Event("change");
+    allocationSlotNameInput.dispatchEvent(changeEvent);
+  }
+
+  console.log(
+    `Populated dropdown: ${availableSlots.length} available, ${disabledSlots.length} disabled`
+  );
+}
+
+// Populate basic dropdown (existing logic for when faculty not selected)
+function populateBasicSlotDropdown(
+  availableSlots,
+  slotLinks,
+  previouslySelectedSlot
+) {
+  // Sort slots: regular lab slots first, then compound 4-hour lab slots
+  const regularSlots = availableSlots.filter((slot) => !slot.includes(","));
+  const compoundSlots = availableSlots.filter((slot) => slot.includes(","));
+  const sortedSlots = [...regularSlots.sort(), ...compoundSlots.sort()];
+
+  sortedSlots.forEach((slotName) => {
+    const option = document.createElement("option");
+    option.value = slotName;
+
+    // Enhanced display for different slot types (existing logic)
+    if (slotName.includes(",") && slotName.startsWith("L")) {
+      const linkedSlots =
+        slotLinks && slotLinks[slotName] ? slotLinks[slotName] : [];
+      if (linkedSlots.length > 0) {
+        option.textContent = `🕐 4-Hour Lab: ${slotName} ↔ ${linkedSlots.join(
+          ", "
+        )}`;
+        option.style.fontWeight = "bold";
+        option.style.color = "#d63384";
+      } else {
+        option.textContent = `🕐 4-Hour Lab: ${slotName}`;
+        option.style.fontWeight = "bold";
+      }
+    } else if (slotLinks && slotLinks[slotName]) {
+      option.textContent = `${slotName} (linked with ${slotLinks[slotName].join(
+        ", "
+      )})`;
+    } else {
+      option.textContent = slotName;
+    }
+
+    allocationSlotNameInput.appendChild(option);
+  });
+
+  // Restore previous selection if it exists in the new options
+  if (
+    previouslySelectedSlot &&
+    availableSlots.includes(previouslySelectedSlot)
+  ) {
+    allocationSlotNameInput.value = previouslySelectedSlot;
+    const changeEvent = new Event("change");
+    allocationSlotNameInput.dispatchEvent(changeEvent);
+  }
 }
 
 // Update faculty available slots by filtering already allocated
@@ -2991,11 +3142,17 @@ function setupFacultyNameAutocomplete() {
               // Store faculty data
               facultyData = faculty;
 
-              // Update available slots
-              updateFacultyAvailableSlots();
-
-              // Check for conflicts
-              checkAndDisableConflictingSlots();
+              // If course is already selected, refresh slots with enhanced API
+              if (courseData && courseData.course_code) {
+                console.log(
+                  "Faculty selected via autocomplete, refreshing slots with enhanced API"
+                );
+                updateAvailableSlots(courseData);
+              } else {
+                // Fallback to original logic if course not selected yet
+                updateFacultyAvailableSlots();
+                checkAndDisableConflictingSlots();
+              }
 
               // Hide dropdown
               dropdown.style.display = "none";

@@ -1411,3 +1411,432 @@ exports.checkConflicts = async (req, res) => {
     });
   }
 };
+
+// Get available slots for a faculty considering all conflicts and cross-day requirements
+exports.getAvailableSlotsForFaculty = async (req, res) => {
+  try {
+    const { facultyId, courseCode, year, semesterType, componentType } =
+      req.query;
+
+    if (!facultyId || !courseCode || !year || !semesterType) {
+      return res.status(400).json({
+        message:
+          "Faculty ID, course code, year, and semester type are required",
+      });
+    }
+
+    // Get course details
+    const courseResult = await db.query(
+      `SELECT * FROM course WHERE course_code = $1`,
+      [courseCode]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const course = courseResult.rows[0];
+
+    // Get base available slots using existing logic
+    const baseAvailableSlots = await getBaseAvailableSlots(
+      course,
+      year,
+      semesterType,
+      componentType
+    );
+
+    // Get faculty's existing allocations
+    const facultyAllocations = await getFacultyAllocations(
+      facultyId,
+      year,
+      semesterType
+    );
+
+    // Get all slot definitions for cross-day validation
+    const allSlots = await db.query(
+      `SELECT * FROM slot WHERE slot_year = $1 AND semester_type = $2 ORDER BY slot_day, slot_time`,
+      [year, semesterType]
+    );
+
+    // Filter slots based on faculty availability and cross-day requirements
+    const availableSlots = await filterSlotsForFaculty(
+      baseAvailableSlots.availableSlots,
+      baseAvailableSlots.slotLinks,
+      facultyAllocations,
+      allSlots.rows,
+      year,
+      semesterType,
+      course
+    );
+
+    res.status(200).json({
+      course: course,
+      availableSlots: availableSlots.available,
+      disabledSlots: availableSlots.disabled,
+      slotLinks: baseAvailableSlots.slotLinks,
+    });
+  } catch (error) {
+    console.error("Get available slots for faculty error:", error);
+    res.status(500).json({
+      message: "Server error while fetching available slots for faculty",
+    });
+  }
+};
+
+// Helper function to get base available slots (reuses existing logic)
+async function getBaseAvailableSlots(
+  course,
+  year,
+  semesterType,
+  componentType
+) {
+  const theory = course.theory;
+  const practical = course.practical;
+
+  // Get available slots based on course T-P-C and semester slot configuration
+  let configQuery = `
+    SELECT ssc.* 
+    FROM semester_slot_config ssc
+    WHERE ssc.slot_year = $1 
+    AND ssc.semester_type = $2 
+    AND ssc.is_active = true
+  `;
+
+  const params = [year, semesterType];
+
+  // Apply the same filtering logic as existing getAvailableSlotsForCourse
+  if (course.course_type === "TEL" && componentType) {
+    if (componentType === "theory") {
+      params.push(theory);
+      params.push(0);
+      configQuery += ` AND ssc.course_theory = $3 AND ssc.course_practical = $4`;
+    } else if (componentType === "lab") {
+      params.push(0);
+      params.push(practical);
+      configQuery += ` AND ssc.course_theory = $3 AND ssc.course_practical = $4`;
+    }
+  } else {
+    if (theory > 0 && practical === 0) {
+      params.push(theory);
+      configQuery += ` AND ssc.course_theory = $3 AND ssc.course_practical = 0`;
+    } else if (theory === 0 && practical > 0) {
+      if (practical === 4) {
+        params.push(practical);
+        configQuery += ` AND ssc.course_theory = 0 AND ssc.course_practical = $3`;
+      } else {
+        params.push(practical);
+        configQuery += ` AND ssc.course_theory = 0 AND ssc.course_practical = $3`;
+      }
+    } else if (theory > 0 && practical > 0 && course.course_type !== "TEL") {
+      if (practical === 4) {
+        params.push(theory);
+        configQuery += ` AND ((ssc.course_theory = $3 AND ssc.course_practical = 0) OR 
+                             (ssc.course_theory = 0 AND ssc.course_practical = 4))`;
+      } else {
+        params.push(theory);
+        configQuery += ` AND ((ssc.course_theory = $3 AND ssc.course_practical = 0) OR 
+                             (ssc.course_theory = 0 AND ssc.course_practical > 0 AND ssc.course_practical < 4))`;
+      }
+    }
+  }
+
+  configQuery += ` ORDER BY ssc.slot_name`;
+
+  const configResult = await db.query(configQuery, params);
+
+  const availableSlots = [];
+  const slotLinks = {};
+
+  configResult.rows.forEach((config) => {
+    availableSlots.push(config.slot_name);
+    if (config.linked_slots && config.linked_slots.length > 0) {
+      slotLinks[config.slot_name] = config.linked_slots;
+    }
+  });
+
+  return { availableSlots, slotLinks };
+}
+
+// Helper function to get faculty allocations
+async function getFacultyAllocations(facultyId, year, semesterType) {
+  const result = await db.query(
+    `SELECT * FROM faculty_allocation 
+     WHERE employee_id = $1 AND slot_year = $2 AND semester_type = $3`,
+    [facultyId, year, semesterType]
+  );
+  return result.rows;
+}
+
+// Main filtering logic for faculty availability and cross-day requirements
+async function filterSlotsForFaculty(
+  baseSlots,
+  slotLinks,
+  facultyAllocations,
+  allSlots,
+  year,
+  semesterType,
+  course
+) {
+  const available = [];
+  const disabled = [];
+
+  // Create maps for quick lookup
+  const allocatedSlotMap = new Set();
+  const allocatedTimeMap = new Map(); // day -> time -> slotName
+
+  facultyAllocations.forEach((allocation) => {
+    allocatedSlotMap.add(allocation.slot_name);
+
+    const key = `${allocation.slot_day}-${allocation.slot_time}`;
+    if (!allocatedTimeMap.has(allocation.slot_day)) {
+      allocatedTimeMap.set(allocation.slot_day, new Map());
+    }
+    allocatedTimeMap
+      .get(allocation.slot_day)
+      .set(allocation.slot_time, allocation.slot_name);
+  });
+
+  // Get slot conflict rules
+  const conflictRules = await db.query(
+    `SELECT slot_name, conflicting_slot_name FROM slot_conflict 
+     WHERE slot_year = $1 AND semester_type = $2`,
+    [year, semesterType]
+  );
+
+  const conflictMap = new Map();
+  conflictRules.rows.forEach((rule) => {
+    if (!conflictMap.has(rule.slot_name)) {
+      conflictMap.set(rule.slot_name, []);
+    }
+    conflictMap.get(rule.slot_name).push(rule.conflicting_slot_name);
+  });
+
+  // Check each base slot
+  for (const slotName of baseSlots) {
+    const availability = await checkSlotAvailability(
+      slotName,
+      slotLinks,
+      allocatedSlotMap,
+      allocatedTimeMap,
+      conflictMap,
+      allSlots,
+      course
+    );
+
+    if (availability.available) {
+      available.push(slotName);
+    } else {
+      disabled.push({
+        slotName: slotName,
+        reason: availability.reason,
+        details: availability.details,
+      });
+    }
+  }
+
+  return { available, disabled };
+}
+
+// Check if a slot (or slot combination) is fully available across all required days
+async function checkSlotAvailability(
+  slotName,
+  slotLinks,
+  allocatedSlotMap,
+  allocatedTimeMap,
+  conflictMap,
+  allSlots,
+  course
+) {
+  // If slot is directly allocated
+  if (allocatedSlotMap.has(slotName)) {
+    return {
+      available: false,
+      reason: "Already allocated",
+      details: `Slot ${slotName} is already allocated to this faculty`,
+    };
+  }
+
+  // Get all slots involved in this allocation (including linked slots)
+  const involvedSlots = [slotName];
+  if (slotLinks[slotName]) {
+    involvedSlots.push(...slotLinks[slotName]);
+  }
+
+  // For combination slots (like E+F for 4-credit theory), check cross-day availability
+  if (slotName.includes("+") || isPartOfCombination(slotName, course)) {
+    const combinationCheck = await checkCombinationAvailability(
+      slotName,
+      allocatedSlotMap,
+      allocatedTimeMap,
+      conflictMap,
+      allSlots,
+      course
+    );
+
+    if (!combinationCheck.available) {
+      return combinationCheck;
+    }
+  }
+
+  // Check each involved slot for conflicts
+  for (const involvedSlot of involvedSlots) {
+    // Check direct conflicts
+    if (allocatedSlotMap.has(involvedSlot)) {
+      return {
+        available: false,
+        reason: "Linked slot conflict",
+        details: `Linked slot ${involvedSlot} is already allocated`,
+      };
+    }
+
+    // Check slot conflict rules
+    if (conflictMap.has(involvedSlot)) {
+      const conflictingSlots = conflictMap.get(involvedSlot);
+      for (const conflictingSlot of conflictingSlots) {
+        if (allocatedSlotMap.has(conflictingSlot)) {
+          return {
+            available: false,
+            reason: "Slot conflict rule",
+            details: `Slot ${involvedSlot} conflicts with allocated slot ${conflictingSlot}`,
+          };
+        }
+      }
+    }
+
+    // Check time-based conflicts
+    const timeConflict = checkTimeBasedConflicts(
+      involvedSlot,
+      allocatedTimeMap,
+      allSlots
+    );
+    if (!timeConflict.available) {
+      return timeConflict;
+    }
+  }
+
+  return { available: true };
+}
+
+// Check if a slot is part of a combination (like E is part of E+F for 4-credit courses)
+function isPartOfCombination(slotName, course) {
+  // For 4-credit theory courses, slots like E, F are part of E+F combination
+  if (
+    course.theory >= 4 &&
+    !slotName.startsWith("L") &&
+    !slotName.includes("+")
+  ) {
+    const theoryCombinations = ["E", "F"]; // Add other combination patterns as needed
+    return theoryCombinations.includes(slotName);
+  }
+  return false;
+}
+
+// Check combination availability across all days (THE KEY FUNCTION)
+async function checkCombinationAvailability(
+  slotName,
+  allocatedSlotMap,
+  allocatedTimeMap,
+  conflictMap,
+  allSlots,
+  course
+) {
+  // For 4-credit theory, E requires E+F combination
+  if (slotName === "E" && course.theory >= 4) {
+    return await checkEFCombinationAvailability(
+      allocatedSlotMap,
+      allocatedTimeMap,
+      conflictMap,
+      allSlots
+    );
+  }
+
+  // Add other combination checks as needed (A+TA, B+TB, etc.)
+
+  return { available: true };
+}
+
+// Check E+F combination availability across ALL days
+async function checkEFCombinationAvailability(
+  allocatedSlotMap,
+  allocatedTimeMap,
+  conflictMap,
+  allSlots
+) {
+  const days = ["MON", "TUE", "WED", "THU", "FRI"];
+
+  for (const day of days) {
+    // Find E and F slots for this day
+    const eSlots = allSlots.filter(
+      (slot) => slot.slot_day === day && slot.slot_name === "E"
+    );
+    const fSlots = allSlots.filter(
+      (slot) => slot.slot_day === day && slot.slot_name === "F"
+    );
+
+    if (eSlots.length === 0 || fSlots.length === 0) {
+      continue; // Skip days that don't have E or F slots
+    }
+
+    // Check if F is available on this day
+    for (const fSlot of fSlots) {
+      // Check direct allocation
+      if (allocatedSlotMap.has("F")) {
+        return {
+          available: false,
+          reason: "F slot blocked",
+          details: `F slot blocked on ${day} due to existing allocation`,
+        };
+      }
+
+      // Check time-based conflicts
+      if (allocatedTimeMap.has(day)) {
+        const dayAllocations = allocatedTimeMap.get(day);
+        if (dayAllocations.has(fSlot.slot_time)) {
+          return {
+            available: false,
+            reason: "F slot time conflict",
+            details: `F slot time blocked on ${day} at ${fSlot.slot_time} due to existing allocation`,
+          };
+        }
+      }
+
+      // Check slot conflict rules for F
+      if (conflictMap.has("F")) {
+        const conflictingSlots = conflictMap.get("F");
+        for (const conflictingSlot of conflictingSlots) {
+          if (allocatedSlotMap.has(conflictingSlot)) {
+            return {
+              available: false,
+              reason: "F slot conflict rule",
+              details: `F slot blocked on ${day} due to conflict with allocated slot ${conflictingSlot}`,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return { available: true };
+}
+
+// Check time-based conflicts
+function checkTimeBasedConflicts(slotName, allocatedTimeMap, allSlots) {
+  const slotDefinitions = allSlots.filter(
+    (slot) => slot.slot_name === slotName
+  );
+
+  for (const slotDef of slotDefinitions) {
+    if (allocatedTimeMap.has(slotDef.slot_day)) {
+      const dayAllocations = allocatedTimeMap.get(slotDef.slot_day);
+      if (dayAllocations.has(slotDef.slot_time)) {
+        return {
+          available: false,
+          reason: "Time conflict",
+          details: `Time slot blocked on ${slotDef.slot_day} at ${slotDef.slot_time}`,
+        };
+      }
+    }
+  }
+
+  return { available: true };
+}

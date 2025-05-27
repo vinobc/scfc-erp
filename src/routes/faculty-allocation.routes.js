@@ -41,6 +41,13 @@ router.get(
   facultyAllocationController.getAvailableSlotsForCourse
 );
 
+// Available slots for specific faculty endpoint
+router.get(
+  "/available-slots-for-faculty",
+  canManageFacultyAllocations,
+  facultyAllocationController.getAvailableSlotsForFaculty
+);
+
 // Real-time conflict checking endpoint
 router.get(
   "/check-conflicts",
