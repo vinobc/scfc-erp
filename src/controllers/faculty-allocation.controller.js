@@ -1120,3 +1120,294 @@ exports.updateFacultyAllocation = async (req, res) => {
       .json({ message: "Server error while updating faculty allocation" });
   }
 };
+
+// Check for conflicts without saving allocation
+exports.checkConflicts = async (req, res) => {
+  try {
+    const { year, semesterType, courseCode, facultyId, slotName, venue } =
+      req.query;
+
+    console.log("Conflict check request:", req.query);
+
+    // Validate minimum required fields for meaningful conflict checking
+    if (!year || !semesterType) {
+      return res.status(400).json({
+        message: "Year and semester type are required for conflict checking",
+        conflicts: [],
+      });
+    }
+
+    const conflicts = [];
+    let slotDetails = null;
+
+    // If we have enough data, get slot details
+    if (slotName) {
+      const slotResult = await db.query(
+        `SELECT slot_day, slot_time FROM slot 
+         WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+        [year, semesterType, slotName]
+      );
+
+      if (slotResult.rows.length > 0) {
+        slotDetails = slotResult.rows[0];
+      }
+    }
+
+    // 1. VENUE CLASH CHECK
+    if (venue && slotDetails && facultyId) {
+      const venueClashCheck = await db.query(
+        `SELECT fa.*, c.course_name, f.name as faculty_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+         AND fa.venue = $3 AND fa.slot_day = $4 
+         AND fa.slot_time = $5 AND fa.employee_id != $6`,
+        [
+          year,
+          semesterType,
+          venue,
+          slotDetails.slot_day,
+          slotDetails.slot_time,
+          facultyId,
+        ]
+      );
+
+      if (venueClashCheck.rows.length > 0) {
+        const clash = venueClashCheck.rows[0];
+        conflicts.push({
+          type: "venue_clash",
+          severity: "error",
+          message: `Venue ${venue} is already booked by ${clash.faculty_name} for ${clash.course_name}`,
+          details: {
+            conflictingFaculty: clash.faculty_name,
+            conflictingCourse: clash.course_name,
+            time: `${slotDetails.slot_day} ${slotDetails.slot_time}`,
+          },
+        });
+      }
+    }
+
+    // 2. FACULTY CLASH CHECK
+    if (facultyId && slotDetails && courseCode) {
+      const facultyClashCheck = await db.query(
+        `SELECT fa.*, c.course_name, v.venue as venue_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN venue v ON fa.venue = v.venue
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+         AND fa.employee_id = $3 AND fa.slot_day = $4 
+         AND fa.slot_time = $5 AND fa.course_code != $6`,
+        [
+          year,
+          semesterType,
+          facultyId,
+          slotDetails.slot_day,
+          slotDetails.slot_time,
+          courseCode,
+        ]
+      );
+
+      if (facultyClashCheck.rows.length > 0) {
+        const clash = facultyClashCheck.rows[0];
+        conflicts.push({
+          type: "faculty_clash",
+          severity: "error",
+          message: `Faculty is already teaching ${clash.course_name} in ${clash.venue_name}`,
+          details: {
+            conflictingCourse: clash.course_name,
+            conflictingVenue: clash.venue_name,
+            time: `${slotDetails.slot_day} ${slotDetails.slot_time}`,
+          },
+        });
+      }
+    }
+
+    // 3. SLOT CONFLICT CHECK
+    if (facultyId && slotName) {
+      const conflictingSlots = await db.query(
+        `SELECT conflicting_slot_name 
+         FROM slot_conflict 
+         WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+        [year, semesterType, slotName]
+      );
+
+      if (conflictingSlots.rows.length > 0) {
+        const conflictingSlotNames = conflictingSlots.rows.map(
+          (row) => row.conflicting_slot_name
+        );
+
+        const slotConflictCheck = await db.query(
+          `SELECT fa.*, c.course_name, v.venue as venue_name
+           FROM faculty_allocation fa
+           JOIN course c ON fa.course_code = c.course_code
+           JOIN venue v ON fa.venue = v.venue
+           WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+           AND fa.employee_id = $3 AND fa.slot_name = ANY($4)`,
+          [year, semesterType, facultyId, conflictingSlotNames]
+        );
+
+        if (slotConflictCheck.rows.length > 0) {
+          const conflict = slotConflictCheck.rows[0];
+          conflicts.push({
+            type: "slot_conflict",
+            severity: "error",
+            message: `Slot conflicts with already allocated ${conflict.slot_name} for ${conflict.course_name}`,
+            details: {
+              conflictingSlot: conflict.slot_name,
+              conflictingCourse: conflict.course_name,
+              conflictingVenue: conflict.venue_name,
+            },
+          });
+        }
+      }
+    }
+
+    // 4. SUMMER LAB LINKING CONFLICTS
+    if (
+      semesterType === "SUMMER" &&
+      slotName &&
+      slotName.startsWith("L") &&
+      slotName.includes("+") &&
+      courseCode &&
+      facultyId &&
+      venue
+    ) {
+      // Get course details to check if this is a 4-hour lab course
+      const courseResult = await db.query(
+        `SELECT practical FROM course WHERE course_code = $1`,
+        [courseCode]
+      );
+
+      const coursePractical = courseResult.rows[0]?.practical || 0;
+
+      // Check for linked slot conflicts
+      const linkedSlotsResult = await db.query(
+        `SELECT linked_slots FROM semester_slot_config 
+         WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3 
+         AND course_theory = 0 AND course_practical > 0`,
+        [year, semesterType, slotName]
+      );
+
+      if (
+        linkedSlotsResult.rows.length > 0 &&
+        linkedSlotsResult.rows[0].linked_slots
+      ) {
+        const linkedSlotNames = linkedSlotsResult.rows[0].linked_slots;
+
+        for (const linkedSlotName of linkedSlotNames) {
+          // For compound slots, check all individual slots
+          const slotsToCheck = linkedSlotName.includes(",")
+            ? linkedSlotName.split(", ").map((s) => s.trim())
+            : [linkedSlotName];
+
+          for (const individualSlot of slotsToCheck) {
+            const linkedSlotDetailsResult = await db.query(
+              `SELECT slot_day, slot_time FROM slot 
+               WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+              [year, semesterType, individualSlot]
+            );
+
+            if (linkedSlotDetailsResult.rows.length > 0) {
+              const linkedSlotDetails = linkedSlotDetailsResult.rows[0];
+
+              // Check venue clash for linked slot
+              const linkedVenueClash = await db.query(
+                `SELECT fa.*, c.course_name, f.name as faculty_name
+                 FROM faculty_allocation fa
+                 JOIN course c ON fa.course_code = c.course_code
+                 JOIN faculty f ON fa.employee_id = f.employee_id
+                 WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+                 AND fa.venue = $3 AND fa.slot_day = $4 
+                 AND fa.slot_time = $5 AND fa.employee_id != $6`,
+                [
+                  year,
+                  semesterType,
+                  venue,
+                  linkedSlotDetails.slot_day,
+                  linkedSlotDetails.slot_time,
+                  facultyId,
+                ]
+              );
+
+              if (linkedVenueClash.rows.length > 0) {
+                const clash = linkedVenueClash.rows[0];
+                conflicts.push({
+                  type: "linked_slot_venue_clash",
+                  severity: "error",
+                  message: `Linked slot ${individualSlot} venue conflict: ${venue} already booked by ${clash.faculty_name}`,
+                  details: {
+                    linkedSlot: individualSlot,
+                    conflictingFaculty: clash.faculty_name,
+                    conflictingCourse: clash.course_name,
+                    time: `${linkedSlotDetails.slot_day} ${linkedSlotDetails.slot_time}`,
+                  },
+                });
+              }
+
+              // Check faculty clash for linked slot
+              const linkedFacultyClash = await db.query(
+                `SELECT fa.*, c.course_name, v.venue as venue_name
+                 FROM faculty_allocation fa
+                 JOIN course c ON fa.course_code = c.course_code
+                 JOIN venue v ON fa.venue = v.venue
+                 WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+                 AND fa.employee_id = $3 AND fa.slot_day = $4 
+                 AND fa.slot_time = $5 AND fa.course_code != $6`,
+                [
+                  year,
+                  semesterType,
+                  facultyId,
+                  linkedSlotDetails.slot_day,
+                  linkedSlotDetails.slot_time,
+                  courseCode,
+                ]
+              );
+
+              if (linkedFacultyClash.rows.length > 0) {
+                const clash = linkedFacultyClash.rows[0];
+                conflicts.push({
+                  type: "linked_slot_faculty_clash",
+                  severity: "error",
+                  message: `Faculty conflict in linked slot ${individualSlot}: already teaching ${clash.course_name}`,
+                  details: {
+                    linkedSlot: individualSlot,
+                    conflictingCourse: clash.course_name,
+                    conflictingVenue: clash.venue_name,
+                    time: `${linkedSlotDetails.slot_day} ${linkedSlotDetails.slot_time}`,
+                  },
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Return results
+    const hasConflicts = conflicts.length > 0;
+    res.status(200).json({
+      hasConflicts,
+      conflicts,
+      message: hasConflicts
+        ? `Found ${conflicts.length} conflict(s)`
+        : "No conflicts detected",
+      checkedParameters: {
+        year,
+        semesterType,
+        courseCode: courseCode || null,
+        facultyId: facultyId || null,
+        slotName: slotName || null,
+        venue: venue || null,
+      },
+    });
+  } catch (error) {
+    console.error("Check conflicts error:", error);
+    res.status(500).json({
+      message: "Server error while checking conflicts",
+      error: error.message,
+      hasConflicts: false,
+      conflicts: [],
+    });
+  }
+};

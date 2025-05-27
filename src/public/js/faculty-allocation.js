@@ -173,23 +173,44 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (allocationCourseCodeInput) {
-    allocationCourseCodeInput.addEventListener("input", handleCourseCodeInput);
+    allocationCourseCodeInput.addEventListener("input", (event) => {
+      handleCourseCodeInput(event);
+      checkConflictsRealTime();
+    });
   }
 
   if (allocationEmployeeIdInput) {
-    allocationEmployeeIdInput.addEventListener("input", handleEmployeeIdInput);
+    allocationEmployeeIdInput.addEventListener("input", (event) => {
+      handleEmployeeIdInput(event);
+      checkConflictsRealTime();
+    });
   }
 
   if (allocationSlotNameInput) {
-    allocationSlotNameInput.addEventListener("change", handleSlotNameChange);
-  }
-
-  if (allocationVenueTypeInput) {
-    allocationVenueTypeInput.addEventListener("change", handleVenueTypeChange);
+    allocationSlotNameInput.addEventListener("change", (event) => {
+      handleSlotNameChange(event);
+      checkConflictsRealTime();
+    });
   }
 
   if (allocationVenueInput) {
-    allocationVenueInput.addEventListener("change", handleVenueChange);
+    allocationVenueInput.addEventListener("change", (event) => {
+      handleVenueChange(event);
+      checkConflictsRealTime();
+    });
+  }
+  if (allocationYearInput) {
+    allocationYearInput.addEventListener("change", checkConflictsRealTime);
+  }
+
+  if (allocationSemesterTypeInput) {
+    allocationSemesterTypeInput.addEventListener(
+      "change",
+      checkConflictsRealTime
+    );
+  }
+  if (allocationVenueTypeInput) {
+    allocationVenueTypeInput.addEventListener("change", handleVenueTypeChange);
   }
 
   if (allocationComponentTypeInput) {
@@ -3001,4 +3022,279 @@ function setupFacultyNameAutocomplete() {
       dropdown.style.display = "none";
     }
   });
+}
+
+// Real-time conflict checking with visual feedback
+let conflictCheckTimeout = null;
+
+async function checkConflictsRealTime() {
+  // Clear any existing timeout
+  if (conflictCheckTimeout) {
+    clearTimeout(conflictCheckTimeout);
+  }
+
+  // Debounce the conflict check (wait 500ms after user stops interacting)
+  conflictCheckTimeout = setTimeout(async () => {
+    await performConflictCheck();
+  }, 500);
+}
+
+async function performConflictCheck() {
+  try {
+    // Get current form values
+    const year = allocationYearInput?.value;
+    const semesterType = allocationSemesterTypeInput?.value;
+    const courseCode = allocationCourseCodeInput?.value;
+    const facultyId = allocationEmployeeIdInput?.value;
+    const slotName = allocationSlotNameInput?.value;
+    const venue = allocationVenueInput?.value;
+
+    // Need at least year and semester to do meaningful conflict checking
+    if (!year || !semesterType) {
+      clearConflictIndicators();
+      return;
+    }
+
+    // Build query parameters
+    const params = new URLSearchParams({
+      year,
+      semesterType,
+    });
+
+    if (courseCode) params.append("courseCode", courseCode);
+    if (facultyId) params.append("facultyId", facultyId);
+    if (slotName) params.append("slotName", slotName);
+    if (venue) params.append("venue", venue);
+
+    console.log("Checking conflicts with params:", params.toString());
+
+    // Make API call
+    const response = await fetch(
+      `${window.API_URL}/faculty-allocations/check-conflicts?${params}`,
+      {
+        headers: {
+          Authorization: localStorage.getItem("token"),
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Conflict check failed:", response.status);
+      return;
+    }
+
+    const result = await response.json();
+    console.log("Conflict check result:", result);
+
+    // Update UI based on conflicts
+    updateConflictIndicators(result);
+  } catch (error) {
+    console.error("Error checking conflicts:", error);
+    clearConflictIndicators();
+  }
+}
+
+function updateConflictIndicators(conflictResult) {
+  // Clear previous indicators
+  clearConflictIndicators();
+
+  const { hasConflicts, conflicts } = conflictResult;
+
+  if (hasConflicts && conflicts.length > 0) {
+    // Show conflicts with visual indicators
+    conflicts.forEach((conflict) => {
+      showConflictIndicator(conflict);
+    });
+
+    // Disable save button
+    if (saveFacultyAllocationBtn) {
+      saveFacultyAllocationBtn.disabled = true;
+      saveFacultyAllocationBtn.textContent = "Conflicts Detected";
+      saveFacultyAllocationBtn.className = "btn btn-danger";
+    }
+
+    // Show conflict summary
+    showConflictSummary(conflicts);
+  } else {
+    // No conflicts - enable save button and show success indicators
+    if (saveFacultyAllocationBtn) {
+      saveFacultyAllocationBtn.disabled = false;
+      saveFacultyAllocationBtn.textContent = "Save Allocation";
+      saveFacultyAllocationBtn.className = "btn btn-success";
+    }
+
+    // Show success indicators on filled fields
+    showSuccessIndicators();
+  }
+}
+
+function showConflictIndicator(conflict) {
+  console.log("Showing conflict indicator for:", conflict);
+
+  // Add red borders and warning icons based on conflict type
+  if (
+    conflict.type === "venue_clash" ||
+    conflict.type === "linked_slot_venue_clash"
+  ) {
+    addConflictStyling(allocationVenueInput, conflict.message);
+    addConflictStyling(
+      allocationSlotNameInput,
+      "Slot time conflicts with venue booking"
+    );
+  }
+
+  if (
+    conflict.type === "faculty_clash" ||
+    conflict.type === "linked_slot_faculty_clash"
+  ) {
+    addConflictStyling(
+      allocationEmployeeIdInput?.parentNode?.querySelector(
+        "#faculty-name-search"
+      ) || allocationEmployeeIdInput,
+      conflict.message
+    );
+    addConflictStyling(
+      allocationSlotNameInput,
+      "Faculty already teaching at this time"
+    );
+  }
+
+  if (conflict.type === "slot_conflict") {
+    addConflictStyling(allocationSlotNameInput, conflict.message);
+  }
+}
+
+function addConflictStyling(element, message) {
+  if (!element) return;
+
+  // Add red border
+  element.style.borderColor = "#dc3545";
+  element.style.borderWidth = "2px";
+  element.style.boxShadow = "0 0 0 0.2rem rgba(220, 53, 69, 0.25)";
+
+  // Add or update conflict message
+  let conflictMsg = element.parentNode.querySelector(".conflict-message");
+  if (!conflictMsg) {
+    conflictMsg = document.createElement("div");
+    conflictMsg.className = "conflict-message text-danger small mt-1";
+    conflictMsg.innerHTML =
+      '<i class="fas fa-exclamation-triangle"></i> ' + message;
+    element.parentNode.appendChild(conflictMsg);
+  } else {
+    conflictMsg.innerHTML =
+      '<i class="fas fa-exclamation-triangle"></i> ' + message;
+  }
+}
+
+function showSuccessIndicators() {
+  // Add green checkmarks to successfully filled fields
+  const fieldsToCheck = [
+    {
+      element: allocationCourseCodeInput,
+      condition: () => courseData && courseData.course_code,
+    },
+    {
+      element:
+        allocationEmployeeIdInput?.parentNode?.querySelector(
+          "#faculty-name-search"
+        ) || allocationEmployeeIdInput,
+      condition: () => facultyData && facultyData.employee_id,
+    },
+    {
+      element: allocationSlotNameInput,
+      condition: () => allocationSlotNameInput?.value,
+    },
+    {
+      element: allocationVenueInput,
+      condition: () => allocationVenueInput?.value,
+    },
+  ];
+
+  fieldsToCheck.forEach(({ element, condition }) => {
+    if (element && condition()) {
+      addSuccessStyling(element);
+    }
+  });
+}
+
+function addSuccessStyling(element) {
+  if (!element) return;
+
+  // Add green border
+  element.style.borderColor = "#198754";
+  element.style.borderWidth = "2px";
+  element.style.boxShadow = "0 0 0 0.2rem rgba(25, 135, 84, 0.25)";
+
+  // Add or update success indicator
+  let successMsg = element.parentNode.querySelector(".success-message");
+  if (!successMsg) {
+    successMsg = document.createElement("div");
+    successMsg.className = "success-message text-success small mt-1";
+    successMsg.innerHTML = '<i class="fas fa-check-circle"></i> Available';
+    element.parentNode.appendChild(successMsg);
+  }
+}
+
+function showConflictSummary(conflicts) {
+  // Create or update conflict summary alert
+  let summaryAlert = document.querySelector(".conflict-summary-alert");
+  if (!summaryAlert) {
+    summaryAlert = document.createElement("div");
+    summaryAlert.className = "conflict-summary-alert alert alert-danger mt-3";
+    // Insert after the form or in a visible location
+    const form = document.getElementById("faculty-allocation-form");
+    if (form) {
+      form.parentNode.insertBefore(summaryAlert, form.nextSibling);
+    }
+  }
+
+  let summaryHtml =
+    '<h6><i class="fas fa-exclamation-triangle"></i> Allocation Conflicts Detected:</h6><ul>';
+  conflicts.forEach((conflict, index) => {
+    summaryHtml += `<li><strong>${conflict.type
+      .replace(/_/g, " ")
+      .toUpperCase()}:</strong> ${conflict.message}</li>`;
+  });
+  summaryHtml +=
+    "</ul><small>Please resolve these conflicts before saving the allocation.</small>";
+
+  summaryAlert.innerHTML = summaryHtml;
+}
+
+function clearConflictIndicators() {
+  // Remove all conflict and success styling
+  const allInputs = [
+    allocationCourseCodeInput,
+    allocationEmployeeIdInput?.parentNode?.querySelector(
+      "#faculty-name-search"
+    ) || allocationEmployeeIdInput,
+    allocationSlotNameInput,
+    allocationVenueInput,
+  ];
+
+  allInputs.forEach((element) => {
+    if (element) {
+      // Reset styling
+      element.style.borderColor = "";
+      element.style.borderWidth = "";
+      element.style.boxShadow = "";
+
+      // Remove conflict/success messages
+      const conflictMsg = element.parentNode.querySelector(".conflict-message");
+      const successMsg = element.parentNode.querySelector(".success-message");
+      if (conflictMsg) conflictMsg.remove();
+      if (successMsg) successMsg.remove();
+    }
+  });
+
+  // Remove conflict summary
+  const summaryAlert = document.querySelector(".conflict-summary-alert");
+  if (summaryAlert) summaryAlert.remove();
+
+  // Reset save button
+  if (saveFacultyAllocationBtn) {
+    saveFacultyAllocationBtn.disabled = false;
+    saveFacultyAllocationBtn.textContent = "Save Allocation";
+    saveFacultyAllocationBtn.className = "btn btn-primary";
+  }
 }
