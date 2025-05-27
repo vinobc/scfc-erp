@@ -2334,14 +2334,69 @@ function generateFacultyTimetable(faculty, allocations, year, semester) {
       tableHtml += "</tbody></table>";
 
       // Create summary table with unique allocations only
+      // Filter out compound slot entries when individual entries exist
       const uniqueAllocations = [];
       const seen = new Set();
 
+      // Group allocations by course-faculty-venue (without slot_name)
+      const allocationGroups = {};
       allocations.forEach((allocation) => {
-        const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueAllocations.push(allocation);
+        const groupKey = `${allocation.course_code}-${allocation.employee_id}-${allocation.venue}`;
+        if (!allocationGroups[groupKey]) {
+          allocationGroups[groupKey] = [];
+        }
+        allocationGroups[groupKey].push(allocation);
+      });
+
+      // Process each group to remove compound duplicates
+      Object.values(allocationGroups).forEach((group) => {
+        // Separate compound slots (containing commas) from individual slots
+        const compoundSlots = group.filter((a) => a.slot_name.includes(","));
+        const individualSlots = group.filter((a) => !a.slot_name.includes(","));
+
+        // If we have both compound and individual slots for the same course-faculty-venue
+        if (compoundSlots.length > 0 && individualSlots.length > 0) {
+          // Check if the compound slot components exist as individual slots
+          const shouldRemoveCompound = compoundSlots.some((compound) => {
+            const compoundComponents = compound.slot_name
+              .split(", ")
+              .map((s) => s.trim());
+            const hasAllComponents = compoundComponents.every((component) =>
+              individualSlots.some(
+                (individual) => individual.slot_name === component
+              )
+            );
+            return hasAllComponents;
+          });
+
+          if (shouldRemoveCompound) {
+            // Only add individual slots, skip compound slots
+            individualSlots.forEach((allocation) => {
+              const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueAllocations.push(allocation);
+              }
+            });
+          } else {
+            // Add all slots if compound components don't match individual slots
+            group.forEach((allocation) => {
+              const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueAllocations.push(allocation);
+              }
+            });
+          }
+        } else {
+          // No conflict, add all slots from this group
+          group.forEach((allocation) => {
+            const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueAllocations.push(allocation);
+            }
+          });
         }
       });
 
@@ -2675,14 +2730,69 @@ function generateClassTimetable(venue, allocations, year, semester) {
       tableHtml += "</tbody></table>";
 
       // Create summary table with unique allocations only
+      // Filter out compound slot entries when individual entries exist
       const uniqueAllocations = [];
       const seen = new Set();
 
+      // Group allocations by course-faculty-venue (without slot_name)
+      const allocationGroups = {};
       allocations.forEach((allocation) => {
-        const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueAllocations.push(allocation);
+        const groupKey = `${allocation.course_code}-${allocation.employee_id}-${allocation.venue}`;
+        if (!allocationGroups[groupKey]) {
+          allocationGroups[groupKey] = [];
+        }
+        allocationGroups[groupKey].push(allocation);
+      });
+
+      // Process each group to remove compound duplicates
+      Object.values(allocationGroups).forEach((group) => {
+        // Separate compound slots (containing commas) from individual slots
+        const compoundSlots = group.filter((a) => a.slot_name.includes(","));
+        const individualSlots = group.filter((a) => !a.slot_name.includes(","));
+
+        // If we have both compound and individual slots for the same course-faculty-venue
+        if (compoundSlots.length > 0 && individualSlots.length > 0) {
+          // Check if the compound slot components exist as individual slots
+          const shouldRemoveCompound = compoundSlots.some((compound) => {
+            const compoundComponents = compound.slot_name
+              .split(", ")
+              .map((s) => s.trim());
+            const hasAllComponents = compoundComponents.every((component) =>
+              individualSlots.some(
+                (individual) => individual.slot_name === component
+              )
+            );
+            return hasAllComponents;
+          });
+
+          if (shouldRemoveCompound) {
+            // Only add individual slots, skip compound slots
+            individualSlots.forEach((allocation) => {
+              const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueAllocations.push(allocation);
+              }
+            });
+          } else {
+            // Add all slots if compound components don't match individual slots
+            group.forEach((allocation) => {
+              const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueAllocations.push(allocation);
+              }
+            });
+          }
+        } else {
+          // No conflict, add all slots from this group
+          group.forEach((allocation) => {
+            const key = `${allocation.course_code}-${allocation.slot_name}-${allocation.venue}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueAllocations.push(allocation);
+            }
+          });
         }
       });
 
