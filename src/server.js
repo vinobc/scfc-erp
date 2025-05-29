@@ -79,6 +79,11 @@ console.log(
 app.use("/api/timetable-coordinators", timetableCoordinatorRoutes);
 console.log("Registering user routes at /api/users");
 app.use("/api/users", userRoutes);
+// Course Registration Routes
+app.use(
+  "/api/course-registration",
+  require("./routes/course-registration.routes")
+);
 
 // Root route
 app.get("/", (req, res) => {
