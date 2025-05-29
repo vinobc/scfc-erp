@@ -369,3 +369,210 @@ window.formatDate = function (dateString) {
     day: "numeric",
   }).format(date);
 };
+
+// Global logout functionality for all user types
+function handleGlobalLogout() {
+  console.log("Global logout initiated");
+
+  // Clear storage
+  localStorage.removeItem("token");
+
+  // Clear user data
+  if (typeof currentUser !== "undefined") currentUser = null;
+  if (typeof currentStudent !== "undefined") currentStudent = null;
+
+  // Reset to login state
+  document.body.classList.remove("authenticated");
+  document.body.classList.add("login-state");
+
+  // Hide all interfaces
+  const adminInterface = document.querySelector("body > .container-fluid");
+  const studentInterface = document.getElementById("student-interface");
+
+  if (adminInterface) {
+    adminInterface.style.display = "none";
+  }
+
+  if (studentInterface) {
+    studentInterface.classList.add("d-none");
+    studentInterface.classList.remove("show");
+  }
+
+  // Show login modal after brief delay
+  setTimeout(() => {
+    const loginModal = new bootstrap.Modal(
+      document.getElementById("loginModal")
+    );
+    loginModal.show();
+  }, 100);
+
+  // Show logout message
+  if (typeof showAlert === "function") {
+    showAlert("Logged out successfully", "info");
+  }
+}
+// Initialize global logout functionality
+document.addEventListener("DOMContentLoaded", () => {
+  // Handle logout button clicks for all user types
+  const logoutLinks = document.querySelectorAll(
+    '#logout-link, [data-logout="true"]'
+  );
+  logoutLinks.forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleGlobalLogout();
+    });
+  });
+});
+
+// Global logout functionality for all user types
+function handleGlobalLogout() {
+  console.log("Global logout initiated");
+
+  // Add blank background class for all users
+  document.body.classList.add("login-state");
+
+  // Clear storage
+  localStorage.removeItem("token");
+
+  // Clear user data
+  if (typeof currentUser !== "undefined") currentUser = null;
+  if (typeof currentStudent !== "undefined") currentStudent = null;
+
+  // Hide all interfaces
+  const adminInterface = document.querySelector("body > .container-fluid");
+  const studentInterface = document.getElementById("student-interface");
+
+  if (adminInterface) {
+    adminInterface.style.display = "none";
+  }
+
+  if (studentInterface) {
+    studentInterface.classList.add("d-none");
+  }
+
+  // Show login modal after brief delay
+  setTimeout(() => {
+    const loginModal = new bootstrap.Modal(
+      document.getElementById("loginModal")
+    );
+    loginModal.show();
+
+    // Remove blank background class when modal is fully shown
+    loginModal._element.addEventListener(
+      "shown.bs.modal",
+      () => {
+        document.body.classList.remove("login-state");
+      },
+      { once: true }
+    );
+  }, 100);
+
+  // Show logout message
+  if (typeof showAlert === "function") {
+    showAlert("Logged out successfully", "info");
+  }
+}
+
+// Initialize global logout functionality
+document.addEventListener("DOMContentLoaded", () => {
+  // Handle logout button clicks for all user types
+  const logoutLinks = document.querySelectorAll(
+    '#logout-link, [data-logout="true"]'
+  );
+  logoutLinks.forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      handleGlobalLogout();
+    });
+  });
+});
+
+// ===== PAGE LOAD AUTHENTICATION CHECK (Fixed Version) =====
+
+// Start with login state
+document.body.className = "login-state";
+
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("Page loaded - checking authentication...");
+
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    // No token - show login modal
+    console.log("No token - showing login modal");
+
+    setTimeout(() => {
+      const loginModal = new bootstrap.Modal(
+        document.getElementById("loginModal")
+      );
+      loginModal.show();
+    }, 300);
+  } else {
+    // Token exists - verify it
+    console.log("Token found - verifying...");
+
+    fetch(`${window.API_URL}/auth/me`, {
+      headers: { "x-access-token": token },
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("Invalid token");
+        return response.json();
+      })
+      .then((user) => {
+        console.log("Valid session found:", user.role);
+
+        if (user.role === "student") {
+          // CRITICAL: Set student classes automatically
+          document.body.className = "authenticated student-user";
+          console.log("Set student classes automatically");
+
+          // Set current student data
+          currentStudent = user;
+
+          // Update header if possible
+          if (typeof updateStudentHeader === "function") {
+            updateStudentHeader(user);
+          }
+        } else {
+          // Admin/staff - set admin classes
+          document.body.className = "authenticated admin-user";
+
+          // Update UI elements
+          const userNameElement = document.getElementById("user-name");
+          const userRoleElement = document.getElementById("user-role");
+          if (userNameElement) userNameElement.textContent = user.full_name;
+          if (userRoleElement) userRoleElement.textContent = user.role;
+
+          // Set current user
+          currentUser = user;
+
+          // Load dashboard data if available
+          if (typeof loadDashboardData === "function") {
+            loadDashboardData();
+          }
+        }
+      })
+      .catch((error) => {
+        console.log("Invalid session - showing login");
+        localStorage.removeItem("token");
+
+        setTimeout(() => {
+          const loginModal = new bootstrap.Modal(
+            document.getElementById("loginModal")
+          );
+          loginModal.show();
+        }, 300);
+      });
+  }
+});
+// ===== BOOTSTRAP DEBUG (Add temporarily) =====
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("Bootstrap available:", typeof bootstrap !== "undefined");
+  console.log("Login modal element:", document.getElementById("loginModal"));
+
+  // If bootstrap is not available, let's try a fallback
+  if (typeof bootstrap === "undefined") {
+    console.error("Bootstrap is not loaded!");
+  }
+});

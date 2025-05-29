@@ -3,6 +3,42 @@ body {
   background-color: #f8f9fa;
 }
 
+/* ===== INTERFACE ISOLATION - CRITICAL FIXES ===== */
+
+/* Hide admin content by default */
+body .container-fluid:first-of-type {
+  display: none !important;
+}
+
+/* Hide student interface by default */
+body #student-interface {
+  display: none !important;
+}
+
+/* Only show admin interface when authenticated as non-student */
+body.authenticated.admin-user .container-fluid:first-of-type {
+  display: block !important;
+}
+
+/* Only show student interface when authenticated as student */
+body.authenticated.student-user #student-interface {
+  display: block !important;
+}
+
+/* Ensure student interface takes full screen when shown */
+body.authenticated.student-user .container-fluid:first-of-type {
+  display: none !important;
+}
+
+/* Student password reset state - hide everything except modal */
+body.student-password-reset .container-fluid {
+  display: none !important;
+}
+
+body.student-password-reset #student-interface {
+  display: none !important;
+}
+
 /* Sidebar */
 .sidebar {
   position: fixed;
@@ -164,4 +200,112 @@ main {
 
 .summary-table td:last-child {
   text-align: left; /* Faculty name column */
+}
+
+/* ===== LOGIN/LOGOUT BACKGROUND STATES - BLACK BACKGROUND ===== */
+
+/* Login state styles - BLACK background for better separation */
+body.login-state {
+  background-color: #000000 !important;
+}
+
+body.login-state .container-fluid {
+  display: none !important;
+}
+
+body.login-state #student-interface {
+  display: none !important;
+}
+
+/* Modal backdrop with black background */
+.modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Student interface specific styles */
+#student-interface {
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+#student-interface .sidebar {
+  min-height: 100vh;
+}
+
+/* Admin interface when authenticated */
+body.authenticated .container-fluid {
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+/* Special case: Student with mandatory password reset - keep BLACK background */
+body.student-password-reset {
+  background-color: #000000 !important;
+}
+
+body.student-password-reset .container-fluid {
+  display: none !important;
+}
+
+body.student-password-reset #student-interface {
+  display: none !important;
+}
+
+/* ===== STUDENT INTERFACE PERMANENT FIX ===== */
+
+/* Student interface container */
+body.authenticated.student-user #student-interface {
+  position: relative !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100vh !important;
+  background-color: #f8f9fa !important;
+  display: block !important;
+  visibility: visible !important;
+  z-index: 1 !important;
+}
+
+/* Container inside student interface */
+body.authenticated.student-user #student-interface .container-fluid {
+  display: block !important;
+  visibility: visible !important;
+  width: 100% !important;
+  height: 100vh !important;
+}
+
+/* Student sidebar */
+body.authenticated.student-user #student-interface .sidebar {
+  display: block !important;
+  visibility: visible !important;
+  background-color: #212529 !important;
+  color: white !important;
+  width: 250px !important;
+  height: 100vh !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 100 !important;
+}
+
+/* Student main content */
+body.authenticated.student-user #student-interface main {
+  display: block !important;
+  visibility: visible !important;
+  background-color: #f8f9fa !important;
+  color: black !important;
+  margin-left: 250px !important;
+  padding: 20px !important;
+  min-height: 100vh !important;
+}
+
+/* Student navigation links */
+body.authenticated.student-user #student-interface .nav-link {
+  color: white !important;
+  display: block !important;
+}
+
+/* Hide admin interface when student is logged in */
+body.authenticated.student-user .container-fluid:first-of-type {
+  display: none !important;
 }

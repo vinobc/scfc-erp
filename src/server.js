@@ -19,6 +19,7 @@ const facultyAllocationRoutes = require("./routes/faculty-allocation.routes");
 const semesterSlotConfigRoutes = require("./routes/semester-slot-config.routes");
 const timetableCoordinatorRoutes = require("./routes/timetable-coordinator.routes");
 const userRoutes = require("./routes/user.routes");
+const studentAuthRoutes = require("./routes/student-auth.routes");
 
 // Initialize express app
 const app = express();
@@ -46,6 +47,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/student-auth", studentAuthRoutes);
 app.use("/api/schools", schoolRoutes);
 console.log("Registering semesters routes at /api/semesters");
 app.use("/api/semesters", semesterRoutes);
