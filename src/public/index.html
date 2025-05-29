@@ -1390,116 +1390,241 @@
 
     <!-- Student Interface (Hidden by default) -->
     <div id="student-interface" class="d-none">
-      <div class="container-fluid">
-        <div class="row">
-          <!-- Student Sidebar (Empty for now) -->
-          <nav
-            id="student-sidebar"
-            class="col-md-3 col-lg-2 d-md-block bg-dark sidebar"
-          >
-            <div class="position-sticky sidebar-sticky">
-              <div class="text-center p-3">
-                <h3 class="text-white">Student Portal</h3>
+      <div class="container-fluid p-0">
+        <div class="row g-0">
+          <!-- Student Sidebar -->
+          <div class="col-md-3 col-lg-2">
+            <nav id="student-sidebar" class="bg-dark sidebar-fixed">
+              <div class="position-sticky sidebar-sticky">
+                <div class="text-center p-3">
+                  <h3 class="text-white">Student Portal</h3>
+                </div>
+                <ul class="nav flex-column">
+                  <!-- Dashboard link -->
+                  <li class="nav-item">
+                    <a
+                      class="nav-link active text-white"
+                      href="#"
+                      id="student-dashboard-link"
+                    >
+                      <i class="fas fa-tachometer-alt me-2"></i>
+                      Dashboard
+                    </a>
+                  </li>
+                  <!-- Course Registration -->
+                  <li class="nav-item">
+                    <a
+                      class="nav-link text-white"
+                      href="#"
+                      id="student-course-registration-link"
+                    >
+                      <i class="fas fa-book-open me-2"></i>
+                      Course Registration
+                    </a>
+                  </li>
+                  <!-- Change Password option -->
+                  <li class="nav-item">
+                    <a
+                      class="nav-link text-white"
+                      href="#"
+                      id="student-change-password-link"
+                    >
+                      <i class="fas fa-key me-2"></i>
+                      Change Password
+                    </a>
+                  </li>
+                  <!-- Placeholder for future features -->
+                  <li class="nav-item">
+                    <a class="nav-link text-muted" href="#">
+                      <i class="fas fa-info-circle me-2"></i>
+                      More features coming soon...
+                    </a>
+                  </li>
+                </ul>
               </div>
-              <ul class="nav flex-column">
-                <!-- Dashboard link -->
-                <li class="nav-item">
-                  <a
-                    class="nav-link active text-white"
-                    href="#"
-                    id="student-dashboard-link"
-                  >
-                    <i class="fas fa-tachometer-alt me-2"></i>
-                    Dashboard
-                  </a>
-                </li>
-                <!-- Change Password option -->
-                <li class="nav-item">
-                  <a
-                    class="nav-link text-white"
-                    href="#"
-                    id="student-change-password-link"
-                  >
-                    <i class="fas fa-key me-2"></i>
-                    Change Password
-                  </a>
-                </li>
-                <!-- Placeholder for future features -->
-                <li class="nav-item">
-                  <a class="nav-link text-muted" href="#">
-                    <i class="fas fa-info-circle me-2"></i>
-                    More features coming soon...
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </nav>
+            </nav>
+          </div>
 
           <!-- Student Main Content -->
-          <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-            <!-- Student Header -->
-            <div
-              class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom"
-            >
-              <h1 id="student-page-title">Student Dashboard</h1>
-              <div class="student-info">
-                <div class="row text-end">
-                  <div class="col-12">
-                    <strong>Enrollment #:</strong>
-                    <span id="student-enrollment-no">-</span>
-                  </div>
-                  <div class="col-12">
-                    <strong>Name:</strong> <span id="student-name">-</span>
-                  </div>
-                  <div class="col-12">
-                    <strong>School:</strong> <span id="student-school">-</span>
-                  </div>
-                  <div class="col-12">
-                    <strong>Program:</strong>
-                    <span id="student-program">-</span>
-                  </div>
-                  <div class="col-12">
-                    <strong>Year Admitted:</strong>
-                    <span id="student-year">-</span>
-                  </div>
-                  <div class="col-12 mt-2">
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-outline-secondary"
-                      id="student-logout-btn"
-                    >
-                      <i class="fas fa-sign-out-alt me-1"></i> Logout
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Student Alert Messages -->
-            <div id="student-alert-container"></div>
-
-            <!-- Student Content -->
-            <div id="student-content-container">
-              <div class="row">
-                <div class="col-lg-12">
-                  <div class="card shadow mb-4">
-                    <div class="card-header py-3">
-                      <h6 class="m-0 font-weight-bold text-primary">
-                        Welcome to Student Portal
-                      </h6>
+          <div class="col-md-9 col-lg-10">
+            <main class="student-main-content">
+              <!-- Student Header -->
+              <div
+                class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom"
+              >
+                <h1 id="student-page-title">Student Dashboard</h1>
+                <div class="student-info">
+                  <div class="row text-end">
+                    <div class="col-12">
+                      <strong>Enrollment #:</strong>
+                      <span id="student-enrollment-no">-</span>
                     </div>
-                    <div class="card-body">
-                      <p>
-                        Welcome to the Student Centric Flexible Curriculum
-                        (SCFC) portal.
-                      </p>
-                      <p>More features will be available here soon.</p>
+                    <div class="col-12">
+                      <strong>Name:</strong> <span id="student-name">-</span>
+                    </div>
+                    <div class="col-12">
+                      <strong>School:</strong>
+                      <span id="student-school">-</span>
+                    </div>
+                    <div class="col-12">
+                      <strong>Program:</strong>
+                      <span id="student-program">-</span>
+                    </div>
+                    <div class="col-12">
+                      <strong>Year Admitted:</strong>
+                      <span id="student-year">-</span>
+                    </div>
+                    <div class="col-12 mt-2">
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        id="student-logout-btn"
+                      >
+                        <i class="fas fa-sign-out-alt me-1"></i> Logout
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </main>
+
+              <!-- Student Alert Messages -->
+              <div id="student-alert-container"></div>
+
+              <!-- Student Content -->
+              <div id="student-content-container">
+                <!-- Student Dashboard (Default) -->
+                <div
+                  id="student-dashboard-content"
+                  class="student-content-page active"
+                >
+                  <div class="row">
+                    <div class="col-lg-12">
+                      <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                          <h6 class="m-0 font-weight-bold text-primary">
+                            Welcome to Student Portal
+                          </h6>
+                        </div>
+                        <div class="card-body">
+                          <p>
+                            Welcome to the Student Centric Flexible Curriculum
+                            (SCFC) portal. Here you can manage your academic
+                            journey with flexible course selection and
+                            registration.
+                          </p>
+                          <p>
+                            Use the sidebar to navigate to different sections:
+                          </p>
+                          <ul>
+                            <li>
+                              <strong>Course Registration</strong> - Register
+                              for courses for upcoming semesters
+                            </li>
+                            <li>
+                              <strong>Change Password</strong> - Update your
+                              account password
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Course Registration Content -->
+                <div
+                  id="student-course-registration-content"
+                  class="student-content-page"
+                  style="display: none"
+                >
+                  <div class="row">
+                    <div class="col-lg-12">
+                      <!-- Move content away from sidebar -->
+                      <div style="margin-left: 50px; margin-right: 20px">
+                        <div class="card shadow mb-4">
+                          <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">
+                              Course Registration
+                            </h6>
+                          </div>
+                          <div class="card-body">
+                            <!-- Step 1: Select Semester -->
+                            <div class="mb-4">
+                              <h5>Step 1: Select Academic Year & Semester</h5>
+                              <div class="row">
+                                <div class="col-md-8">
+                                  <select
+                                    class="form-select"
+                                    id="semester-select"
+                                    style="position: relative; z-index: 1"
+                                  >
+                                    <option value="">
+                                      Loading semesters...
+                                    </option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <!-- Step 2: Course Search -->
+                            <div
+                              id="course-search-section"
+                              style="display: none"
+                              class="mb-4"
+                            >
+                              <h5>Step 2: Search and Select Course</h5>
+                              <div class="row">
+                                <div class="col-md-8">
+                                  <div style="position: relative; z-index: 10">
+                                    <input
+                                      type="text"
+                                      class="form-control mb-3"
+                                      id="course-search-input"
+                                      placeholder="Type course code or title..."
+                                      autocomplete="off"
+                                      style="position: relative; z-index: 11"
+                                    />
+                                    <!-- Course Results -->
+                                    <div
+                                      id="course-results"
+                                      class="border rounded p-3"
+                                      style="
+                                        display: none;
+                                        max-height: 300px;
+                                        overflow-y: auto;
+                                        position: relative;
+                                        z-index: 12;
+                                        background: white;
+                                      "
+                                    >
+                                      <!-- Course list will be populated here -->
+                                    </div>
+                                  </div>
+                                  <div class="form-text">
+                                    Start typing course code (e.g., CHE1004) or
+                                    course title to search
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <!-- Step 3: Course Details Display -->
+                            <div
+                              id="course-details-section"
+                              style="display: none"
+                              class="mb-4"
+                            >
+                              <!-- Course details table will be populated here -->
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
         </div>
       </div>
     </div>
@@ -3772,5 +3897,6 @@
     <script src="js/timetable-coordinator.js"></script>
     <script src="js/users.js"></script>
     <script src="js/password-change.js"></script>
+    <script src="js/course-registration.js"></script>
   </body>
 </html>

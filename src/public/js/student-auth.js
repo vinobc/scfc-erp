@@ -22,9 +22,122 @@ document.addEventListener("DOMContentLoaded", () => {
     studentCancelBtn.addEventListener("click", handleCancelReset);
   }
 
+  // Initialize student navigation
+  setupStudentNavigation();
+
   // Check for existing student session
   checkExistingStudentSession();
 });
+
+// Setup student navigation event listeners
+function setupStudentNavigation() {
+  // Initialize student dashboard navigation
+  const studentDashboardLink = document.getElementById(
+    "student-dashboard-link"
+  );
+  if (studentDashboardLink) {
+    studentDashboardLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("dashboard");
+    });
+  }
+
+  // Initialize course registration navigation
+  const studentCourseRegistrationLink = document.getElementById(
+    "student-course-registration-link"
+  );
+  if (studentCourseRegistrationLink) {
+    studentCourseRegistrationLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("course-registration");
+    });
+  }
+
+  // Initialize voluntary password change
+  const studentChangePasswordLink = document.getElementById(
+    "student-change-password-link"
+  );
+  if (studentChangePasswordLink) {
+    studentChangePasswordLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showVoluntaryPasswordModal();
+    });
+  }
+
+  const voluntaryChangeBtn = document.getElementById(
+    "voluntary-change-password-btn"
+  );
+  if (voluntaryChangeBtn) {
+    voluntaryChangeBtn.addEventListener("click", handleVoluntaryPasswordChange);
+  }
+}
+
+// Show specific student page
+function showStudentPage(pageType) {
+  console.log("Showing student page:", pageType);
+
+  // Hide all student content pages
+  const contentPages = document.querySelectorAll(".student-content-page");
+  contentPages.forEach((page) => {
+    page.style.display = "none";
+  });
+
+  // Remove active class from all nav links
+  const navLinks = document.querySelectorAll("#student-sidebar .nav-link");
+  navLinks.forEach((link) => {
+    link.classList.remove("active");
+  });
+
+  // Show selected page and activate nav link
+  switch (pageType) {
+    case "dashboard":
+      const dashboardContent = document.getElementById(
+        "student-dashboard-content"
+      );
+      if (dashboardContent) {
+        dashboardContent.style.display = "block";
+      }
+      const dashboardLink = document.getElementById("student-dashboard-link");
+      if (dashboardLink) {
+        dashboardLink.classList.add("active");
+      }
+      const pageTitle = document.getElementById("student-page-title");
+      if (pageTitle) {
+        pageTitle.textContent = "Student Dashboard";
+      }
+      break;
+
+    case "course-registration":
+      const courseContent = document.getElementById(
+        "student-course-registration-content"
+      );
+      if (courseContent) {
+        courseContent.style.display = "block";
+      }
+      const courseLink = document.getElementById(
+        "student-course-registration-link"
+      );
+      if (courseLink) {
+        courseLink.classList.add("active");
+      }
+      const courseTitleElement = document.getElementById("student-page-title");
+      if (courseTitleElement) {
+        courseTitleElement.textContent = "Course Registration";
+      }
+
+      // Initialize course registration if not already done
+      if (typeof initializeCourseRegistration === "function") {
+        initializeCourseRegistration();
+      }
+      break;
+  }
+}
+
+// Initialize student interface navigation
+function initializeStudentNavigation() {
+  // Show dashboard by default
+  showStudentPage("dashboard");
+}
 
 // Check on page load if we need to restore student interface
 function checkExistingStudentSession() {
@@ -91,6 +204,8 @@ function checkExistingStudentSession() {
                 console.log(
                   "Password reset not required - student can access system"
                 );
+                // Initialize student navigation
+                initializeStudentNavigation();
               }
 
               console.log("Student interface restored successfully");
@@ -136,6 +251,9 @@ function handleStudentLoginSuccess(data) {
 
     updateStudentHeader(data.user);
     showStudentAlert(`Welcome, ${data.user.student_name}!`, "success");
+
+    // Initialize student navigation
+    initializeStudentNavigation();
   }
 
   // Close login modal
@@ -145,6 +263,7 @@ function handleStudentLoginSuccess(data) {
     if (modalInstance) modalInstance.hide();
   }
 }
+
 // Update student header with information
 function updateStudentHeader(student) {
   const elements = {
@@ -333,6 +452,9 @@ function handleStudentPasswordReset() {
         // Update student header information
         updateStudentHeader(currentStudent);
 
+        // Initialize student navigation
+        initializeStudentNavigation();
+
         // Reset form
         document.getElementById("student-password-reset-form").reset();
 
@@ -353,6 +475,7 @@ function handleStudentPasswordReset() {
       resetBtn.innerHTML = "Change Password";
     });
 }
+
 // Show alert in password reset modal
 function showResetAlert(message, type) {
   const alertDiv = document.getElementById("student-reset-alert");
@@ -415,49 +538,6 @@ function showStudentAlert(message, type = "info", timeout = 5000) {
     }, timeout);
   }
 }
-
-// Initialize student navigation and voluntary password change
-document.addEventListener("DOMContentLoaded", () => {
-  console.log("student-auth.js: DOM loaded");
-
-  // Initialize student logout button
-  const studentLogoutBtn = document.getElementById("student-logout-btn");
-  if (studentLogoutBtn) {
-    studentLogoutBtn.addEventListener("click", handleStudentLogout);
-  }
-
-  // Initialize password reset modal buttons (mandatory)
-  const studentResetBtn = document.getElementById("student-reset-password-btn");
-  if (studentResetBtn) {
-    studentResetBtn.addEventListener("click", handleStudentPasswordReset);
-  }
-
-  const studentCancelBtn = document.getElementById("student-cancel-reset-btn");
-  if (studentCancelBtn) {
-    studentCancelBtn.addEventListener("click", handleCancelReset);
-  }
-
-  // Initialize voluntary password change
-  const studentChangePasswordLink = document.getElementById(
-    "student-change-password-link"
-  );
-  if (studentChangePasswordLink) {
-    studentChangePasswordLink.addEventListener("click", (e) => {
-      e.preventDefault();
-      showVoluntaryPasswordModal();
-    });
-  }
-
-  const voluntaryChangeBtn = document.getElementById(
-    "voluntary-change-password-btn"
-  );
-  if (voluntaryChangeBtn) {
-    voluntaryChangeBtn.addEventListener("click", handleVoluntaryPasswordChange);
-  }
-
-  // Check for existing student session
-  checkExistingStudentSession();
-});
 
 // Show voluntary password change modal
 function showVoluntaryPasswordModal() {
