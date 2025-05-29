@@ -44,6 +44,86 @@ function setupLoginForm() {
   }
 }
 
+// // Handle login form submission
+// function handleLogin() {
+//   console.log("auth.js: Login attempt");
+
+//   // Clear previous errors
+//   if (loginAlert) {
+//     loginAlert.classList.add("d-none");
+//   }
+
+//   // Get form values - add checks to prevent errors
+//   const username = usernameInput ? usernameInput.value.trim() : "";
+//   const password = passwordInput ? passwordInput.value : "";
+
+//   // Basic validation
+//   if (!username || !password) {
+//     showLoginError("Please enter both username and password.");
+//     return;
+//   }
+
+//   // Disable button and show loading state
+//   loginButton.disabled = true;
+//   loginButton.innerHTML =
+//     '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Logging in...';
+
+//   // Send login request
+//   fetch(`${window.API_URL}/auth/login`, {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/json",
+//     },
+//     body: JSON.stringify({ username, password }),
+//   })
+//     .then((response) => {
+//       if (!response.ok) {
+//         throw new Error("Login failed");
+//       }
+//       return response.json();
+//     })
+//     .then((data) => {
+//       // Store token and user data
+//       localStorage.setItem("token", data.token);
+//       currentUser = data.user;
+
+//       // Update UI
+//       const userNameElement = document.getElementById("user-name");
+//       const userRoleElement = document.getElementById("user-role");
+//       if (userNameElement) userNameElement.textContent = data.user.full_name;
+//       if (userRoleElement) userRoleElement.textContent = data.user.role;
+
+//       // Close modal
+//       const loginModal = document.getElementById("loginModal");
+//       if (loginModal) {
+//         const modalInstance = bootstrap.Modal.getInstance(loginModal);
+//         if (modalInstance) modalInstance.hide();
+//       }
+
+//       // Reset form
+//       if (loginFormElement) loginFormElement.reset();
+
+//       // Load dashboard data
+//       if (typeof loadDashboardData === "function") {
+//         loadDashboardData();
+//       }
+
+//       // Show welcome message
+//       showAlert(`Welcome back, ${data.user.full_name}!`, "success");
+//     })
+//     .catch((error) => {
+//       console.error("Login error:", error);
+//       showLoginError("Invalid username or password. Please try again.");
+//     })
+//     .finally(() => {
+//       // Reset button state
+//       if (loginButton) {
+//         loginButton.disabled = false;
+//         loginButton.innerHTML = "Login";
+//       }
+//     });
+// }
+
 // Handle login form submission
 function handleLogin() {
   console.log("auth.js: Login attempt");
@@ -68,7 +148,8 @@ function handleLogin() {
   loginButton.innerHTML =
     '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Logging in...';
 
-  // Send login request
+  // Always try regular login first
+  console.log("DEBUG - Trying regular auth endpoint first");
   fetch(`${window.API_URL}/auth/login`, {
     method: "POST",
     headers: {
@@ -78,38 +159,82 @@ function handleLogin() {
   })
     .then((response) => {
       if (!response.ok) {
+        // If regular login fails, try student login for @blr.amity.edu addresses
+        if (username.endsWith("@blr.amity.edu")) {
+          console.log("DEBUG - Regular login failed, trying student endpoint");
+          return fetch(`${window.API_URL}/student-auth/login`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ username, password }),
+          });
+        }
+        throw new Error("Login failed");
+      }
+      return response;
+    })
+    .then((response) => {
+      if (!response.ok) {
         throw new Error("Login failed");
       }
       return response.json();
     })
     .then((data) => {
-      // Store token and user data
+      console.log("DEBUG - Login successful:", data);
+      console.log("DEBUG - User role:", data.user.role);
+      console.log("DEBUG - mustResetPassword:", data.mustResetPassword);
+
+      // Store token
       localStorage.setItem("token", data.token);
-      currentUser = data.user;
 
-      // Update UI
-      const userNameElement = document.getElementById("user-name");
-      const userRoleElement = document.getElementById("user-role");
-      if (userNameElement) userNameElement.textContent = data.user.full_name;
-      if (userRoleElement) userRoleElement.textContent = data.user.role;
+      if (data.user.role === "student") {
+        console.log("DEBUG - Handling as student login");
+        if (typeof handleStudentLoginSuccess === "function") {
+          handleStudentLoginSuccess(data);
+        }
+      } else {
+        console.log("DEBUG - Handling as admin/staff/coordinator login");
 
-      // Close modal
-      const loginModal = document.getElementById("loginModal");
-      if (loginModal) {
-        const modalInstance = bootstrap.Modal.getInstance(loginModal);
-        if (modalInstance) modalInstance.hide();
+        // Remove login state and add admin-specific classes
+        document.body.classList.remove("login-state");
+        document.body.classList.add("authenticated", "admin-user");
+
+        // Explicitly hide student interface
+        const studentInterface = document.getElementById("student-interface");
+        if (studentInterface) {
+          studentInterface.classList.add("d-none");
+          studentInterface.classList.remove("show");
+          studentInterface.style.display = "none";
+        }
+
+        // Handle admin/staff/faculty/coordinator login (existing logic)
+        currentUser = data.user;
+
+        // Update UI
+        const userNameElement = document.getElementById("user-name");
+        const userRoleElement = document.getElementById("user-role");
+        if (userNameElement) userNameElement.textContent = data.user.full_name;
+        if (userRoleElement) userRoleElement.textContent = data.user.role;
+
+        // Close modal
+        const loginModal = document.getElementById("loginModal");
+        if (loginModal) {
+          const modalInstance = bootstrap.Modal.getInstance(loginModal);
+          if (modalInstance) modalInstance.hide();
+        }
+
+        // Reset form
+        if (loginFormElement) loginFormElement.reset();
+
+        // Load dashboard data
+        if (typeof loadDashboardData === "function") {
+          loadDashboardData();
+        }
+
+        // Show welcome message
+        showAlert(`Welcome back, ${data.user.full_name}!`, "success");
       }
-
-      // Reset form
-      if (loginFormElement) loginFormElement.reset();
-
-      // Load dashboard data
-      if (typeof loadDashboardData === "function") {
-        loadDashboardData();
-      }
-
-      // Show welcome message
-      showAlert(`Welcome back, ${data.user.full_name}!`, "success");
     })
     .catch((error) => {
       console.error("Login error:", error);
@@ -122,6 +247,21 @@ function handleLogin() {
         loginButton.innerHTML = "Login";
       }
     });
+}
+// Try student login if regular login fails
+function tryStudentLogin(username, password) {
+  return fetch(`${window.API_URL}/student-auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ username, password }),
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error("Login failed");
+    }
+    return response.json();
+  });
 }
 
 // Show login error message

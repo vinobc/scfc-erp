@@ -18,7 +18,12 @@ CREATE TABLE student (
     FOREIGN KEY (school_id) REFERENCES school(school_id) ON DELETE RESTRICT
 );
 
+-- Add password reset tracking for students  
+ALTER TABLE student ADD COLUMN IF NOT EXISTS must_reset_password BOOLEAN DEFAULT TRUE;
+ALTER TABLE student ADD COLUMN IF NOT EXISTS last_password_change TIMESTAMP NULL;
+
 -- Add indexes for faster lookups
 CREATE INDEX idx_student_user_id ON student(user_id);
 CREATE INDEX idx_student_program_id ON student(program_id);
 CREATE INDEX idx_student_school_id ON student(school_id);
+CREATE INDEX IF NOT EXISTS idx_student_must_reset_password ON student(must_reset_password);
