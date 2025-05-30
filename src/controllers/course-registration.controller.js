@@ -1,613 +1,497 @@
+// src/controllers/course-registration.controller.js
 const db = require("../config/db");
 
-// Get available academic years and semesters
-exports.getAvailableSemesters = async (req, res) => {
-  try {
-    const result = await db.query(
-      `SELECT DISTINCT 
-           slot_year, 
-           semester_type,
-           CASE semester_type 
-             WHEN 'FALL' THEN 1 
-             WHEN 'WINTER' THEN 2 
-             WHEN 'SUMMER' THEN 3 
-           END as semester_order
-         FROM slot 
-         WHERE is_active = true 
-         ORDER BY slot_year DESC, semester_order`,
-      []
-    );
+const courseRegistrationController = {
+  // Get available semesters
+  async getAvailableSemesters(req, res) {
+    try {
+      const query = `
+        SELECT DISTINCT slot_year, semester_type 
+        FROM faculty_allocation 
+        ORDER BY slot_year DESC, 
+        CASE semester_type 
+          WHEN 'SUMMER' THEN 1 
+          WHEN 'WINTER' THEN 2 
+          WHEN 'FALL' THEN 3 
+        END
+      `;
 
-    res.status(200).json(result.rows);
-  } catch (error) {
-    console.error("Get available semesters error:", error);
-    res.status(500).json({ message: "Server error while fetching semesters" });
-  }
-};
+      const result = await db.query(query);
 
-// Get available courses for selected semester and year
-exports.getCoursesForSemester = async (req, res) => {
-  try {
-    const { slot_year, semester_type } = req.query;
+      const semesters = result.rows.map((row) => ({
+        year: row.slot_year,
+        semester: row.semester_type,
+        display: `${row.slot_year} - ${row.semester_type}`,
+      }));
 
-    if (!slot_year || !semester_type) {
-      return res.status(400).json({
-        message: "slot_year and semester_type are required",
-      });
+      res.json({ success: true, semesters });
+    } catch (error) {
+      console.error("Error fetching semesters:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch semesters" });
     }
+  },
 
-    const result = await db.query(
-      `SELECT DISTINCT fa.course_code, c.course_name
-       FROM faculty_allocation fa
-       JOIN course c ON fa.course_code = c.course_code
-       WHERE fa.slot_year = $1 AND fa.semester_type = $2
-       ORDER BY fa.course_code`,
-      [slot_year, semester_type]
-    );
+  // Get courses for selected semester
+  async getCoursesForSemester(req, res) {
+    try {
+      const { year, semester } = req.query;
 
-    res.status(200).json(result.rows);
-  } catch (error) {
-    console.error("Get courses for semester error:", error);
-    res.status(500).json({ message: "Server error while fetching courses" });
-  }
-};
+      if (!year || !semester) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Year and semester are required" });
+      }
 
-// Enhanced getCourseDetails with data cleanup and P=4 support
-exports.getCourseDetails = async (req, res) => {
-  try {
-    const { course_code } = req.params;
-    const { slot_year, semester_type } = req.query;
+      const query = `
+        SELECT DISTINCT c.course_code, c.course_name, c.theory, c.practical, c.credits
+        FROM course c
+        INNER JOIN faculty_allocation fa ON c.course_code = fa.course_code
+        WHERE fa.slot_year = $1 AND fa.semester_type = $2
+        ORDER BY c.course_code
+      `;
 
-    if (!course_code) {
-      return res.status(400).json({
-        message: "course_code is required",
-      });
+      const result = await db.query(query, [year, semester]);
+      res.json({ success: true, courses: result.rows });
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch courses" });
     }
+  },
 
-    // Get basic course details (T-P-C structure)
-    const courseResult = await db.query(
-      `SELECT course_code, course_name, theory, practical, credits
-       FROM course 
-       WHERE course_code = $1`,
-      [course_code]
-    );
+  // Enhanced getCourseDetails with proper slot filtering
+  async getCourseDetails(req, res) {
+    try {
+      const { courseCode, year, semester } = req.query;
 
-    if (courseResult.rows.length === 0) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+      if (!courseCode || !year || !semester) {
+        return res.status(400).json({
+          success: false,
+          message: "Course code, year, and semester are required",
+        });
+      }
 
-    const courseDetails = courseResult.rows[0];
-    const theory = parseInt(courseDetails.theory);
-    const practical = parseInt(courseDetails.practical);
+      // Get course details
+      const courseQuery = `
+        SELECT course_code, course_name, theory, practical, credits, description
+        FROM course 
+        WHERE course_code = $1
+      `;
+      const courseResult = await db.query(courseQuery, [courseCode]);
 
-    // Calculate course type
-    let courseType;
-    if (theory > 0 && practical === 0) {
-      courseType = "T"; // Theory only
-    } else if (theory === 0 && practical > 0) {
-      courseType = "P"; // Lab only
-    } else if (theory > 0 && practical > 0) {
-      courseType = "TEL"; // Theory embedded Lab
-    } else {
-      courseType = "Unknown";
-    }
+      if (courseResult.rows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Course not found" });
+      }
 
-    // Get slot offerings with faculty and venue details
-    let slotOfferings = [];
-    if (slot_year && semester_type) {
-      const slotResult = await db.query(
-        `SELECT 
-           fa.slot_day,
-           fa.slot_name,
-           fa.slot_time,
-           fa.venue,
-           f.name as faculty_name,
-           v.capacity as available_seats,
-           v.seats as venue_seats
-         FROM faculty_allocation fa
-         JOIN faculty f ON fa.employee_id = f.employee_id
-         JOIN venue v ON fa.venue = v.venue
-         WHERE fa.course_code = $1 
-           AND fa.slot_year = $2 
-           AND fa.semester_type = $3
-         ORDER BY fa.slot_name, fa.slot_day`,
-        [course_code, slot_year, semester_type]
+      const course = courseResult.rows[0];
+
+      // Get ONLY allocated slots for this specific course
+      const slotsQuery = `
+        SELECT DISTINCT 
+          fa.slot_name,
+          fa.slot_day,
+          fa.slot_time,
+          fa.venue,
+          f.name as faculty_name,
+          v.capacity
+        FROM faculty_allocation fa
+        LEFT JOIN faculty f ON fa.employee_id = f.employee_id
+        LEFT JOIN venue v ON fa.venue = v.venue_id
+        WHERE fa.course_code = $1 
+          AND fa.slot_year = $2 
+          AND fa.semester_type = $3
+        ORDER BY fa.slot_name, fa.slot_day
+      `;
+
+      const slotsResult = await db.query(slotsQuery, [
+        courseCode,
+        year,
+        semester,
+      ]);
+
+      console.log(
+        `🔍 DEBUG: Found ${slotsResult.rows.length} allocated slots for ${courseCode}`
       );
 
-      slotOfferings = slotResult.rows;
-    }
+      if (slotsResult.rows.length === 0) {
+        return res.json({
+          success: true,
+          course,
+          registrationEntries: [],
+          message:
+            "No faculty allocations found for this course in the selected semester",
+        });
+      }
 
-    // Get linked slot information for Summer 2024-25
-    let linkedSlotInfo = new Map();
-
-    if (slot_year === "2024-25" && semester_type === "SUMMER") {
-      // Get P=2 linking info
-      const linkedSlotsResult = await db.query(
-        `SELECT slot_name, linked_slots, course_theory, course_practical
-         FROM semester_slot_config 
-         WHERE slot_year = $1 
-           AND semester_type = $2 
-           AND linked_slots IS NOT NULL
-           AND (
-             (course_theory = $3 AND course_practical = 0) OR 
-             (course_theory = 0 AND course_practical = 2)
-           )`,
-        [slot_year, semester_type, theory]
+      // Process allocated slots into registration entries
+      const registrationEntries = await processAllocatedSlotsIntoRegistrations(
+        slotsResult.rows,
+        course,
+        year,
+        semester
       );
 
-      // Build P=2 linked slots mapping
-      linkedSlotsResult.rows.forEach((row) => {
-        if (row.linked_slots && row.linked_slots.length > 0) {
-          linkedSlotInfo.set(row.slot_name, row.linked_slots[0]);
-          linkedSlotInfo.set(row.linked_slots[0], row.slot_name);
-        }
+      res.json({
+        success: true,
+        course,
+        registrationEntries,
       });
+    } catch (error) {
+      console.error("Error fetching course details:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch course details" });
     }
-
-    // Process slot offerings into grouped registrations
-    const registrationEntries = processSlotOfferingsIntoRegistrations(
-      slotOfferings,
-      linkedSlotInfo,
-      theory,
-      practical,
-      slot_year === "2024-25" && semester_type === "SUMMER"
-    );
-
-    // Prepare response data
-    const response = {
-      course_code: courseDetails.course_code,
-      course_name: courseDetails.course_name,
-      theory: courseDetails.theory,
-      practical: courseDetails.practical,
-      credits: courseDetails.credits,
-      course_type: courseType,
-      registration_entries: registrationEntries,
-      is_summer_linked: slot_year === "2024-25" && semester_type === "SUMMER",
-    };
-
-    res.status(200).json(response);
-  } catch (error) {
-    console.error("Get course details error:", error);
-    res
-      .status(500)
-      .json({ message: "Server error while fetching course details" });
-  }
+  },
 };
 
-// Process slot offerings into grouped registrations
-function processSlotOfferingsIntoRegistrations(
-  slotOfferings,
-  linkedSlotInfo,
-  theory,
-  practical,
-  isSummerLinked
+// Process only allocated slots into registration entries
+async function processAllocatedSlotsIntoRegistrations(
+  allocatedSlots,
+  course,
+  year,
+  semester
 ) {
-  if (!slotOfferings || slotOfferings.length === 0) {
-    return [];
-  }
+  console.log(
+    `🔍 DEBUG: Processing ${allocatedSlots.length} allocated slots for ${course.course_code}`
+  );
 
   // Separate theory and lab slots
-  const theorySlots = slotOfferings.filter(
-    (slot) => !slot.slot_name.startsWith("L")
+  const theorySlots = allocatedSlots.filter(
+    (slot) =>
+      /^[A-H]$/.test(slot.slot_name) || /^T[A-Z]\d+$/.test(slot.slot_name)
   );
-  const labSlots = slotOfferings.filter((slot) =>
-    slot.slot_name.startsWith("L")
+  const labSlots = allocatedSlots.filter((slot) =>
+    /^L\d+\+L\d+$/.test(slot.slot_name)
+  );
+
+  console.log(
+    `🔍 DEBUG: Found ${theorySlots.length} theory slots, ${labSlots.length} lab slots`
   );
 
   const registrationEntries = [];
 
-  // Process theory component
-  if (theory > 0 && theorySlots.length > 0) {
-    const theoryEntry = processTheorySlots(
+  // Process theory component if exists
+  if (course.theory > 0 && theorySlots.length > 0) {
+    const theoryEntry = await processTheorySlots(
       theorySlots,
-      linkedSlotInfo,
-      theory,
-      isSummerLinked
+      course,
+      year,
+      semester
     );
     if (theoryEntry) {
       registrationEntries.push(theoryEntry);
     }
   }
 
-  // Process lab component
-  if (practical > 0 && labSlots.length > 0) {
-    const labEntry = processLabSlots(
-      labSlots,
-      linkedSlotInfo,
-      practical,
-      isSummerLinked
-    );
+  // Process lab component if exists
+  if (course.practical > 0 && labSlots.length > 0) {
+    const labEntry = await processLabSlots(labSlots, course, year, semester);
     if (labEntry) {
       registrationEntries.push(labEntry);
     }
   }
 
+  console.log(
+    `✅ DEBUG: Created ${registrationEntries.length} registration entries`
+  );
   return registrationEntries;
 }
 
-// Process theory slots with linking support
-function processTheorySlots(
-  theorySlots,
-  linkedSlotInfo,
-  theory,
-  isSummerLinked
-) {
-  // Group by slot name and deduplicate
-  const slotGroups = new Map();
-  theorySlots.forEach((slot) => {
-    if (!slotGroups.has(slot.slot_name)) {
-      slotGroups.set(slot.slot_name, []);
-    }
-    slotGroups.get(slot.slot_name).push(slot);
-  });
+// Process theory slots
+async function processTheorySlots(theorySlots, course, year, semester) {
+  console.log(`🔍 DEBUG Theory: Processing ${theorySlots.length} theory slots`);
 
-  const slotNames = Array.from(slotGroups.keys());
-  console.log("🔍 DEBUG: Theory slot names:", slotNames);
+  // Get unique slot names
+  const uniqueSlotNames = [
+    ...new Set(theorySlots.map((slot) => slot.slot_name)),
+  ];
+  console.log(
+    `🔍 DEBUG Theory: Unique slot names: ${uniqueSlotNames.join(", ")}`
+  );
 
-  // Check if linking is needed for T=4 in Summer 2024-25
-  if (theory === 4 && isSummerLinked) {
-    // Find linked pairs (E+F or G+H)
-    const linkedPairs = findLinkedPairs(slotNames, linkedSlotInfo);
-    console.log("🔍 DEBUG: Found linked theory pairs:", linkedPairs);
+  // Check for theory linking (T=4 courses with E+F or G+H)
+  let isLinked = false;
+  let slotGroups = [];
 
-    if (linkedPairs.length > 0) {
-      // Use the first linked pair found
-      const [slot1, slot2] = linkedPairs[0];
-      const slot1Data = slotGroups.get(slot1) || [];
-      const slot2Data = slotGroups.get(slot2) || [];
+  if (course.theory === 4 && year === "2024-25" && semester === "SUMMER") {
+    // Check if we have E+F or G+H combination
+    const hasEF =
+      uniqueSlotNames.includes("E") && uniqueSlotNames.includes("F");
+    const hasGH =
+      uniqueSlotNames.includes("G") && uniqueSlotNames.includes("H");
 
-      return {
-        type: "theory",
-        component_name: `${slot1}, ${slot2}`,
-        is_linked: true,
-        slot_details: {
-          [slot1]: slot1Data,
-          [slot2]: slot2Data,
-        },
-        all_slots_data: [...slot1Data, ...slot2Data],
-        venue: slot1Data[0]?.venue || slot2Data[0]?.venue,
-        faculty_name: slot1Data[0]?.faculty_name || slot2Data[0]?.faculty_name,
-        available_seats:
-          slot1Data[0]?.available_seats || slot2Data[0]?.available_seats,
-      };
+    if (hasEF || hasGH) {
+      isLinked = true;
+      console.log(
+        `✅ DEBUG Theory: Found ${hasEF ? "E+F" : "G+H"} linking for T=4 course`
+      );
     }
   }
 
-  // Non-linked theory (T=2, T=3, or T=4 without linking)
+  // Group slots by slot name and collect all times
+  const slotDetails = {};
+  theorySlots.forEach((slot) => {
+    if (!slotDetails[slot.slot_name]) {
+      slotDetails[slot.slot_name] = {
+        times: [],
+        faculty: slot.faculty_name,
+        venue: slot.venue,
+        capacity: slot.capacity,
+      };
+    }
+    slotDetails[slot.slot_name].times.push({
+      day: slot.slot_day,
+      time: slot.slot_time,
+    });
+  });
+
+  // Format display
+  let slotsOffered = "";
+  if (isLinked) {
+    // For linked theory (E+F or G+H), show as combined
+    slotsOffered = uniqueSlotNames.join(", ");
+
+    // Create grouped time display
+    const timeDetails = [];
+    uniqueSlotNames.forEach((slotName) => {
+      if (slotDetails[slotName]) {
+        const times = slotDetails[slotName].times
+          .map((t) => `${t.day} (${t.time})`)
+          .join(", ");
+        timeDetails.push(`${slotName}: ${times}`);
+      }
+    });
+    slotsOffered += "\n" + timeDetails.join("\n");
+  } else {
+    // For individual theory slots
+    const timeDetails = [];
+    uniqueSlotNames.forEach((slotName) => {
+      if (slotDetails[slotName]) {
+        const times = slotDetails[slotName].times
+          .map((t) => `${t.day} (${t.time})`)
+          .join(", ");
+        timeDetails.push(`${slotName}: ${times}`);
+      }
+    });
+    slotsOffered = timeDetails.join("\n");
+  }
+
+  // Get representative faculty and venue
   const firstSlot = theorySlots[0];
+
   return {
-    type: "theory",
-    component_name: slotNames.join(", "),
-    is_linked: false,
-    slot_details: Object.fromEntries(slotGroups),
-    all_slots_data: theorySlots,
+    course_code: course.course_code,
+    course_title: course.course_name,
+    course_type: "THEORY",
+    slots_offered: slotsOffered,
     venue: firstSlot.venue,
     faculty_name: firstSlot.faculty_name,
-    available_seats: firstSlot.available_seats,
+    available_seats: firstSlot.capacity || 60,
+    is_linked: isLinked,
+    component_type: "theory",
   };
 }
 
-// Enhanced process lab slots function with data cleanup
-function processLabSlots(labSlots, linkedSlotInfo, practical, isSummerLinked) {
-  // Clean and deduplicate lab slots - remove invalid compound entries
-  const cleanedSlots = cleanupLabSlots(labSlots);
-  const uniqueSlots = deduplicateSlots(cleanedSlots);
-  const firstSlot = uniqueSlots[0];
+// Process lab slots
+async function processLabSlots(labSlots, course, year, semester) {
+  console.log(`🔍 DEBUG Lab: Processing ${labSlots.length} lab slots`);
 
+  // Clean and deduplicate lab slots
+  const cleanedSlots = deduplicateSlots(labSlots);
   console.log(
-    "🧹 DEBUG: Original lab slots:",
-    labSlots.map((s) => s.slot_name)
-  );
-  console.log(
-    "🧹 DEBUG: Cleaned lab slots:",
-    cleanedSlots.map((s) => s.slot_name)
-  );
-  console.log(
-    "🧹 DEBUG: Unique cleaned slots:",
-    uniqueSlots.map((s) => s.slot_name)
+    `🔍 DEBUG Lab: After deduplication: ${cleanedSlots.length} slots`
   );
 
-  if (!isSummerLinked) {
-    // Non-summer: treat as individual slots
-    return {
-      type: "lab",
-      component_name: uniqueSlots.map((s) => s.slot_name).join(", "),
-      is_linked: false,
-      slot_details: uniqueSlots.reduce((acc, slot) => {
-        acc[slot.slot_name] = [slot];
-        return acc;
-      }, {}),
-      all_slots_data: uniqueSlots,
-      venue: firstSlot.venue,
-      faculty_name: firstSlot.faculty_name,
-      available_seats: firstSlot.available_seats,
-    };
+  const uniqueSlotNames = [
+    ...new Set(cleanedSlots.map((slot) => slot.slot_name)),
+  ];
+  console.log(`🔍 DEBUG Lab: Unique slot names: ${uniqueSlotNames.join(", ")}`);
+
+  let isLinked = false;
+  let slotsOffered = "";
+
+  // Check for Summer 2024-25 linking
+  if (year === "2024-25" && semester === "SUMMER") {
+    if (course.practical === 2) {
+      // P=2: Simple pairing (e.g., L19+L20 ↔ L39+L40)
+      const linkedPairs = await findLinkedPairs(uniqueSlotNames, 2);
+      if (linkedPairs.length > 0) {
+        isLinked = true;
+        slotsOffered = formatLinkedLabDisplay(linkedPairs, cleanedSlots);
+        console.log(
+          `✅ DEBUG Lab P=2: Found ${linkedPairs.length} linked pairs`
+        );
+      }
+    } else if (course.practical === 4) {
+      // P=4: Complex combinations (e.g., L5+L6, L19+L20 ↔ L25+L26, L39+L40)
+      const p4Combinations = await findP4Combinations(uniqueSlotNames);
+      if (p4Combinations.length > 0) {
+        isLinked = true;
+        slotsOffered = formatP4LabDisplay(p4Combinations, cleanedSlots);
+        console.log(
+          `✅ DEBUG Lab P=4: Found ${p4Combinations.length} combinations`
+        );
+      }
+    }
   }
 
-  // Summer 2024-25: Handle P=4 with cleaned data
-  if (practical === 4) {
-    // Recalculate P=4 combination with cleaned data
-    const cleanedSlotNames = uniqueSlots.map((s) => s.slot_name).sort();
-    console.log(
-      "🔍 DEBUG P=4: Cleaned slot names for matching:",
-      cleanedSlotNames
-    );
+  // If no linking found, display individual slots
+  if (!isLinked) {
+    const timeDetails = uniqueSlotNames.map((slotName) => {
+      const slot = cleanedSlots.find((s) => s.slot_name === slotName);
+      return `${slotName} (${slot.slot_day}, ${slot.slot_time})`;
+    });
+    slotsOffered = timeDetails.join("\n");
+  }
 
-    // Re-find P=4 combination with cleaned slot names
-    const p4Info = findP4CombinationWithCleanedData(
-      uniqueSlots,
-      cleanedSlotNames
-    );
+  // Get representative faculty and venue
+  const firstSlot = cleanedSlots[0];
 
-    if (p4Info) {
-      console.log(
-        "✅ DEBUG P=4: Found matching combination after cleanup:",
-        p4Info
-      );
+  return {
+    course_code: course.course_code,
+    course_title: course.course_name,
+    course_type: "LAB",
+    slots_offered: slotsOffered,
+    venue: firstSlot.venue,
+    faculty_name: firstSlot.faculty_name,
+    available_seats: firstSlot.capacity || 30,
+    is_linked: isLinked,
+    component_type: "lab",
+  };
+}
 
-      const allSlotNames = p4Info.all;
-      const slotDetails = {};
-
-      allSlotNames.forEach((slotName) => {
-        const slot = uniqueSlots.find((s) => s.slot_name === slotName);
-        if (slot) {
-          slotDetails[slotName] = [slot];
-        }
-      });
-
-      return {
-        type: "lab",
-        component_name: allSlotNames.join(", "),
-        is_linked: true,
-        slot_details: slotDetails,
-        all_slots_data: uniqueSlots,
-        p4_combination: p4Info,
-        venue: firstSlot.venue,
-        faculty_name: firstSlot.faculty_name,
-        available_seats: firstSlot.available_seats,
-      };
-    } else {
-      console.log("⚠️ DEBUG P=4: Still no matching combination after cleanup");
+// Helper function to deduplicate slots
+function deduplicateSlots(slots) {
+  const seen = new Set();
+  return slots.filter((slot) => {
+    const key = `${slot.slot_name}-${slot.slot_day}-${slot.slot_time}`;
+    if (seen.has(key)) {
+      return false;
     }
-  } else if (practical === 2) {
-    // P=2: Use simple 1:1 linking
+    seen.add(key);
+    return true;
+  });
+}
+
+// Find linked pairs for P=2 courses
+async function findLinkedPairs(slotNames, practical) {
+  try {
+    const query = `
+      SELECT slot_name, linked_slots 
+      FROM semester_slot_config 
+      WHERE slot_year = '2024-25' 
+        AND semester_type = 'SUMMER' 
+        AND course_practical = $1
+        AND slot_name = ANY($2)
+    `;
+
+    const result = await db.query(query, [practical, slotNames]);
+
     const pairs = [];
-    const processedSlots = new Set();
+    const processed = new Set();
 
-    uniqueSlots.forEach((slot) => {
-      if (processedSlots.has(slot.slot_name)) return;
-
-      const linkedSlotName = linkedSlotInfo.get(slot.slot_name);
-      if (linkedSlotName) {
-        const linkedSlot = uniqueSlots.find(
-          (s) => s.slot_name === linkedSlotName
-        );
-        if (linkedSlot && !processedSlots.has(linkedSlotName)) {
-          pairs.push([slot, linkedSlot]);
-          processedSlots.add(slot.slot_name);
-          processedSlots.add(linkedSlotName);
+    result.rows.forEach((row) => {
+      if (!processed.has(row.slot_name)) {
+        const linkedSlots = JSON.parse(row.linked_slots);
+        if (linkedSlots.length > 0 && slotNames.includes(linkedSlots[0])) {
+          pairs.push({
+            morning: row.slot_name,
+            afternoon: linkedSlots[0],
+          });
+          processed.add(row.slot_name);
+          processed.add(linkedSlots[0]);
         }
       }
     });
 
-    const allSlotNames = [];
-    const slotDetails = {};
-
-    pairs.forEach((pair) => {
-      pair.forEach((slot) => {
-        allSlotNames.push(slot.slot_name);
-        slotDetails[slot.slot_name] = [slot];
-      });
-    });
-
-    return {
-      type: "lab",
-      component_name: allSlotNames.join(", "),
-      is_linked: true,
-      slot_details: slotDetails,
-      all_slots_data: uniqueSlots,
-      venue: firstSlot.venue,
-      faculty_name: firstSlot.faculty_name,
-      available_seats: firstSlot.available_seats,
-    };
+    return pairs;
+  } catch (error) {
+    console.error("Error finding linked pairs:", error);
+    return [];
   }
-
-  // Fallback: individual slots
-  return {
-    type: "lab",
-    component_name: uniqueSlots.map((s) => s.slot_name).join(", "),
-    is_linked: false,
-    slot_details: uniqueSlots.reduce((acc, slot) => {
-      acc[slot.slot_name] = [slot];
-      return acc;
-    }, {}),
-    all_slots_data: uniqueSlots,
-    venue: firstSlot.venue,
-    faculty_name: firstSlot.faculty_name,
-    available_seats: firstSlot.available_seats,
-  };
 }
 
-// Clean up lab slots by removing invalid compound entries
-function cleanupLabSlots(labSlots) {
-  const validSlots = [];
-  const validSlotPattern = /^L\d+\+L\d+$/; // Matches L1+L2, L19+L20, etc.
-
-  labSlots.forEach((slot) => {
-    // Only keep slots that match the valid pattern (individual lab slots)
-    if (validSlotPattern.test(slot.slot_name)) {
-      validSlots.push(slot);
-      console.log(`✅ CLEANUP: Keeping valid slot: ${slot.slot_name}`);
-    } else {
-      console.log(`❌ CLEANUP: Removing invalid slot: ${slot.slot_name}`);
-    }
-  });
-
-  return validSlots;
-}
-
-// Find P=4 combination with cleaned data
-function findP4CombinationWithCleanedData(uniqueSlots, cleanedSlotNames) {
-  // Hard-coded expected P=4 combinations based on your data
-  const expectedP4Combinations = [
-    {
-      morning: ["L5+L6", "L19+L20"],
-      afternoon: ["L25+L26", "L39+L40"],
-    },
-    {
-      morning: ["L1+L2", "L3+L4"],
-      afternoon: ["L21+L22", "L23+L24"],
-    },
-    {
-      morning: ["L7+L8", "L9+L10"],
-      afternoon: ["L27+L28", "L29+L30"],
-    },
-    {
-      morning: ["L11+L12", "L13+L14"],
-      afternoon: ["L31+L32", "L33+L34"],
-    },
-    {
-      morning: ["L15+L16", "L17+L18"],
-      afternoon: ["L35+L36", "L37+L38"],
-    },
-    // Add more combinations as needed
+// Find P=4 combinations
+async function findP4Combinations(slotNames) {
+  // Hard-coded P=4 combinations for Summer 2024-25
+  const p4Mappings = [
+    { morning: ["L5+L6", "L19+L20"], afternoon: ["L25+L26", "L39+L40"] },
+    { morning: ["L1+L2", "L3+L4"], afternoon: ["L21+L22", "L23+L24"] },
+    { morning: ["L7+L8", "L9+L10"], afternoon: ["L27+L28", "L29+L30"] },
+    { morning: ["L11+L12", "L13+L14"], afternoon: ["L31+L32", "L33+L34"] },
+    { morning: ["L15+L16", "L17+L18"], afternoon: ["L35+L36", "L37+L38"] },
   ];
 
-  // Check if cleaned slot names match any expected combination
-  for (const combo of expectedP4Combinations) {
-    const expectedSlots = [...combo.morning, ...combo.afternoon].sort();
+  const sortedSlotNames = slotNames.sort();
 
-    console.log(
-      `🔍 DEBUG P=4: Checking combination: [${expectedSlots.join(", ")}]`
-    );
-    console.log(
-      `🔍 DEBUG P=4: Against cleaned slots: [${cleanedSlotNames.join(", ")}]`
-    );
-
-    if (arraysEqual(expectedSlots, cleanedSlotNames)) {
-      console.log("✅ DEBUG P=4: Found exact match!");
-
-      // Create day-grouped structure
-      const dayGroupedInfo = createDayGroupedP4StructureFromSlots(
-        uniqueSlots,
-        combo.morning,
-        combo.afternoon
+  for (const mapping of p4Mappings) {
+    const allSlots = [...mapping.morning, ...mapping.afternoon].sort();
+    if (JSON.stringify(sortedSlotNames) === JSON.stringify(allSlots)) {
+      console.log(
+        `✅ DEBUG P=4: Found exact match for: ${sortedSlotNames.join(", ")}`
       );
-
-      return dayGroupedInfo;
+      return [mapping];
     }
   }
 
-  return null;
-}
-
-// Create day-grouped P=4 structure from cleaned slot data
-function createDayGroupedP4StructureFromSlots(
-  uniqueSlots,
-  morningSlots,
-  afternoonSlots
-) {
-  const dayGroups = new Map();
-
-  // Create a mapping of slot names to their day/time info
-  const slotInfo = new Map();
-  uniqueSlots.forEach((slot) => {
-    slotInfo.set(slot.slot_name, slot);
-  });
-
-  // Group morning and afternoon slots by day
-  morningSlots.forEach((morningSlotName) => {
-    const morningSlot = slotInfo.get(morningSlotName);
-    if (morningSlot) {
-      const day = morningSlot.slot_day;
-
-      if (!dayGroups.has(day)) {
-        dayGroups.set(day, { morning: null, afternoon: null });
-      }
-
-      dayGroups.get(day).morning = morningSlot;
-    }
-  });
-
-  afternoonSlots.forEach((afternoonSlotName) => {
-    const afternoonSlot = slotInfo.get(afternoonSlotName);
-    if (afternoonSlot) {
-      const day = afternoonSlot.slot_day;
-
-      if (!dayGroups.has(day)) {
-        dayGroups.set(day, { morning: null, afternoon: null });
-      }
-
-      dayGroups.get(day).afternoon = afternoonSlot;
-    }
-  });
-
-  // Convert to array format sorted by day
-  const dayOrder = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-  const sortedDays = Array.from(dayGroups.keys()).sort(
-    (a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b)
-  );
-
-  const dayGroupedSlots = sortedDays
-    .map((day) => ({
-      day: day,
-      morning: dayGroups.get(day).morning,
-      afternoon: dayGroups.get(day).afternoon,
-    }))
-    .filter((group) => group.morning || group.afternoon);
-
-  return {
-    morning: morningSlots,
-    afternoon: afternoonSlots,
-    all: [...morningSlots, ...afternoonSlots],
-    dayGroups: dayGroupedSlots,
-  };
-}
-
-// Enhanced deduplication function
-function deduplicateSlots(slots) {
-  const seen = new Map();
-
-  slots.forEach((slot) => {
-    const key = slot.slot_name;
-    if (!seen.has(key)) {
-      seen.set(key, slot);
-    } else {
-      console.log(`🔄 DEDUP: Skipping duplicate slot: ${key}`);
-    }
-  });
-
-  const uniqueSlots = Array.from(seen.values());
   console.log(
-    `🔍 DEBUG: Deduplicated ${slots.length} slots to ${uniqueSlots.length} unique slots`
+    `⚠️ DEBUG P=4: No matching combination found for: ${sortedSlotNames.join(
+      ", "
+    )}`
   );
-  return uniqueSlots;
+  return [];
 }
 
-// Find linked pairs in slot names
-function findLinkedPairs(slotNames, linkedSlotInfo) {
-  const pairs = [];
-  const processed = new Set();
+// Format linked lab display for P=2
+function formatLinkedLabDisplay(linkedPairs, slotData) {
+  const pairStrings = linkedPairs.map((pair) => {
+    const morningSlot = slotData.find((s) => s.slot_name === pair.morning);
+    const afternoonSlot = slotData.find((s) => s.slot_name === pair.afternoon);
 
-  slotNames.forEach((slotName) => {
-    if (processed.has(slotName)) return;
+    return `${pair.morning}, ${pair.afternoon}\n${pair.morning} (${morningSlot.slot_day}, ${morningSlot.slot_time}), ${pair.afternoon} (${afternoonSlot.slot_day}, ${afternoonSlot.slot_time})`;
+  });
 
-    const linkedSlot = linkedSlotInfo.get(slotName);
-    if (linkedSlot && slotNames.includes(linkedSlot)) {
-      pairs.push([slotName, linkedSlot]);
-      processed.add(slotName);
-      processed.add(linkedSlot);
+  return pairStrings.join("\n\n");
+}
+
+// Format P=4 lab display with day grouping
+function formatP4LabDisplay(combinations, slotData) {
+  if (combinations.length === 0) return "";
+
+  const combo = combinations[0];
+  const allSlots = [...combo.morning, ...combo.afternoon];
+
+  // First line: slot names
+  const slotNames = `${combo.morning.join(", ")}\n${combo.afternoon.join(
+    ", "
+  )}`;
+
+  // Group by day
+  const dayGroups = {};
+  allSlots.forEach((slotName) => {
+    const slot = slotData.find((s) => s.slot_name === slotName);
+    if (slot) {
+      if (!dayGroups[slot.slot_day]) {
+        dayGroups[slot.slot_day] = [];
+      }
+      dayGroups[slot.slot_day].push(`${slotName} (${slot.slot_time})`);
     }
   });
 
-  return pairs;
+  // Create day-grouped display
+  const dayLines = Object.keys(dayGroups)
+    .sort()
+    .map((day) => {
+      return `${day}: ${dayGroups[day].join(", ")}`;
+    });
+
+  return `${slotNames}\n\n${dayLines.join("\n")}`;
 }
 
-// Helper function to compare arrays
-function arraysEqual(arr1, arr2) {
-  if (arr1.length !== arr2.length) return false;
-  for (let i = 0; i < arr1.length; i++) {
-    if (arr1[i] !== arr2[i]) return false;
-  }
-  return true;
-}
+module.exports = courseRegistrationController;
