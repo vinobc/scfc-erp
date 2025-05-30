@@ -228,7 +228,7 @@ function handleCourseSearch() {
   console.log(`🔍 Found ${filtered.length} courses matching "${term}"`);
 }
 
-// Enhanced selectCourse function with Phase 2 support
+// Enhanced selectCourse function with new response structure
 async function selectCourse(courseCode) {
   console.log(`📋 Loading details for course: ${courseCode}`);
 
@@ -276,49 +276,49 @@ async function selectCourse(courseCode) {
     const detailsContent = document.getElementById("working-details-content");
     if (detailsContent) {
       detailsContent.innerHTML = `
-          <!-- Phase 1: T-P-C Table -->
-          <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 20px;">
-            <h5 style="margin-bottom: 15px; color: #007bff;">Course Information</h5>
-            <table style="width: 100%; border-collapse: collapse;">
-              <thead>
-                <tr style="background: #007bff; color: white;">
-                  <th style="padding: 12px; text-align: left;">Course Code</th>
-                  <th style="padding: 12px; text-align: left;">Course Title</th>
-                  <th style="padding: 12px; text-align: center;">Theory (T)</th>
-                  <th style="padding: 12px; text-align: center;">Practical (P)</th>
-                  <th style="padding: 12px; text-align: center;">Credits (C)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">${
-                    details.course_code
-                  }</td>
-                  <td style="padding: 12px; border: 1px solid #ddd;">${
-                    details.course_name
-                  }</td>
-                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${
-                    details.theory
-                  }</td>
-                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${
-                    details.practical
-                  }</td>
-                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #28a745;">${
-                    details.credits
-                  }</td>
-                </tr>
-              </tbody>
-            </table>
-            <div style="margin-top: 15px; color: #666; font-size: 14px;">
-              <strong>T</strong> = Theory hours per week | 
-              <strong>P</strong> = Practical hours per week | 
-              <strong>C</strong> = Total Credits
-            </div>
+        <!-- Phase 1: T-P-C Table -->
+        <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 20px;">
+          <h5 style="margin-bottom: 15px; color: #007bff;">Course Information</h5>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #007bff; color: white;">
+                <th style="padding: 12px; text-align: left;">Course Code</th>
+                <th style="padding: 12px; text-align: left;">Course Title</th>
+                <th style="padding: 12px; text-align: center;">Theory (T)</th>
+                <th style="padding: 12px; text-align: center;">Practical (P)</th>
+                <th style="padding: 12px; text-align: center;">Credits (C)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">${
+                  details.course_code
+                }</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${
+                  details.course_name
+                }</td>
+                <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${
+                  details.theory
+                }</td>
+                <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${
+                  details.practical
+                }</td>
+                <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #28a745;">${
+                  details.credits
+                }</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="margin-top: 15px; color: #666; font-size: 14px;">
+            <strong>T</strong> = Theory hours per week | 
+            <strong>P</strong> = Practical hours per week | 
+            <strong>C</strong> = Total Credits
           </div>
-  
-          <!-- Phase 2: Slot Offerings Table -->
-          ${renderSlotOfferingsTable(details)}
-        `;
+        </div>
+
+        <!-- Phase 2: Registration Entries Table -->
+        ${renderEnhancedSlotOfferingsTable(details)}
+      `;
     }
 
     const detailsDiv = document.getElementById("working-course-details");
@@ -333,185 +333,262 @@ async function selectCourse(courseCode) {
   }
 }
 
-// New function to render Phase 2 slot offerings table
-function renderSlotOfferingsTable(details) {
+// Enhanced slot details formatting for day-grouped P=4 display
+function formatRegistrationSlotDetails(entry) {
+  if (!entry.slot_details) return "No schedule available";
+
+  if (entry.type === "theory") {
+    // Theory slots: group by slot name, show all times
+    const slotNames = Object.keys(entry.slot_details);
+    const formattedSlots = [];
+
+    slotNames.forEach((slotName) => {
+      const slotData = entry.slot_details[slotName];
+      if (slotData && slotData.length > 0) {
+        const times = slotData
+          .map((slot) => `${slot.slot_day} (${slot.slot_time})`)
+          .join(", ");
+        formattedSlots.push(`<strong>${slotName}:</strong> ${times}`);
+      }
+    });
+
+    return formattedSlots.join("<br>");
+  } else {
+    // Lab slots: handle day-grouped P=4 combination or regular linking
+    if (entry.p4_combination && entry.p4_combination.dayGroups) {
+      // P=4 combination: show day-grouped format
+      const dayGroupedDisplay = [];
+
+      entry.p4_combination.dayGroups.forEach((dayGroup) => {
+        const daySlots = [];
+
+        if (dayGroup.morning) {
+          daySlots.push(
+            `<strong>${dayGroup.morning.slot_name}</strong> (${dayGroup.morning.slot_time})`
+          );
+        }
+
+        if (dayGroup.afternoon) {
+          daySlots.push(
+            `<strong>${dayGroup.afternoon.slot_name}</strong> (${dayGroup.afternoon.slot_time})`
+          );
+        }
+
+        if (daySlots.length > 0) {
+          dayGroupedDisplay.push(
+            `<strong>${dayGroup.day}:</strong> ${daySlots.join(", ")}`
+          );
+        }
+      });
+
+      return dayGroupedDisplay.join("<br>");
+    } else {
+      // Regular lab slots (P=2 or individual)
+      const slotNames = Object.keys(entry.slot_details);
+      const formattedSlots = [];
+
+      slotNames.forEach((slotName) => {
+        const slotData = entry.slot_details[slotName];
+        if (slotData && slotData.length > 0) {
+          const slot = slotData[0];
+          formattedSlots.push(
+            `<strong>${slotName}</strong> (${slot.slot_day}, ${slot.slot_time})`
+          );
+        }
+      });
+
+      return formattedSlots.join("<br>");
+    }
+  }
+}
+
+// Enhanced component name formatting for day-grouped P=4
+function formatComponentName(entry) {
+  if (entry.p4_combination && entry.p4_combination.dayGroups) {
+    // P=4: Show day-grouped component names
+    const dayNames = entry.p4_combination.dayGroups.map((dayGroup) => {
+      const slots = [];
+      if (dayGroup.morning) slots.push(dayGroup.morning.slot_name);
+      if (dayGroup.afternoon) slots.push(dayGroup.afternoon.slot_name);
+      return slots.join(", ");
+    });
+    return dayNames.join("<br>");
+  } else {
+    // Regular component name
+    return entry.component_name;
+  }
+}
+
+// Enhanced table rendering with clean UI (no linking indicators)
+function renderEnhancedSlotOfferingsTable(details) {
   if (
-    !details.slot_offerings ||
-    details.slot_offerings.all_slots.length === 0
+    !details.registration_entries ||
+    details.registration_entries.length === 0
   ) {
     return `
-        <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd;">
-          <h5 style="margin-bottom: 15px; color: #007bff;">Course Offerings</h5>
-          <div style="text-align: center; color: #666; padding: 20px;">
-            No slot offerings available for this course in the selected semester.
-          </div>
-        </div>
-      `;
-  }
-
-  const { course_type, slot_offerings } = details;
-  const { theory_slots, lab_slots, all_slots } = slot_offerings;
-
-  // Determine which slots to display based on course type
-  let slotsToDisplay = [];
-  if (course_type === "T") {
-    slotsToDisplay = theory_slots; // Theory only
-  } else if (course_type === "P") {
-    slotsToDisplay = lab_slots; // Lab only
-  } else if (course_type === "TEL") {
-    slotsToDisplay = all_slots; // Both theory and lab
-  }
-
-  // Group slots by unique combinations for display
-  const uniqueOfferings = [];
-  const seen = new Set();
-
-  slotsToDisplay.forEach((slot) => {
-    const key = `${slot.slot_name}-${slot.venue}-${slot.faculty_name}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-
-      // Find all slots for this combination
-      const relatedSlots = slotsToDisplay.filter(
-        (s) =>
-          s.slot_name === slot.slot_name &&
-          s.venue === slot.venue &&
-          s.faculty_name === slot.faculty_name
-      );
-
-      uniqueOfferings.push({
-        ...slot,
-        slot_count: relatedSlots.length,
-        all_days: relatedSlots.map((s) => s.slot_day).join(", "),
-      });
-    }
-  });
-
-  return `
       <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd;">
-        <h5 style="margin-bottom: 15px; color: #007bff;">Registration - ${
-          course_type === "T"
-            ? "Theory Only"
-            : course_type === "P"
-            ? "Lab Only"
-            : "Theory + Lab"
-        }</h5>
-        
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead>
-            <tr style="background: #28a745; color: white;">
-              <th style="padding: 12px; text-align: left;">Course Code</th>
-              <th style="padding: 12px; text-align: left;">Course Title</th>
-              <th style="padding: 12px; text-align: center;">Course Type</th>
-              <th style="padding: 12px; text-align: center;">Slots Offered</th>
-              <th style="padding: 12px; text-align: left;">Venue</th>
-              <th style="padding: 12px; text-align: left;">Faculty Name</th>
-              <th style="padding: 12px; text-align: center;">Available Seats</th>
-              <th style="padding: 12px; text-align: center;">Register</th>
-              <th style="padding: 12px; text-align: center;">Delete</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${uniqueOfferings
-              .map(
-                (offering, index) => `
-              <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">${
-                  details.course_code
-                }</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${
-                  details.course_name
-                }</td>
-                <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
-                  <span style="background: ${
-                    course_type === "T"
-                      ? "#007bff"
-                      : course_type === "P"
-                      ? "#17a2b8"
-                      : "#6f42c1"
-                  }; 
-                               color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
-                    ${course_type}
-                  </span>
-                </td>
-                <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
-                  <div style="font-weight: bold; color: #007bff;">${
-                    offering.slot_name
-                  }</div>
-                  <div style="font-size: 12px; color: #666;">${
-                    offering.slot_time
-                  }</div>
-                  <div style="font-size: 11px; color: #888;">${
-                    offering.all_days
-                  }</div>
-                </td>
-                <td style="padding: 12px; border: 1px solid #ddd;">
-                  <span style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-weight: bold;">
-                    ${offering.venue}
-                  </span>
-                </td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${
-                  offering.faculty_name
-                }</td>
-                <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
-                  <span style="color: ${
-                    offering.available_seats > 10
-                      ? "#28a745"
-                      : offering.available_seats > 5
-                      ? "#ffc107"
-                      : "#dc3545"
-                  }; 
-                               font-weight: bold;">
-                    ${offering.available_seats}
-                  </span>
-                </td>
-                <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
-                  <input type="radio" 
-                         name="course_registration_${details.course_code}" 
-                         value="register_${index}"
-                         onchange="handleRegistrationChange('${
-                           details.course_code
-                         }', 'register', ${index})"
-                         style="transform: scale(1.2);">
-                </td>
-                <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
-                  <input type="radio" 
-                         name="course_registration_${details.course_code}" 
-                         value="delete_${index}"
-                         onchange="handleRegistrationChange('${
-                           details.course_code
-                         }', 'delete', ${index})"
-                         style="transform: scale(1.2);">
-                </td>
-              </tr>
-            `
-              )
-              .join("")}
-          </tbody>
-        </table>
-        
-        <div style="margin-top: 15px; color: #666; font-size: 14px;">
-          <strong>Course Type:</strong> 
-          T = Theory Only | P = Lab Only | TEL = Theory Embedded Lab<br>
-          <strong>Available Seats:</strong> Based on venue capacity
+        <h5 style="margin-bottom: 15px; color: #007bff;">Registration</h5>
+        <div style="text-align: center; color: #666; padding: 20px;">
+          No slot offerings available for this course in the selected semester.
         </div>
       </div>
     `;
+  }
+
+  return `
+    <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd;">
+      <h5 style="margin-bottom: 15px; color: #007bff;">Registration</h5>
+      
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #28a745; color: white;">
+            <th style="padding: 12px; text-align: left;">Course Code</th>
+            <th style="padding: 12px; text-align: left;">Course Title</th>
+            <th style="padding: 12px; text-align: center;">Course Type</th>
+            <th style="padding: 12px; text-align: left;">Slots Offered</th>
+            <th style="padding: 12px; text-align: left;">Venue</th>
+            <th style="padding: 12px; text-align: left;">Faculty Name</th>
+            <th style="padding: 12px; text-align: center;">Available Seats</th>
+            <th style="padding: 12px; text-align: center; width: 100px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${details.registration_entries
+            .map(
+              (entry, index) => `
+            <tr style="border-bottom: 1px solid #ddd;" id="offering-row-${index}">
+              <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">${
+                details.course_code
+              }</td>
+              <td style="padding: 12px; border: 1px solid #ddd;">${
+                details.course_name
+              }</td>
+              <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
+                <span style="background: ${getEntryTypeColor(entry.type)}; 
+                             color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                  ${entry.type.toUpperCase()}
+                </span>
+              </td>
+              <td style="padding: 12px; border: 1px solid #ddd; text-align: left;">
+                <div style="font-weight: bold; color: #007bff; margin-bottom: 6px;">
+                  ${formatComponentName(entry)}
+                </div>
+                <div style="font-size: 13px; color: #333; line-height: 1.4;">
+                  ${formatRegistrationSlotDetails(entry)}
+                </div>
+              </td>
+              <td style="padding: 12px; border: 1px solid #ddd;">
+                <span style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px; font-weight: bold;">
+                  ${entry.venue}
+                </span>
+              </td>
+              <td style="padding: 12px; border: 1px solid #ddd;">${
+                entry.faculty_name
+              }</td>
+              <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
+                <span style="color: ${
+                  entry.available_seats > 10
+                    ? "#28a745"
+                    : entry.available_seats > 5
+                    ? "#ffc107"
+                    : "#dc3545"
+                }; 
+                             font-weight: bold;">
+                  ${entry.available_seats}
+                </span>
+              </td>
+              <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <button onclick="handleCourseRegistration('${
+                    details.course_code
+                  }', ${index}, 'register')"
+                          style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;"
+                          onmouseover="this.style.background='#218838'"
+                          onmouseout="this.style.background='#28a745'">
+                    REGISTER
+                  </button>
+                  <button onclick="handleCourseRegistration('${
+                    details.course_code
+                  }', ${index}, 'delete')"
+                          style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;"
+                          onmouseover="this.style.background='#c82333'"
+                          onmouseout="this.style.background='#dc3545'">
+                    DELETE
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
-// New function to handle registration/delete radio button changes
-function handleRegistrationChange(courseCode, action, index) {
+// Get color for entry type
+function getEntryTypeColor(type) {
+  switch (type) {
+    case "theory":
+      return "#007bff";
+    case "lab":
+      return "#17a2b8";
+    default:
+      return "#6c757d";
+  }
+}
+
+// Enhanced function to handle course registration/deletion with confirmation
+function handleCourseRegistration(courseCode, offeringIndex, action) {
   console.log(
-    `📝 ${action.toUpperCase()} selected for course: ${courseCode}, offering index: ${index}`
+    `🎯 ${action.toUpperCase()} action for course: ${courseCode}, offering: ${offeringIndex}`
   );
 
-  // Here you can add logic to handle the registration/deletion
-  // For now, just show a confirmation
+  // Get offering row for visual feedback
+  const offeringRow = document.getElementById(`offering-row-${offeringIndex}`);
+
+  // Show confirmation dialog
   const actionText = action === "register" ? "register for" : "delete from";
-  showAlert(
-    `You selected to ${actionText} ${courseCode} (Option ${index + 1})`,
-    "info"
+  const actionColor = action === "register" ? "#28a745" : "#dc3545";
+  const actionIcon = action === "register" ? "✅" : "❌";
+
+  const confirmed = confirm(
+    `${actionIcon} Are you sure you want to ${actionText} this course offering?\n\nCourse: ${courseCode}\nOffering: ${
+      offeringIndex + 1
+    }`
   );
+
+  if (confirmed) {
+    // Add visual feedback
+    if (offeringRow) {
+      offeringRow.style.backgroundColor =
+        action === "register" ? "#d4edda" : "#f8d7da";
+      offeringRow.style.borderLeft = `4px solid ${actionColor}`;
+
+      // Reset visual feedback after 2 seconds
+      setTimeout(() => {
+        offeringRow.style.backgroundColor = "";
+        offeringRow.style.borderLeft = "";
+      }, 2000);
+    }
+
+    // Show success message
+    showAlert(
+      `${actionIcon} Successfully ${
+        action === "register" ? "registered for" : "deleted from"
+      } ${courseCode} (Offering ${offeringIndex + 1})`,
+      action === "register" ? "success" : "warning"
+    );
+
+    // TODO: Here you would implement the actual API call to register/delete
+    // For example:
+    // await registerForCourse(courseCode, offeringIndex);
+
+    console.log(`✅ ${action.toUpperCase()} completed for ${courseCode}`);
+  } else {
+    console.log(`❌ ${action.toUpperCase()} cancelled for ${courseCode}`);
+  }
 }
 
 // Show alert message
@@ -530,7 +607,7 @@ function showAlert(message, type = "info") {
   `;
 }
 
-// Make functions available globally
+// Make enhanced functions available globally
 window.initializeCourseRegistration = initializeCourseRegistration;
 window.selectCourse = selectCourse;
-window.handleRegistrationChange = handleRegistrationChange;
+window.handleCourseRegistration = handleCourseRegistration;
