@@ -52,10 +52,11 @@ exports.getCoursesForSemester = async (req, res) => {
   }
 };
 
-// Get course details (T-P-C structure)
+// Get course details with slot offerings (Enhanced for Phase 2)
 exports.getCourseDetails = async (req, res) => {
   try {
     const { course_code } = req.params;
+    const { slot_year, semester_type } = req.query;
 
     if (!course_code) {
       return res.status(400).json({
@@ -63,18 +64,89 @@ exports.getCourseDetails = async (req, res) => {
       });
     }
 
-    const result = await db.query(
+    // Get basic course details (T-P-C structure)
+    const courseResult = await db.query(
       `SELECT course_code, course_name, theory, practical, credits
-       FROM course 
-       WHERE course_code = $1`,
+         FROM course 
+         WHERE course_code = $1`,
       [course_code]
     );
 
-    if (result.rows.length === 0) {
+    if (courseResult.rows.length === 0) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    res.status(200).json(result.rows[0]);
+    const courseDetails = courseResult.rows[0];
+
+    // Calculate course type
+    const theory = parseInt(courseDetails.theory);
+    const practical = parseInt(courseDetails.practical);
+    let courseType;
+    if (theory > 0 && practical === 0) {
+      courseType = "T"; // Theory only
+    } else if (theory === 0 && practical > 0) {
+      courseType = "P"; // Lab only
+    } else if (theory > 0 && practical > 0) {
+      courseType = "TEL"; // Theory embedded Lab
+    } else {
+      courseType = "Unknown";
+    }
+
+    // Get slot offerings with faculty and venue details (only if semester info provided)
+    let slotOfferings = [];
+    if (slot_year && semester_type) {
+      const slotResult = await db.query(
+        `SELECT 
+             fa.slot_day,
+             fa.slot_name,
+             fa.slot_time,
+             fa.venue,
+             f.name as faculty_name,
+             v.capacity as available_seats,
+             v.seats as venue_seats
+           FROM faculty_allocation fa
+           JOIN faculty f ON fa.employee_id = f.employee_id
+           JOIN venue v ON fa.venue = v.venue
+           WHERE fa.course_code = $1 
+             AND fa.slot_year = $2 
+             AND fa.semester_type = $3
+           ORDER BY fa.slot_day, fa.slot_name`,
+        [course_code, slot_year, semester_type]
+      );
+
+      slotOfferings = slotResult.rows;
+    }
+
+    // Group slots by type (theory vs lab) for display
+    const theorySlots = slotOfferings.filter((slot) => {
+      // Theory slots: A1, A2, B1, B2, C1, C2, D1, D2, E1, E2, F1, F2, G1, G2, TA1, TA2, TB1, TB2
+      return !slot.slot_name.startsWith("L");
+    });
+
+    const labSlots = slotOfferings.filter((slot) => {
+      // Lab slots: L1, L2, L3, etc.
+      return slot.slot_name.startsWith("L");
+    });
+
+    // Prepare response data
+    const response = {
+      // Basic course info (for existing T-P-C table)
+      course_code: courseDetails.course_code,
+      course_name: courseDetails.course_name,
+      theory: courseDetails.theory,
+      practical: courseDetails.practical,
+      credits: courseDetails.credits,
+
+      // Enhanced info (for new Phase 2 table)
+      course_type: courseType,
+      slot_offerings: {
+        theory_slots: theorySlots,
+        lab_slots: labSlots,
+        all_slots: slotOfferings,
+      },
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     console.error("Get course details error:", error);
     res
