@@ -52,4 +52,10 @@ router.get(
   courseRegistrationController.getStudentRegistrationSummary
 );
 
+/// Get student slot timetable
+router.get(
+  "/student-timetable",
+  verifyToken,
+  courseRegistrationController.getStudentSlotTimetable
+);
 module.exports = router;
