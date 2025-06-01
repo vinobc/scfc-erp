@@ -309,3 +309,112 @@ body.authenticated.student-user #student-interface .nav-link {
 body.authenticated.student-user .container-fluid:first-of-type {
   display: none !important;
 }
+
+/* Fix for left navigation panel height */
+.sidebar,
+.student-sidebar,
+.navigation-panel,
+[class*="sidebar"],
+[class*="nav-panel"] {
+  min-height: 100vh !important;
+  height: 100vh !important;
+}
+
+/* Ensure the main container uses full viewport height */
+.main-container,
+.app-container,
+body {
+  min-height: 100vh;
+}
+
+/* Fix for responsive table container */
+.table-responsive {
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+/* Ensure table doesn't break layout */
+.table-responsive table {
+  min-width: 1000px;
+  white-space: nowrap;
+}
+
+/* Button text should not wrap */
+.table-responsive button {
+  white-space: nowrap;
+}
+
+/* Targeted fix for student sidebar height issue */
+
+/* Fix the main sidebar container */
+#student-sidebar.bg-dark.sidebar-fixed {
+  min-height: 100vh !important;
+  height: auto !important; /* Allow it to grow with content */
+  position: relative !important; /* Override any fixed positioning that might limit height */
+}
+
+/* Fix the sticky positioned child */
+#student-sidebar .position-sticky.sidebar-sticky {
+  position: relative !important; /* Remove sticky positioning that might cause height issues */
+  min-height: 100vh !important;
+  height: auto !important;
+}
+
+/* Ensure the sidebar column extends properly */
+.col-md-3.col-lg-2 {
+  min-height: 100vh !important;
+}
+
+/* Alternative approach: Use flexbox for the row container */
+.row.g-0 {
+  min-height: 100vh !important;
+  display: flex !important;
+}
+
+.row.g-0 .col-md-3.col-lg-2 {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.row.g-0 .col-md-9.col-lg-10 {
+  min-height: 100vh !important;
+}
+
+/* Ensure the main content area doesn't cause layout issues */
+.container-fluid {
+  min-height: 100vh !important;
+}
+
+/* Fix for authenticated student user body */
+body.authenticated.student-user {
+  min-height: 100vh !important;
+}
+
+/* Fix for responsive table container (keeping previous fix) */
+.table-responsive {
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.table-responsive table {
+  min-width: 1000px;
+  white-space: nowrap;
+}
+
+.table-responsive button {
+  white-space: nowrap;
+}
+
+/* Course registration content container */
+#student-course-registration-content {
+  padding: 20px;
+  min-height: calc(100vh - 100px);
+}
+
+/* Ensure content doesn't cause horizontal overflow */
+.course-registration-container {
+  max-width: 100%;
+  overflow-x: hidden;
+}

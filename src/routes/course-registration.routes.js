@@ -24,4 +24,11 @@ router.get(
   courseRegistrationController.getCourseDetails
 );
 
+// Get course offerings (slots, faculty, venues)
+router.get(
+  "/course-offerings/:course_code/:slot_year/:semester_type",
+  verifyToken,
+  courseRegistrationController.getCourseOfferings
+);
+
 module.exports = router;

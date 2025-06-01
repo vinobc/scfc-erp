@@ -297,10 +297,196 @@ async function selectCourse(courseCode) {
     }
 
     console.log(`✅ Course details loaded for ${courseCode}`);
+
+    // Phase 2: Load course offerings after showing course details
+    await loadCourseOfferings(courseCode);
   } catch (error) {
     console.error("Error loading course details:", error);
     showAlert(`Error loading course details: ${error.message}`, "danger");
   }
+}
+
+// Fetch and display course offerings
+async function loadCourseOfferings(courseCode) {
+  const semesterSelect = document.getElementById("working-semester-select");
+  if (!semesterSelect.value) {
+    console.error("No semester selected");
+    return;
+  }
+
+  const [year, type] = semesterSelect.value.split("|");
+
+  try {
+    console.log(
+      `🔍 Loading course offerings for ${courseCode} - ${year} ${type}`
+    );
+
+    const response = await fetch(
+      `${
+        window.API_URL
+      }/course-registration/course-offerings/${encodeURIComponent(
+        courseCode
+      )}/${encodeURIComponent(year)}/${encodeURIComponent(type)}`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status}: Failed to load course offerings`
+      );
+    }
+
+    const data = await response.json();
+    displayCourseOfferings(data);
+  } catch (error) {
+    console.error("Error loading course offerings:", error);
+    showAlert(`Error loading course offerings: ${error.message}`, "danger");
+  }
+}
+
+// Display course offerings table
+function displayCourseOfferings(data) {
+  const detailsContent = document.getElementById("working-details-content");
+  if (!detailsContent) {
+    console.error("Details content div not found");
+    return;
+  }
+
+  const { course_info, offerings } = data;
+
+  // Create course offerings table with responsive container
+  const offeringsTable = `
+    <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-top: 20px;">
+      <h5 style="color: #007bff; margin-bottom: 15px;">📋 Step 4: Registration</h5>
+      
+      <!-- Responsive table container -->
+      <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 4px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px; min-width: 1000px;">
+          <thead>
+            <tr style="background: #28a745; color: white;">
+              <th style="padding: 10px; text-align: left; border: 1px solid #ddd; min-width: 100px;">Course Code</th>
+              <th style="padding: 10px; text-align: left; border: 1px solid #ddd; min-width: 150px;">Course Title</th>
+              <th style="padding: 10px; text-align: center; border: 1px solid #ddd; min-width: 80px;">Course Type</th>
+              <th style="padding: 10px; text-align: center; border: 1px solid #ddd; min-width: 150px;">Slots Offered</th>
+              <th style="padding: 10px; text-align: center; border: 1px solid #ddd; min-width: 80px;">Venue</th>
+              <th style="padding: 10px; text-align: left; border: 1px solid #ddd; min-width: 150px;">Faculty Name</th>
+              <th style="padding: 10px; text-align: center; border: 1px solid #ddd; min-width: 80px;">Available Seats</th>
+              <th style="padding: 10px; text-align: center; border: 1px solid #ddd; min-width: 80px;">Register</th>
+              <th style="padding: 10px; text-align: center; border: 1px solid #ddd; min-width: 80px;">Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${offerings
+              .map(
+                (offering, index) => `
+              <tr style="background: ${index % 2 === 0 ? "#f8f9fa" : "white"};">
+                <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${
+                  offering.course_code
+                }</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${
+                  offering.course_title
+                }</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
+                  <span style="
+                    background: ${
+                      offering.course_type === "T"
+                        ? "#007bff"
+                        : offering.course_type === "P"
+                        ? "#28a745"
+                        : "#ffc107"
+                    }; 
+                    color: ${
+                      offering.course_type === "TEL" ? "#000" : "white"
+                    }; 
+                    padding: 4px 8px; 
+                    border-radius: 4px; 
+                    font-weight: bold; 
+                    font-size: 12px;
+                  ">
+                    ${offering.course_type}
+                  </span>
+                </td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
+                  ${offering.slots_offered}
+                </td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
+                  ${offering.venue}
+                </td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${
+                  offering.faculty_name
+                }</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #28a745;">
+                  ${offering.available_seats}
+                </td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
+                  <button 
+                    onclick="registerCourseOffering('${
+                      offering.course_code
+                    }', '${offering.slots_offered}', '${offering.course_type}')"
+                    style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;"
+                    onmouseover="this.style.background='#218838'"
+                    onmouseout="this.style.background='#28a745'">
+                    Register
+                  </button>
+                </td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
+                  <button 
+                    onclick="deleteCourseOffering('${offering.course_code}', '${
+                  offering.slots_offered
+                }', '${offering.course_type}')"
+                    style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;"
+                    onmouseover="this.style.background='#c82333'"
+                    onmouseout="this.style.background='#dc3545'">
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+      
+      <div style="margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 4px; font-size: 13px; color: #666;">
+        <strong>Legend:</strong> 
+        <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 3px; margin-left: 10px;">T</span> Theory Only | 
+        <span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 3px; margin-left: 5px;">P</span> Practical/Lab Only
+        <br><br>
+        📍 <strong>Total Offerings:</strong> ${
+          offerings.length
+        } option(s) available for this course
+        <br><small style="color: #999; font-style: italic;">💡 Tip: Scroll horizontally if table extends beyond screen width</small>
+      </div>
+    </div>
+  `;
+
+  // Add the offerings table to existing content
+  const existingContent = detailsContent.innerHTML;
+  detailsContent.innerHTML = existingContent + offeringsTable;
+
+  console.log(
+    `✅ Displayed ${offerings.length} course offerings for ${course_info.course_code}`
+  );
+}
+
+// Placeholder functions for Register/Delete buttons (Phase 3)
+function registerCourseOffering(courseCode, slotOffered, courseType) {
+  console.log(`📝 Register: ${courseCode} - ${slotOffered} (${courseType})`);
+  showAlert(
+    `Register functionality will be implemented in Phase 3. Selected: ${courseCode} - ${slotOffered} (${courseType})`,
+    "info"
+  );
+}
+
+function deleteCourseOffering(courseCode, slotOffered, courseType) {
+  console.log(`🗑️ Delete: ${courseCode} - ${slotOffered} (${courseType})`);
+  showAlert(
+    `Delete functionality will be implemented in Phase 3. Selected: ${courseCode} - ${slotOffered} (${courseType})`,
+    "info"
+  );
 }
 
 // Show alert message
@@ -322,3 +508,6 @@ function showAlert(message, type = "info") {
 // Make functions available globally
 window.initializeCourseRegistration = initializeCourseRegistration;
 window.selectCourse = selectCourse;
+window.loadCourseOfferings = loadCourseOfferings;
+window.registerCourseOffering = registerCourseOffering;
+window.deleteCourseOffering = deleteCourseOffering;
