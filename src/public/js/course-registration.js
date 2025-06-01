@@ -21,11 +21,59 @@ function replaceWithWorkingCourseRegistration() {
     console.error("Course registration content not found");
     return;
   }
+  // Force remove spacing from all parent containers
+  function removeParentSpacing() {
+    const parents = [
+      document.body,
+      document.querySelector(".main-content"),
+      document.querySelector("#content"),
+      document.querySelector(".container-fluid"),
+      document.querySelector(".student-page"),
+      document.querySelector(".col-md-9"), // Target Bootstrap column
+      document.querySelector(".col-lg-10"), // Target Bootstrap column
+      courseRegistrationContent.parentElement,
+      courseRegistrationContent.parentElement?.parentElement,
+      courseRegistrationContent.parentElement?.parentElement?.parentElement,
+    ];
+
+    parents.forEach((parent) => {
+      if (parent) {
+        parent.style.paddingLeft = "0px !important";
+        parent.style.marginLeft = "0px !important";
+        parent.style.paddingRight = "15px"; // Keep some right padding
+        // Specifically target Bootstrap column padding
+        if (
+          parent.classList.contains("col-md-9") ||
+          parent.classList.contains("col-lg-10")
+        ) {
+          parent.style.paddingLeft = "0px !important";
+          parent.style.paddingRight = "15px !important";
+        }
+        console.log(
+          "Removed spacing from:",
+          parent.className || parent.tagName
+        );
+      }
+    });
+
+    // Also try to find and modify the column that contains our content
+    const columnParent = courseRegistrationContent.closest(
+      ".col-md-9, .col-lg-10"
+    );
+    if (columnParent) {
+      columnParent.style.paddingLeft = "0px !important";
+      columnParent.style.paddingRight = "15px !important";
+      console.log("Found and modified column parent:", columnParent.className);
+    }
+  }
+
+  // Call it before replacing content
+  removeParentSpacing();
 
   // Replace with working content
   courseRegistrationContent.innerHTML = `
-    <div style="padding: 20px; background: white; min-height: 80vh;">
-      <div style="max-width: 900px; margin: 0 auto;">
+    <div style="padding: 0; background: white; min-height: 80vh; margin: 0; position: relative; left: -20px;">
+      <div style="max-width: none; margin: 0; padding: 20px;">
         <h2 style="color: #007bff; margin-bottom: 30px;">
           📚 Course Registration
         </h2>
@@ -699,6 +747,9 @@ async function registerCourseOffering(courseCode, slotOffered, courseType) {
     // Refresh credit summary
     await loadCreditSummary();
 
+    // Refresh timetable if it's currently displayed
+    await refreshTimetableIfVisible();
+
     // Refresh the course offerings to show updated state
     await loadCourseOfferings(courseCode);
   } catch (error) {
@@ -768,6 +819,9 @@ async function deleteCourseOffering(courseCode, slotOffered, courseType) {
         `(${result.deleted_registrations} registration(s) removed)`,
       "success"
     );
+
+    // Refresh timetable if it's currently displayed
+    await refreshTimetableIfVisible();
 
     // Refresh the course offerings to show updated state
     await loadCourseOfferings(courseCode);
@@ -1016,6 +1070,9 @@ async function registerTELCourse(courseCode) {
     // Refresh credit summary
     await loadCreditSummary();
 
+    // Refresh timetable if it's currently displayed
+    await refreshTimetableIfVisible();
+
     // Refresh the course offerings to show updated state
     await loadCourseOfferings(courseCode);
   } catch (error) {
@@ -1076,7 +1133,7 @@ function displayCreditSummary(summary) {
       : "#28a745";
 
   creditContainer.innerHTML = `
-    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid ${progressColor};">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 0 20px 20px 0; border-left: 5px solid ${progressColor};">
       <h5 style="color: #007bff; margin-bottom: 15px;">📊 Registration Summary - ${
         semester_info.slot_year
       } ${semester_info.semester_type}</h5>
@@ -1151,8 +1208,434 @@ function displayCreditSummary(summary) {
       `
           : ""
       }
+
+      ${
+        registered_courses.length > 0
+          ? `
+        <div style="margin-top: 15px; text-align: center;">
+          <button id="view-student-timetable-btn" 
+                  style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 4px; 
+                         cursor: pointer; font-size: 14px; font-weight: bold;"
+                  onclick="toggleStudentTimetable()">
+            📅 View my Slot TimeTable
+          </button>
+        </div>
+      `
+          : ""
+      }
+
+      <!-- Timetable Container (initially hidden) -->
+      <div id="student-timetable-container" style="display: none; margin-top: 20px;">
+        <div id="student-timetable-content"></div>
+      </div>
     </div>
   `;
+}
+
+// Helper function to refresh timetable if it's currently visible
+async function refreshTimetableIfVisible() {
+  const container = document.getElementById("student-timetable-container");
+  if (container && container.style.display !== "none") {
+    console.log("🔄 Refreshing visible timetable...");
+    await loadStudentTimetable();
+  }
+}
+
+// Toggle student timetable display
+async function toggleStudentTimetable() {
+  const button = document.getElementById("view-student-timetable-btn");
+  const container = document.getElementById("student-timetable-container");
+
+  if (!container) {
+    console.error("Timetable container not found");
+    return;
+  }
+
+  if (container.style.display === "none") {
+    // Show timetable
+    button.textContent = "🔄 Loading Timetable...";
+    button.disabled = true;
+
+    await loadStudentTimetable();
+
+    container.style.display = "block";
+    button.textContent = "📅 Hide my Slot TimeTable";
+    button.disabled = false;
+  } else {
+    // Hide timetable
+    container.style.display = "none";
+    button.textContent = "📅 View my Slot TimeTable";
+  }
+}
+
+// Load student timetable data
+async function loadStudentTimetable() {
+  const semesterSelect = document.getElementById("working-semester-select");
+  if (!semesterSelect.value) {
+    showAlert("Please select a semester first", "warning");
+    return;
+  }
+
+  const [year, type] = semesterSelect.value.split("|");
+
+  try {
+    const response = await fetch(
+      `${
+        window.API_URL
+      }/course-registration/student-timetable?slot_year=${encodeURIComponent(
+        year
+      )}&semester_type=${encodeURIComponent(type)}`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to load student timetable: ${response.status}`);
+    }
+
+    const data = await response.json();
+    generateStudentTimetable(data.student, data.registrations, year, type);
+  } catch (error) {
+    console.error("Error loading student timetable:", error);
+    showAlert(`Error loading timetable: ${error.message}`, "danger");
+  }
+}
+
+// Generate student timetable (based on faculty timetable logic)
+function generateStudentTimetable(student, registrations, year, semester) {
+  const contentDiv = document.getElementById("student-timetable-content");
+  if (!contentDiv) {
+    console.error("Timetable content div not found");
+    return;
+  }
+
+  // Set title
+  contentDiv.innerHTML = `
+    <h6 style="color: #007bff; margin-bottom: 15px;">📅 My Slot Timetable - ${student.student_name} (${student.enrollment_number})</h6>
+    <div id="student-timetable-loading" style="text-align: center; padding: 20px;">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p>Loading timetable structure...</p>
+    </div>
+  `;
+
+  // Fetch slots to build timetable structure
+  fetch(`${window.API_URL}/slots/${year}/${semester}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  })
+    .then((response) => response.json())
+    .then((slots) => {
+      console.log("🔍 Registrations received:", registrations);
+      console.log(
+        "🔍 Sample registration slot_name:",
+        registrations[0]?.slot_name
+      );
+
+      // Create allocation map from registrations
+      const allocationMap = {};
+      registrations.forEach((registration) => {
+        if (registration.slot_day && registration.slot_time) {
+          // Handle compound slots (like "L9+L10,L29+L30")
+          if (registration.slot_name.includes(",")) {
+            // Split compound slot and create entries for each part
+            const individualSlots = registration.slot_name
+              .split(",")
+              .map((s) => s.trim());
+            console.log(
+              "🔍 Splitting compound slot:",
+              registration.slot_name,
+              "into:",
+              individualSlots
+            );
+            individualSlots.forEach((slot) => {
+              const key = `${registration.slot_day}-${slot}`;
+              allocationMap[key] = registration;
+              console.log("🔍 Added allocation map entry:", key);
+            });
+          } else {
+            // Regular single slot
+            const key = `${registration.slot_day}-${registration.slot_name}`;
+            allocationMap[key] = registration;
+            console.log("🔍 Added allocation map entry:", key);
+          }
+        }
+      });
+
+      console.log("🔍 Final allocation map:", allocationMap);
+
+      // Rest of the function continues...
+
+      // Use same timetable structure as faculty timetable
+      const days = ["MON", "TUE", "WED", "THU", "FRI"];
+      const timeSlots = [
+        "9.00-9.50",
+        "9.55-10.45",
+        "10.50-11.40",
+        "11.45-12.35",
+        "12.35-1.15",
+        "1.15–2.05",
+        "2.10-3.00",
+        "3.05–3.55",
+        "4.00–4.50",
+      ];
+
+      // Create slot map
+      const slotMap = {};
+      days.forEach((day) => {
+        slotMap[day] = {};
+      });
+
+      slots.forEach((slot) => {
+        if (!slotMap[slot.slot_day]) slotMap[slot.slot_day] = {};
+        const matchingTimeSlot = timeSlots.find((ts) =>
+          slot.slot_time.includes(ts)
+        );
+        if (matchingTimeSlot) {
+          slotMap[slot.slot_day][matchingTimeSlot] = slot.slot_name;
+        }
+      });
+
+      // Generate timetable HTML
+      let tableHtml = `
+        <table class="table table-bordered" style="margin-bottom: 20px;">
+          <thead>
+            <tr class="table-primary">
+              <th></th>
+              <th colspan="4">Morning</th>
+              <th rowspan="2" class="align-middle">Lunch</th>
+              <th colspan="4">Afternoon</th>
+            </tr>
+            <tr class="table-primary">
+              <th>Day</th>
+              <th>9:00 - 9:50</th>
+              <th>9:55 - 10:45</th>
+              <th>10:50 - 11:40</th>
+              <th>11:45 - 12:35</th>
+              <th>1:15 - 2:05</th>
+              <th>2:10 - 3:00</th>
+              <th>3:05 - 3:55</th>
+              <th>4:00 - 4:50</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      // Generate theory and lab rows for each day
+      days.forEach((day) => {
+        // Theory row
+        let rowHtml = `<tr><td class="table-secondary"><strong>${day}</strong></td>`;
+
+        // Morning theory slots (0-3)
+        for (let i = 0; i < 4; i++) {
+          const timeSlot = timeSlots[i];
+          const slotName = slotMap[day][timeSlot] || "";
+          const allocation = allocationMap[`${day}-${slotName}`];
+
+          if (allocation) {
+            rowHtml += `<td class="text-center table-success" style="font-size: 12px;">
+              <strong>${slotName}</strong><br>
+              ${allocation.course_code}<br>
+              ${allocation.venue}<br>
+              ${allocation.faculty_name}
+            </td>`;
+          } else {
+            rowHtml += `<td class="text-center" style="color: #999;">${slotName}</td>`;
+          }
+        }
+
+        rowHtml += `<td class="table-secondary text-center">LUNCH</td>`;
+
+        // Afternoon theory slots (5-8)
+        for (let i = 5; i < 9; i++) {
+          const timeSlot = timeSlots[i];
+          const slotName = slotMap[day][timeSlot] || "";
+          const allocation = allocationMap[`${day}-${slotName}`];
+
+          if (allocation) {
+            rowHtml += `<td class="text-center table-success" style="font-size: 12px;">
+              <strong>${slotName}</strong><br>
+              ${allocation.course_code}<br>
+              ${allocation.venue}<br>
+              ${allocation.faculty_name}
+            </td>`;
+          } else {
+            rowHtml += `<td class="text-center" style="color: #999;">${slotName}</td>`;
+          }
+        }
+
+        rowHtml += "</tr>";
+        tableHtml += rowHtml;
+
+        // Lab row
+        let labRowHtml = `<tr><td class="table-warning">Lab</td>`;
+
+        // Lab slots pattern (same as faculty timetable)
+        const morningLab1 = `L${
+          day === "MON"
+            ? "1+L2"
+            : day === "TUE"
+            ? "5+L6"
+            : day === "WED"
+            ? "9+L10"
+            : day === "THU"
+            ? "13+L14"
+            : "17+L18"
+        }`;
+        const morningLab2 = `L${
+          day === "MON"
+            ? "3+L4"
+            : day === "TUE"
+            ? "7+L8"
+            : day === "WED"
+            ? "11+L12"
+            : day === "THU"
+            ? "15+L16"
+            : "19+L20"
+        }`;
+        const afternoonLab1 = `L${
+          day === "MON"
+            ? "21+L22"
+            : day === "TUE"
+            ? "25+L26"
+            : day === "WED"
+            ? "29+L30"
+            : day === "THU"
+            ? "33+L34"
+            : "37+L38"
+        }`;
+        const afternoonLab2 = `L${
+          day === "MON"
+            ? "23+L24"
+            : day === "TUE"
+            ? "27+L28"
+            : day === "WED"
+            ? "31+L32"
+            : day === "THU"
+            ? "35+L36"
+            : "39+L40"
+        }`;
+
+        // Morning lab slots
+        [morningLab1, morningLab2].forEach((labSlot) => {
+          const allocation = allocationMap[`${day}-${labSlot}`];
+          if (allocation) {
+            labRowHtml += `<td class="text-center table-warning" colspan="2" style="font-size: 12px;">
+      <strong>${labSlot}</strong><br>
+      ${allocation.course_code}<br>
+      ${allocation.venue || "TBD"}<br>
+      ${allocation.faculty_name || "TBD"}
+    </td>`;
+          } else {
+            labRowHtml += `<td class="text-center table-warning" colspan="2" style="color: #999;">${labSlot}</td>`;
+          }
+        });
+
+        labRowHtml += `<td class="table-secondary"></td>`;
+
+        // Afternoon lab slots
+        [afternoonLab1, afternoonLab2].forEach((labSlot) => {
+          const allocation = allocationMap[`${day}-${labSlot}`];
+          if (allocation) {
+            labRowHtml += `<td class="text-center table-warning" colspan="2" style="font-size: 12px;">
+      <strong>${labSlot}</strong><br>
+      ${allocation.course_code}<br>
+      ${allocation.venue || "TBD"}<br>
+      ${allocation.faculty_name || "TBD"}
+    </td>`;
+          } else {
+            labRowHtml += `<td class="text-center table-warning" colspan="2" style="color: #999;">${labSlot}</td>`;
+          }
+        });
+
+        labRowHtml += "</tr>";
+        tableHtml += labRowHtml;
+      });
+
+      tableHtml += "</tbody></table>";
+
+      // Generate summary table - group compound slots back together
+      const summaryMap = new Map();
+
+      registrations.forEach((reg) => {
+        const key = `${reg.course_code}-${reg.component_type}`;
+
+        if (!summaryMap.has(key)) {
+          summaryMap.set(key, {
+            ...reg,
+            slots: [reg.slot_name],
+          });
+        } else {
+          // Add slot to existing entry if not already present
+          const existing = summaryMap.get(key);
+          if (!existing.slots.includes(reg.slot_name)) {
+            existing.slots.push(reg.slot_name);
+          }
+        }
+      });
+
+      // Convert map to array and format slot names
+      const uniqueRegistrations = Array.from(summaryMap.values()).map(
+        (reg) => ({
+          ...reg,
+          slot_name: reg.slots.join(","), // Combine slots back: "L9+L10,L29+L30"
+        })
+      );
+      let summaryTable = `
+        <div class="mt-3">
+          <h6>Summary</h6>
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Sl. No.</th>
+                <th>Course Code</th>
+                <th>Course Title</th>
+                <th>Slot</th>
+                <th>Venue</th>
+                <th>Faculty</th>
+                <th>Component</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      uniqueRegistrations.forEach((reg, index) => {
+        summaryTable += `
+          <tr>
+            <td>${index + 1}.</td>
+            <td>${reg.course_code}</td>
+            <td>${reg.course_name}</td>
+            <td>${reg.slot_name}</td>
+            <td>${reg.venue}</td>
+            <td>${reg.faculty_name}</td>
+            <td><span class="badge ${
+              reg.component_type === "T"
+                ? "bg-primary"
+                : reg.component_type === "P"
+                ? "bg-success"
+                : "bg-secondary"
+            }">${reg.component_type}</span></td>
+          </tr>
+        `;
+      });
+
+      summaryTable += "</tbody></table></div>";
+
+      // Update content
+      contentDiv.innerHTML = `
+        <h6 style="color: #007bff; margin-bottom: 15px;">📅 My Slot Timetable - ${student.student_name} (${student.enrollment_number})</h6>
+        ${tableHtml}
+        ${summaryTable}
+      `;
+    })
+    .catch((error) => {
+      console.error("Error generating timetable:", error);
+      contentDiv.innerHTML = `
+        <h6 style="color: #007bff; margin-bottom: 15px;">📅 My Slot Timetable</h6>
+        <div class="alert alert-danger">Error loading timetable. Please try again.</div>
+      `;
+    });
 }
 
 // Make functions available globally
@@ -1164,3 +1647,6 @@ window.deleteCourseOffering = deleteCourseOffering;
 window.updateTELSelection = updateTELSelection;
 window.registerTELCourse = registerTELCourse;
 window.loadCreditSummary = loadCreditSummary;
+window.toggleStudentTimetable = toggleStudentTimetable;
+window.loadStudentTimetable = loadStudentTimetable;
+window.refreshTimetableIfVisible = refreshTimetableIfVisible;

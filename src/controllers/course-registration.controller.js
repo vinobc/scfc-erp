@@ -377,6 +377,8 @@ exports.getCourseOfferings = async (req, res) => {
 
 // Helper function to get student details from user_id
 async function getStudentByUserId(userId) {
+  console.log(`🔍 Looking for student with user_id: ${userId}`);
+
   const result = await db.query(
     `SELECT enrollment_no, student_name, program_name, year_admitted 
      FROM student 
@@ -384,7 +386,15 @@ async function getStudentByUserId(userId) {
     [userId]
   );
 
+  console.log(`🔍 Student query result:`, result.rows);
+
   if (result.rows.length === 0) {
+    // Additional debug: show what user_ids exist in student table
+    const allStudents = await db.query(
+      `SELECT user_id, enrollment_no, student_name FROM student ORDER BY user_id LIMIT 5`
+    );
+    console.log(`🔍 Sample students in database:`, allStudents.rows);
+
     throw new Error("Student record not found for this user");
   }
 
@@ -837,6 +847,130 @@ exports.getStudentRegistrationSummary = async (req, res) => {
     console.error("Get registration summary error:", error);
     res.status(500).json({
       message: "Server error while fetching registration summary",
+      error: error.message,
+    });
+  }
+};
+
+// Get student slot timetable
+exports.getStudentSlotTimetable = async (req, res) => {
+  try {
+    const { slot_year, semester_type } = req.query;
+    const userId = req.userId;
+
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({
+        message: "slot_year and semester_type are required",
+      });
+    }
+
+    // Get student details
+    const student = await getStudentByUserId(userId);
+
+    console.log(
+      `🔍 Looking for registrations for student: ${student.enrollment_number}`
+    );
+
+    // Get raw student registrations first
+    const rawRegistrations = await db.query(
+      `SELECT * FROM student_registrations 
+       WHERE enrollment_number = $1 AND slot_year = $2 AND semester_type = $3
+       ORDER BY course_code, component_type`,
+      [student.enrollment_number, slot_year, semester_type]
+    );
+
+    console.log(`🔍 Raw student registrations:`, rawRegistrations.rows);
+
+    // Process each registration to handle compound slots
+    const processedRegistrations = [];
+
+    for (const registration of rawRegistrations.rows) {
+      if (registration.slot_name.includes(",")) {
+        // Handle compound slots like "L9+L10,L29+L30"
+        const individualSlots = registration.slot_name
+          .split(",")
+          .map((s) => s.trim());
+        console.log(
+          `🔍 Processing compound slot: ${
+            registration.slot_name
+          } -> ${individualSlots.join(", ")}`
+        );
+
+        for (const individualSlot of individualSlots) {
+          // Get slot details for each individual slot
+          const slotDetails = await db.query(
+            `SELECT slot_day, slot_time FROM slot 
+             WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+            [individualSlot, slot_year, semester_type]
+          );
+
+          if (slotDetails.rows.length > 0) {
+            // Create a separate entry for each individual slot
+            slotDetails.rows.forEach((slotDetail) => {
+              processedRegistrations.push({
+                ...registration,
+                slot_name: individualSlot,
+                slot_day: slotDetail.slot_day,
+                slot_time: slotDetail.slot_time,
+              });
+            });
+          } else {
+            console.log(`⚠️ No slot details found for: ${individualSlot}`);
+          }
+        }
+      } else {
+        // Handle regular single slots
+        const slotDetails = await db.query(
+          `SELECT slot_day, slot_time FROM slot 
+           WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+          [registration.slot_name, slot_year, semester_type]
+        );
+
+        if (slotDetails.rows.length > 0) {
+          slotDetails.rows.forEach((slotDetail) => {
+            processedRegistrations.push({
+              ...registration,
+              slot_day: slotDetail.slot_day,
+              slot_time: slotDetail.slot_time,
+            });
+          });
+        } else {
+          console.log(
+            `⚠️ No slot details found for: ${registration.slot_name}`
+          );
+        }
+      }
+    }
+
+    console.log(`🔍 Processed registrations:`, processedRegistrations.length);
+    console.log(
+      `🔍 Lab registrations with slot details:`,
+      processedRegistrations.filter((r) => r.slot_name.startsWith("L"))
+    );
+
+    if (processedRegistrations.length === 0) {
+      return res.status(404).json({
+        message: "No course registrations found for this semester",
+      });
+    }
+
+    res.status(200).json({
+      student: {
+        enrollment_number: student.enrollment_number,
+        student_name: student.student_name,
+        program_code: student.program_code,
+        year_admitted: student.year_admitted,
+      },
+      semester_info: {
+        slot_year,
+        semester_type,
+      },
+      registrations: processedRegistrations,
+    });
+  } catch (error) {
+    console.error("Get student slot timetable error:", error);
+    res.status(500).json({
+      message: "Server error while fetching student timetable",
       error: error.message,
     });
   }
