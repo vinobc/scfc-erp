@@ -31,4 +31,25 @@ router.get(
   courseRegistrationController.getCourseOfferings
 );
 
+// Register course offering
+router.post(
+  "/register",
+  verifyToken,
+  courseRegistrationController.registerCourseOffering
+);
+
+// Delete course offering
+router.delete(
+  "/delete",
+  verifyToken,
+  courseRegistrationController.deleteCourseOffering
+);
+
+// Get student registration summary
+router.get(
+  "/summary",
+  verifyToken,
+  courseRegistrationController.getStudentRegistrationSummary
+);
+
 module.exports = router;
