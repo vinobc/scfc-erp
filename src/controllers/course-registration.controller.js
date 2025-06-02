@@ -83,28 +83,54 @@ exports.getCourseDetails = async (req, res) => {
   }
 };
 
-// Helper function to normalize slot order (morning slots first)
+// Enhanced helper function to normalize slot order (handles both theory and lab slots)
 function normalizeSlotOrder(slotName, linkedSlots) {
   const allSlots = [slotName, ...(linkedSlots || [])];
 
-  // Separate morning and afternoon slots
-  const morningSlots = allSlots.filter((slot) => {
-    // Morning slots are L1-L20 range (e.g., L1+L2, L3+L4, etc.)
-    const firstSlotNum = parseInt(slot.match(/L(\d+)/)[1]);
-    return firstSlotNum <= 20;
-  });
+  // Handle theory slots (A, B, C, D, E, F, G, H, etc.)
+  const theorySlots = allSlots.filter((slot) => !slot.startsWith("L"));
 
-  const afternoonSlots = allSlots.filter((slot) => {
-    // Afternoon slots are L21-L40 range (e.g., L21+L22, L23+L24, etc.)
-    const firstSlotNum = parseInt(slot.match(/L(\d+)/)[1]);
-    return firstSlotNum > 20;
-  });
+  // Handle lab slots (L1+L2, L3+L4, etc.)
+  const labSlots = allSlots.filter((slot) => slot.startsWith("L"));
 
-  // Sort each group and combine (morning first, then afternoon)
-  const sortedMorning = morningSlots.sort();
-  const sortedAfternoon = afternoonSlots.sort();
+  if (theorySlots.length > 0) {
+    // For theory slots, sort alphabetically (E comes before F)
+    const sortedTheory = theorySlots.sort();
+    console.log(
+      `🔍 Normalized theory slots: ${allSlots.join(",")} → ${sortedTheory.join(
+        ","
+      )}`
+    );
+    return sortedTheory.join(",");
+  } else if (labSlots.length > 0) {
+    // For lab slots, separate morning and afternoon then sort
+    const morningSlots = labSlots.filter((slot) => {
+      const match = slot.match(/L(\d+)/);
+      if (!match) return false;
+      const firstSlotNum = parseInt(match[1]);
+      return firstSlotNum <= 20;
+    });
 
-  return [...sortedMorning, ...sortedAfternoon].join(",");
+    const afternoonSlots = labSlots.filter((slot) => {
+      const match = slot.match(/L(\d+)/);
+      if (!match) return false;
+      const firstSlotNum = parseInt(match[1]);
+      return firstSlotNum > 20;
+    });
+
+    // Sort each group and combine (morning first, then afternoon)
+    const sortedMorning = morningSlots.sort();
+    const sortedAfternoon = afternoonSlots.sort();
+    const result = [...sortedMorning, ...sortedAfternoon].join(",");
+
+    console.log(`🔍 Normalized lab slots: ${allSlots.join(",")} → ${result}`);
+    return result;
+  } else {
+    // Fallback: just sort everything
+    const result = allSlots.sort().join(",");
+    console.log(`🔍 Normalized mixed slots: ${allSlots.join(",")} → ${result}`);
+    return result;
+  }
 }
 
 // Get course offerings (slots, faculty, venues) for selected course
@@ -265,38 +291,115 @@ exports.getCourseOfferings = async (req, res) => {
         });
       }
     } else if (courseType === "T") {
-      // For Theory-only courses, show all theory slot options
-      const theoryGroups = {};
+      // For Theory-only courses, handle both 2-credit and 4-credit courses
+      console.log(
+        `Processing Theory-only course: ${courseData.course_code} (T=${theory}, C=${courseData.credits})`
+      );
 
-      allocationsResult.rows.forEach((row) => {
-        const key = `${row.slot_name}-${row.venue}-${row.faculty_name}`;
-        if (!theoryGroups[key]) {
-          theoryGroups[key] = {
-            slot_name: row.slot_name,
-            venue: row.venue,
-            faculty_name: row.faculty_name,
-            available_seats: row.available_seats,
-            schedule: [],
-          };
-        }
-        theoryGroups[key].schedule.push({
-          day: row.slot_day,
-          time: row.slot_time,
-        });
-      });
+      if (courseData.credits === 4) {
+        // 4-credit theory courses need slot combination (E+F, G+H)
+        console.log("4-credit theory course detected, using slot combinations");
 
-      Object.values(theoryGroups).forEach((group) => {
-        offerings.push({
-          course_code: courseData.course_code,
-          course_title: courseData.course_name,
-          course_type: "T",
-          slots_offered: group.slot_name,
-          venue: group.venue,
-          faculty_name: group.faculty_name,
-          available_seats: group.available_seats,
-          schedule: group.schedule,
+        const theoryConfigs = await db.query(
+          `SELECT slot_name, linked_slots
+           FROM semester_slot_config 
+           WHERE slot_year = $1 
+             AND semester_type = $2 
+             AND course_theory = 4 
+             AND course_practical = 0`,
+          [slot_year, semester_type]
+        );
+
+        // Use Set to track normalized slot combinations and prevent duplicates
+        const seenSlotCombinations = new Set();
+
+        theoryConfigs.rows.forEach((config) => {
+          // Normalize slot order to prevent duplicates (E+F same as F+E)
+          const normalizedSlots = normalizeSlotOrder(
+            config.slot_name,
+            config.linked_slots
+          );
+
+          // Skip if we've already seen this combination
+          if (seenSlotCombinations.has(normalizedSlots)) {
+            return;
+          }
+          seenSlotCombinations.add(normalizedSlots);
+
+          // Check if any allocation matches this configuration
+          const slotsInConfig = [
+            config.slot_name,
+            ...(config.linked_slots || []),
+          ];
+          const matchingAllocation = allocationsResult.rows.find((alloc) =>
+            slotsInConfig.includes(alloc.slot_name)
+          );
+
+          if (matchingAllocation) {
+            // Build combined schedule from all slots in the combination
+            const combinedSchedule = [];
+            slotsInConfig.forEach((slotName) => {
+              const slotAllocations = allocationsResult.rows.filter(
+                (alloc) => alloc.slot_name === slotName
+              );
+              slotAllocations.forEach((alloc) => {
+                combinedSchedule.push({
+                  day: alloc.slot_day,
+                  time: alloc.slot_time,
+                });
+              });
+            });
+
+            offerings.push({
+              course_code: courseData.course_code,
+              course_title: courseData.course_name,
+              course_type: "T",
+              slots_offered: normalizedSlots,
+              venue: matchingAllocation.venue,
+              faculty_name: matchingAllocation.faculty_name,
+              available_seats: matchingAllocation.available_seats,
+              schedule: combinedSchedule,
+            });
+          }
         });
-      });
+      } else {
+        // 2-credit and 3-credit theory courses - show individual slots
+        console.log(
+          "2/3-credit theory course detected, using individual slots"
+        );
+
+        const theoryGroups = {};
+
+        allocationsResult.rows.forEach((row) => {
+          const key = `${row.slot_name}-${row.venue}-${row.faculty_name}`;
+          if (!theoryGroups[key]) {
+            theoryGroups[key] = {
+              slot_name: row.slot_name,
+              venue: row.venue,
+              faculty_name: row.faculty_name,
+              available_seats: row.available_seats,
+              schedule: [],
+            };
+          }
+          theoryGroups[key].schedule.push({
+            day: row.slot_day,
+            time: row.slot_time,
+          });
+        });
+
+        Object.values(theoryGroups).forEach((group) => {
+          offerings.push({
+            course_code: courseData.course_code,
+            course_title: courseData.course_name,
+            course_type: "T",
+            slots_offered: group.slot_name,
+            venue: group.venue,
+            faculty_name: group.faculty_name,
+            available_seats: group.available_seats,
+            schedule: group.schedule,
+          });
+        });
+      }
     } else if (courseType === "P") {
       // For Practical-only courses, use semester_slot_config for proper grouping
       const practicalConfigs = await db.query(
