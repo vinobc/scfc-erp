@@ -963,7 +963,7 @@ function updateTELSelection() {
   }
 }
 
-// Register TEL Course (both components)
+// Fixed Register TEL Course (both components) with pre-validation
 async function registerTELCourse(courseCode) {
   const theorySelection = document.querySelector(
     'input[name="theory-selection"]:checked'
@@ -987,12 +987,48 @@ async function registerTELCourse(courseCode) {
 
     const [year, type] = semesterSelect.value.split("|");
 
-    console.log(`📝 Registering TEL course: ${courseCode}`);
+    console.log(`📝 Starting TEL course validation for: ${courseCode}`);
     console.log(
       `Theory: ${theorySelection.value}, Practical: ${practicalSelection.value}`
     );
 
-    // Register theory component
+    // Step 1: Pre-validate BOTH components before registering either
+    const preValidationData = {
+      course_code: courseCode,
+      slot_year: year,
+      semester_type: type,
+      theory_slot: theorySelection.value,
+      theory_venue: theorySelection.dataset.venue,
+      theory_faculty: theorySelection.dataset.faculty,
+      practical_slot: practicalSelection.value,
+      practical_venue: practicalSelection.dataset.venue,
+      practical_faculty: practicalSelection.dataset.faculty,
+    };
+
+    console.log("📤 Pre-validating TEL registration:", preValidationData);
+
+    // Call the new pre-validation endpoint
+    const preValidationResponse = await fetch(
+      `${window.API_URL}/course-registration/validate-tel`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(preValidationData),
+      }
+    );
+
+    const preValidationResult = await preValidationResponse.json();
+
+    if (!preValidationResponse.ok) {
+      throw new Error(`Validation failed: ${preValidationResult.message}`);
+    }
+
+    console.log("✅ Pre-validation passed, proceeding with registration");
+
+    // Step 2: Register theory component
     const theoryRegistration = {
       course_code: courseCode,
       slot_name: theorySelection.value,
@@ -1024,7 +1060,7 @@ async function registerTELCourse(courseCode) {
 
     console.log("✅ Theory component registered successfully");
 
-    // Register practical component
+    // Step 3: Register practical component
     const practicalRegistration = {
       course_code: courseCode,
       slot_name: practicalSelection.value,
@@ -1051,8 +1087,30 @@ async function registerTELCourse(courseCode) {
     const practicalResult = await practicalResponse.json();
 
     if (!practicalResponse.ok) {
-      // If practical registration fails, we should ideally rollback theory registration
-      // For now, just show the error
+      // If practical registration fails, rollback theory registration
+      console.log("❌ Practical registration failed, rolling back theory...");
+
+      try {
+        await fetch(`${window.API_URL}/course-registration/delete`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({
+            course_code: courseCode,
+            slot_year: year,
+            semester_type: type,
+          }),
+        });
+        console.log("✅ Theory registration rolled back successfully");
+      } catch (rollbackError) {
+        console.error(
+          "❌ Failed to rollback theory registration:",
+          rollbackError
+        );
+      }
+
       throw new Error(
         `Practical registration failed: ${practicalResult.message}`
       );
@@ -1067,13 +1125,10 @@ async function registerTELCourse(courseCode) {
         `Total Credits: ${theoryResult.registration.credits}`,
       "success"
     );
-    // Refresh credit summary
+
+    // Refresh displays
     await loadCreditSummary();
-
-    // Refresh timetable if it's currently displayed
     await refreshTimetableIfVisible();
-
-    // Refresh the course offerings to show updated state
     await loadCourseOfferings(courseCode);
   } catch (error) {
     console.error("TEL registration error:", error);
