@@ -58,4 +58,10 @@ router.get(
   verifyToken,
   courseRegistrationController.getStudentSlotTimetable
 );
+
+router.post(
+  "/validate-tel",
+  verifyToken,
+  courseRegistrationController.validateTELRegistration
+);
 module.exports = router;

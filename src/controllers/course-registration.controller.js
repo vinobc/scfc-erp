@@ -407,47 +407,216 @@ async function getStudentByUserId(userId) {
   };
 }
 
-// Helper function to check slot conflicts
+// Enhanced helper function to parse compound slot names
+function parseSlotNames(slotName) {
+  if (!slotName) return [];
+
+  // Handle compound slots like "L1+L2, L17+L18,L21+L22, L37+L38"
+  // Split by comma and clean up spaces
+  const individualSlots = slotName
+    .split(",")
+    .map((slot) => slot.trim())
+    .filter((slot) => slot.length > 0);
+
+  console.log(`🔍 Parsed slot "${slotName}" into:`, individualSlots);
+  return individualSlots;
+}
+
+// Enhanced helper function to check slot conflicts
 async function checkSlotConflicts(
   studentEnrollment,
   slotYear,
   semesterType,
   newSlotName
 ) {
+  console.log(`🔍 Checking conflicts for slot: "${newSlotName}"`);
+
+  // Parse the new slot name into individual slots
+  const newSlots = parseSlotNames(newSlotName);
+
   // Get all current registrations for the student in this semester
   const currentRegistrations = await db.query(
-    `SELECT slot_name FROM student_registrations 
+    `SELECT slot_name, course_code, component_type FROM student_registrations 
      WHERE enrollment_number = $1 
        AND slot_year = $2 
        AND semester_type = $3`,
     [studentEnrollment, slotYear, semesterType]
   );
 
-  // Get all conflicting slots for the new slot
-  const conflicts = await db.query(
-    `SELECT conflicting_slot_name 
-     FROM slot_conflict 
-     WHERE slot_year = $1 
-       AND semester_type = $2 
-       AND slot_name = $3`,
-    [slotYear, semesterType, newSlotName]
-  );
+  console.log(`🔍 Current registrations:`, currentRegistrations.rows);
 
-  const conflictingSlots = conflicts.rows.map(
-    (row) => row.conflicting_slot_name
-  );
-  const currentSlots = currentRegistrations.rows.map((row) => row.slot_name);
+  // Parse all current slot names into individual slots
+  const currentSlots = [];
+  currentRegistrations.rows.forEach((reg) => {
+    const parsedSlots = parseSlotNames(reg.slot_name);
+    parsedSlots.forEach((slot) => {
+      currentSlots.push({
+        slot_name: slot,
+        course_code: reg.course_code,
+        component_type: reg.component_type,
+        original_slot: reg.slot_name,
+      });
+    });
+  });
 
-  // Check if any current slot conflicts with the new slot
-  for (const currentSlot of currentSlots) {
-    if (conflictingSlots.includes(currentSlot)) {
+  console.log(`🔍 Parsed current slots:`, currentSlots);
+
+  // Check each new slot against all current slots
+  for (const newSlot of newSlots) {
+    console.log(`🔍 Checking new slot: "${newSlot}"`);
+
+    // Direct slot conflict (same slot)
+    const directConflict = currentSlots.find(
+      (current) => current.slot_name === newSlot
+    );
+    if (directConflict) {
       return {
         hasConflict: true,
-        conflictingSlot: currentSlot,
+        conflictType: "DIRECT_DUPLICATE",
+        conflictingSlot: directConflict.slot_name,
+        conflictingCourse: directConflict.course_code,
+        message: `Slot "${newSlot}" is already occupied by ${directConflict.course_code} (${directConflict.component_type})`,
       };
+    }
+
+    // Check database conflicts for this new slot
+    const conflicts = await db.query(
+      `SELECT conflicting_slot_name 
+       FROM slot_conflict 
+       WHERE slot_year = $1 
+         AND semester_type = $2 
+         AND slot_name = $3`,
+      [slotYear, semesterType, newSlot]
+    );
+
+    const conflictingSlotNames = conflicts.rows.map(
+      (row) => row.conflicting_slot_name
+    );
+    console.log(
+      `🔍 Database conflicts for "${newSlot}":`,
+      conflictingSlotNames
+    );
+
+    // Check if any current slot conflicts with this new slot
+    for (const currentSlot of currentSlots) {
+      if (conflictingSlotNames.includes(currentSlot.slot_name)) {
+        return {
+          hasConflict: true,
+          conflictType: "TIME_CONFLICT",
+          conflictingSlot: currentSlot.slot_name,
+          conflictingCourse: currentSlot.course_code,
+          newSlot: newSlot,
+          message: `Time conflict: New slot "${newSlot}" conflicts with your existing registration "${currentSlot.slot_name}" (${currentSlot.course_code} - ${currentSlot.component_type})`,
+        };
+      }
+    }
+
+    // Bidirectional check: Check if any current slot has this new slot in its conflicts
+    for (const currentSlot of currentSlots) {
+      const reverseConflicts = await db.query(
+        `SELECT conflicting_slot_name 
+         FROM slot_conflict 
+         WHERE slot_year = $1 
+           AND semester_type = $2 
+           AND slot_name = $3 
+           AND conflicting_slot_name = $4`,
+        [slotYear, semesterType, currentSlot.slot_name, newSlot]
+      );
+
+      if (reverseConflicts.rows.length > 0) {
+        return {
+          hasConflict: true,
+          conflictType: "REVERSE_TIME_CONFLICT",
+          conflictingSlot: currentSlot.slot_name,
+          conflictingCourse: currentSlot.course_code,
+          newSlot: newSlot,
+          message: `Time conflict: New slot "${newSlot}" conflicts with your existing registration "${currentSlot.slot_name}" (${currentSlot.course_code} - ${currentSlot.component_type})`,
+        };
+      }
     }
   }
 
+  console.log(`✅ No conflicts found for slot: "${newSlotName}"`);
+  return { hasConflict: false };
+}
+
+// Enhanced helper function to check TEL course component conflicts
+async function checkTELComponentConflicts(
+  studentEnrollment,
+  slotYear,
+  semesterType,
+  courseCode,
+  newSlotName,
+  newComponentType
+) {
+  console.log(
+    `🔍 Checking TEL component conflicts for ${courseCode} - ${newComponentType}`
+  );
+
+  // Get existing registrations for this course
+  const existingComponents = await db.query(
+    `SELECT slot_name, component_type FROM student_registrations 
+     WHERE enrollment_number = $1 
+       AND slot_year = $2 
+       AND semester_type = $3 
+       AND course_code = $4`,
+    [studentEnrollment, slotYear, semesterType, courseCode]
+  );
+
+  if (existingComponents.rows.length === 0) {
+    console.log(`✅ No existing components for ${courseCode}`);
+    return { hasConflict: false };
+  }
+
+  // Parse slots for all components
+  const newSlots = parseSlotNames(newSlotName);
+
+  for (const existingComponent of existingComponents.rows) {
+    const existingSlots = parseSlotNames(existingComponent.slot_name);
+
+    console.log(
+      `🔍 Checking ${newComponentType} slots [${newSlots.join(", ")}] against ${
+        existingComponent.component_type
+      } slots [${existingSlots.join(", ")}]`
+    );
+
+    // Check each new slot against each existing slot
+    for (const newSlot of newSlots) {
+      for (const existingSlot of existingSlots) {
+        // Direct conflict (same slot)
+        if (newSlot === existingSlot) {
+          return {
+            hasConflict: true,
+            conflictType: "TEL_DIRECT_CONFLICT",
+            conflictingSlot: existingSlot,
+            message: `TEL Course Conflict: ${newComponentType} component slot "${newSlot}" is the same as ${existingComponent.component_type} component slot "${existingSlot}"`,
+          };
+        }
+
+        // Check database conflicts between the slots
+        const conflicts = await db.query(
+          `SELECT COUNT(*) as count FROM slot_conflict 
+           WHERE slot_year = $1 
+             AND semester_type = $2 
+             AND ((slot_name = $3 AND conflicting_slot_name = $4) 
+                  OR (slot_name = $4 AND conflicting_slot_name = $3))`,
+          [slotYear, semesterType, newSlot, existingSlot]
+        );
+
+        if (parseInt(conflicts.rows[0].count) > 0) {
+          return {
+            hasConflict: true,
+            conflictType: "TEL_TIME_CONFLICT",
+            conflictingSlot: existingSlot,
+            newSlot: newSlot,
+            message: `TEL Course Conflict: ${newComponentType} component slot "${newSlot}" conflicts with ${existingComponent.component_type} component slot "${existingSlot}"`,
+          };
+        }
+      }
+    }
+  }
+
+  console.log(`✅ No TEL component conflicts found`);
   return { hasConflict: false };
 }
 
@@ -623,7 +792,12 @@ exports.registerCourseOffering = async (req, res) => {
       }
     }
 
-    // Check slot conflicts
+    // Enhanced slot conflict checking
+    console.log(
+      `🔍 Starting enhanced conflict validation for ${course_code} - ${slot_name}`
+    );
+
+    // 1. Check general slot conflicts
     const conflictCheck = await checkSlotConflicts(
       student.enrollment_number,
       slot_year,
@@ -632,10 +806,47 @@ exports.registerCourseOffering = async (req, res) => {
     );
 
     if (conflictCheck.hasConflict) {
+      console.log(`❌ General conflict detected:`, conflictCheck);
       return res.status(400).json({
-        message: `Slot conflict detected. ${slot_name} conflicts with your existing registration: ${conflictCheck.conflictingSlot}`,
+        message: conflictCheck.message,
+        conflict_details: {
+          type: conflictCheck.conflictType,
+          conflicting_slot: conflictCheck.conflictingSlot,
+          conflicting_course: conflictCheck.conflictingCourse,
+          new_slot: conflictCheck.newSlot,
+        },
       });
     }
+
+    // 2. For TEL courses, check component-specific conflicts
+    if (theory > 0 && practical > 0) {
+      console.log(`🔍 TEL course detected, checking component conflicts`);
+
+      const telConflictCheck = await checkTELComponentConflicts(
+        student.enrollment_number,
+        slot_year,
+        semester_type,
+        course_code,
+        slot_name,
+        componentType
+      );
+
+      if (telConflictCheck.hasConflict) {
+        console.log(`❌ TEL component conflict detected:`, telConflictCheck);
+        return res.status(400).json({
+          message: telConflictCheck.message,
+          conflict_details: {
+            type: telConflictCheck.conflictType,
+            conflicting_slot: telConflictCheck.conflictingSlot,
+            new_slot: telConflictCheck.newSlot,
+          },
+        });
+      }
+    }
+
+    console.log(
+      `✅ All conflict checks passed for ${course_code} - ${slot_name}`
+    );
 
     // Create registration data (component type already determined above)
     let registrations = [
@@ -971,6 +1182,209 @@ exports.getStudentSlotTimetable = async (req, res) => {
     console.error("Get student slot timetable error:", error);
     res.status(500).json({
       message: "Server error while fetching student timetable",
+      error: error.message,
+    });
+  }
+};
+
+// Pre-validate TEL course registration (both components)
+exports.validateTELRegistration = async (req, res) => {
+  try {
+    const {
+      course_code,
+      slot_year,
+      semester_type,
+      theory_slot,
+      theory_venue,
+      theory_faculty,
+      practical_slot,
+      practical_venue,
+      practical_faculty,
+    } = req.body;
+    const userId = req.userId;
+
+    console.log(`🔍 Pre-validating TEL registration for ${course_code}`);
+    console.log(`Theory: ${theory_slot}, Practical: ${practical_slot}`);
+
+    // Validate required fields
+    if (
+      !course_code ||
+      !slot_year ||
+      !semester_type ||
+      !theory_slot ||
+      !theory_venue ||
+      !theory_faculty ||
+      !practical_slot ||
+      !practical_venue ||
+      !practical_faculty
+    ) {
+      return res.status(400).json({
+        message: "Missing required fields for TEL validation",
+      });
+    }
+
+    // Get student details
+    const student = await getStudentByUserId(userId);
+
+    // Get course details
+    const courseResult = await db.query(
+      `SELECT course_code, course_name, theory, practical, credits, course_type
+       FROM course 
+       WHERE course_code = $1`,
+      [course_code]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const course = courseResult.rows[0];
+    const { theory, practical } = course;
+
+    // Verify this is actually a TEL course
+    if (!(theory > 0 && practical > 0)) {
+      return res.status(400).json({
+        message: "This validation endpoint is only for TEL courses",
+      });
+    }
+
+    // Check if course is already registered (any component)
+    const existingRegistration = await db.query(
+      `SELECT COUNT(*) as count FROM student_registrations 
+       WHERE enrollment_number = $1 
+         AND slot_year = $2 
+         AND semester_type = $3 
+         AND course_code = $4`,
+      [student.enrollment_number, slot_year, semester_type, course_code]
+    );
+
+    if (parseInt(existingRegistration.rows[0].count) > 0) {
+      return res.status(400).json({
+        message: `You are already registered for ${course_code}. Please delete existing registration first.`,
+      });
+    }
+
+    // Check credit limits
+    const creditCheck = await checkCreditLimits(
+      student.enrollment_number,
+      slot_year,
+      semester_type,
+      course.credits
+    );
+
+    if (creditCheck.exceedsLimit) {
+      return res.status(400).json({
+        message: `Registration would exceed 27 credit limit. Current: ${creditCheck.currentCredits}, After registration: ${creditCheck.totalAfterRegistration}`,
+      });
+    }
+
+    // Check conflicts for theory slot
+    console.log(`🔍 Checking theory slot conflicts: ${theory_slot}`);
+    const theoryConflictCheck = await checkSlotConflicts(
+      student.enrollment_number,
+      slot_year,
+      semester_type,
+      theory_slot
+    );
+
+    if (theoryConflictCheck.hasConflict) {
+      return res.status(400).json({
+        message: `Theory component conflict: ${theoryConflictCheck.message}`,
+        conflict_details: {
+          component: "theory",
+          type: theoryConflictCheck.conflictType,
+          conflicting_slot: theoryConflictCheck.conflictingSlot,
+          conflicting_course: theoryConflictCheck.conflictingCourse,
+          new_slot: theoryConflictCheck.newSlot,
+        },
+      });
+    }
+
+    // Check conflicts for practical slot
+    console.log(`🔍 Checking practical slot conflicts: ${practical_slot}`);
+    const practicalConflictCheck = await checkSlotConflicts(
+      student.enrollment_number,
+      slot_year,
+      semester_type,
+      practical_slot
+    );
+
+    if (practicalConflictCheck.hasConflict) {
+      return res.status(400).json({
+        message: `Practical component conflict: ${practicalConflictCheck.message}`,
+        conflict_details: {
+          component: "practical",
+          type: practicalConflictCheck.conflictType,
+          conflicting_slot: practicalConflictCheck.conflictingSlot,
+          conflicting_course: practicalConflictCheck.conflictingCourse,
+          new_slot: practicalConflictCheck.newSlot,
+        },
+      });
+    }
+
+    // Check TEL component conflicts (theory vs practical)
+    console.log(
+      `🔍 Checking TEL component conflicts between theory and practical`
+    );
+
+    // Parse both slot types
+    const theorySlots = parseSlotNames(theory_slot);
+    const practicalSlots = parseSlotNames(practical_slot);
+
+    // Check each theory slot against each practical slot
+    for (const theorySlot of theorySlots) {
+      for (const practicalSlot of practicalSlots) {
+        // Direct conflict (same slot)
+        if (theorySlot === practicalSlot) {
+          return res.status(400).json({
+            message: `TEL Component Conflict: Theory and practical components cannot use the same slot "${theorySlot}"`,
+            conflict_details: {
+              type: "TEL_SAME_SLOT",
+              conflicting_slot: theorySlot,
+            },
+          });
+        }
+
+        // Check database conflicts between theory and practical slots
+        const conflicts = await db.query(
+          `SELECT COUNT(*) as count FROM slot_conflict 
+           WHERE slot_year = $1 
+             AND semester_type = $2 
+             AND ((slot_name = $3 AND conflicting_slot_name = $4) 
+                  OR (slot_name = $4 AND conflicting_slot_name = $3))`,
+          [slot_year, semester_type, theorySlot, practicalSlot]
+        );
+
+        if (parseInt(conflicts.rows[0].count) > 0) {
+          return res.status(400).json({
+            message: `TEL Component Conflict: Theory slot "${theorySlot}" conflicts with practical slot "${practicalSlot}"`,
+            conflict_details: {
+              type: "TEL_TIME_CONFLICT",
+              theory_slot: theorySlot,
+              practical_slot: practicalSlot,
+            },
+          });
+        }
+      }
+    }
+
+    console.log(`✅ All TEL validation checks passed for ${course_code}`);
+
+    // Return success response
+    res.status(200).json({
+      message: "TEL registration validation passed",
+      validation_details: {
+        course_code,
+        theory_slot,
+        practical_slot,
+        credits: course.credits,
+        total_credits_after: creditCheck.totalAfterRegistration,
+      },
+    });
+  } catch (error) {
+    console.error("TEL validation error:", error);
+    res.status(500).json({
+      message: "Server error during TEL validation",
       error: error.message,
     });
   }
