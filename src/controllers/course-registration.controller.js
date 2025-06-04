@@ -169,30 +169,54 @@ exports.getCourseOfferings = async (req, res) => {
 
     const courseType = getCourseType(theory, practical);
 
-    // Get all faculty allocations for this course
+    // Get all faculty allocations for this course with actual seat availability
     const allocationsResult = await db.query(
       `SELECT 
-         fa.slot_name,
-         fa.venue,
-         fa.slot_day,
-         fa.slot_time,
-         f.name as faculty_name,
-         v.capacity as available_seats
-       FROM faculty_allocation fa
-       LEFT JOIN faculty f ON fa.employee_id = f.employee_id  
-       LEFT JOIN venue v ON fa.venue = v.venue
-       WHERE fa.course_code = $1 
-         AND fa.slot_year = $2 
-         AND fa.semester_type = $3
-       ORDER BY fa.slot_name, fa.slot_day, fa.slot_time`,
+     fa.slot_name,
+     fa.venue,
+     fa.slot_day,
+     fa.slot_time,
+     f.name as faculty_name,
+     v.seats as total_seats,
+     (
+       SELECT COUNT(*) 
+       FROM student_registrations sr 
+       WHERE sr.course_code = fa.course_code 
+         AND sr.slot_year = fa.slot_year 
+         AND sr.semester_type = fa.semester_type 
+         AND sr.venue = fa.venue
+         AND (
+           -- Case 1: Exact match (for 4-hour labs)
+           sr.slot_name = fa.slot_name
+           OR
+           -- Case 2: Component match (for theory like E,F -> E or F)
+           (',' || sr.slot_name || ',') LIKE ('%,' || fa.slot_name || ',%')
+         )
+     ) as current_registrations,
+     (
+       v.seats - (
+         SELECT COUNT(*) 
+         FROM student_registrations sr 
+         WHERE sr.course_code = fa.course_code 
+           AND sr.slot_year = fa.slot_year 
+           AND sr.semester_type = fa.semester_type 
+           AND sr.venue = fa.venue
+           AND (
+             sr.slot_name = fa.slot_name
+             OR
+             (',' || sr.slot_name || ',') LIKE ('%,' || fa.slot_name || ',%')
+           )
+       )
+     ) as available_seats
+   FROM faculty_allocation fa
+   LEFT JOIN faculty f ON fa.employee_id = f.employee_id  
+   LEFT JOIN venue v ON fa.venue = v.venue
+   WHERE fa.course_code = $1 
+     AND fa.slot_year = $2 
+     AND fa.semester_type = $3
+   ORDER BY fa.slot_name, fa.slot_day, fa.slot_time`,
       [course_code, slot_year, semester_type]
     );
-
-    if (allocationsResult.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No faculty allocations found for this course" });
-    }
 
     const offerings = [];
 
@@ -950,6 +974,66 @@ exports.registerCourseOffering = async (req, res) => {
     console.log(
       `✅ All conflict checks passed for ${course_code} - ${slot_name}`
     );
+
+    // ===== ADD THIS SEAT AVAILABILITY CHECK =====
+    console.log(
+      `✅ All conflict checks passed for ${course_code} - ${slot_name}`
+    );
+
+    // Check seat availability before registration
+    console.log(
+      `🎫 Checking seat availability for ${course_code} - ${slot_name} at ${venue}`
+    );
+
+    const seatCheckResult = await db.query(
+      `SELECT 
+     v.seats as total_seats,
+     (
+       SELECT COUNT(*) 
+       FROM student_registrations sr 
+       WHERE sr.course_code = $1 
+         AND sr.slot_year = $2 
+         AND sr.semester_type = $3 
+         AND sr.venue = $4
+         AND (
+           sr.slot_name = $5
+           OR
+           (',' || sr.slot_name || ',') LIKE ('%,' || $5 || ',%')
+         )
+     ) as current_registrations
+   FROM venue v
+   WHERE v.venue = $4`,
+      [course_code, slot_year, semester_type, venue, slot_name]
+    );
+
+    if (seatCheckResult.rows.length === 0) {
+      return res.status(400).json({
+        message: "Venue not found",
+      });
+    }
+
+    const { total_seats, current_registrations } = seatCheckResult.rows[0];
+    const available_seats = total_seats - current_registrations;
+
+    console.log(
+      `🎫 Seat availability: ${available_seats}/${total_seats} (${current_registrations} registered)`
+    );
+
+    if (available_seats <= 0) {
+      return res.status(400).json({
+        message: `Registration failed: No seats available for ${course_code} at ${venue}. All ${total_seats} seats are occupied.`,
+        seat_info: {
+          total_seats,
+          current_registrations,
+          available_seats,
+        },
+      });
+    }
+
+    console.log(
+      `✅ Seat availability confirmed: ${available_seats} seats remaining`
+    );
+    // ===== END OF SEAT AVAILABILITY CHECK =====
 
     // Create registration data (component type already determined above)
     let registrations = [
