@@ -53,6 +53,17 @@ function setupStudentNavigation() {
     });
   }
 
+  // Initialize student timetable navigation
+  const studentTimetableLink = document.getElementById(
+    "student-timetable-link"
+  );
+  if (studentTimetableLink) {
+    studentTimetableLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("timetable");
+    });
+  }
+
   // Initialize voluntary password change
   const studentChangePasswordLink = document.getElementById(
     "student-change-password-link"
@@ -228,6 +239,29 @@ function showStudentPage(pageType) {
       // Initialize course registration if not already done
       if (typeof initializeCourseRegistration === "function") {
         initializeCourseRegistration();
+      }
+      break;
+
+    case "timetable":
+      const timetableContent = document.getElementById(
+        "student-timetable-page"
+      );
+      if (timetableContent) {
+        timetableContent.style.display = "block";
+      }
+      const timetableLink = document.getElementById("student-timetable-link");
+      if (timetableLink) {
+        timetableLink.classList.add("active");
+      }
+      const timetableTitleElement =
+        document.getElementById("student-page-title");
+      if (timetableTitleElement) {
+        timetableTitleElement.textContent = "My Slot TimeTable";
+      }
+
+      // Initialize standalone timetable functionality
+      if (typeof initializeStandaloneTimetable === "function") {
+        initializeStandaloneTimetable();
       }
       break;
   }
