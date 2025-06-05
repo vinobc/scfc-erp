@@ -72,9 +72,109 @@ function setupStudentNavigation() {
   }
 }
 
+// Check course registration status and update navigation
+async function checkAndUpdateRegistrationStatus() {
+  try {
+    console.log("🔍 Checking course registration status...");
+
+    const response = await fetch(
+      `${window.API_URL}/system-config/course-registration-status`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn("Could not check registration status, assuming enabled");
+      return;
+    }
+
+    const statusData = await response.json();
+    console.log("📋 Registration status:", statusData);
+
+    // Update navigation based on status
+    updateCourseRegistrationNavigation(statusData.enabled, statusData.message);
+  } catch (error) {
+    console.error("❌ Error checking registration status:", error);
+    // Fail-safe: assume registration is enabled if we can't check
+    updateCourseRegistrationNavigation(
+      true,
+      "Course registration is available"
+    );
+  }
+}
+
+// Update course registration navigation item
+function updateCourseRegistrationNavigation(isEnabled, message) {
+  const courseRegLink = document.getElementById(
+    "student-course-registration-link"
+  );
+  const courseRegIcon = courseRegLink?.querySelector("i");
+
+  if (!courseRegLink) {
+    console.error("Course registration link not found");
+    return;
+  }
+
+  if (isEnabled) {
+    // Enable registration
+    courseRegLink.classList.remove("disabled", "text-muted");
+    courseRegLink.classList.add("text-white");
+    courseRegLink.style.pointerEvents = "auto";
+    courseRegLink.style.opacity = "1";
+
+    if (courseRegIcon) {
+      courseRegIcon.className = "fas fa-book-open me-2";
+    }
+
+    // Update link text
+    courseRegLink.innerHTML = `
+      <i class="fas fa-book-open me-2"></i>
+      Course Registration
+    `;
+
+    console.log("✅ Course registration ENABLED for students");
+  } else {
+    // Disable registration
+    courseRegLink.classList.add("disabled", "text-muted");
+    courseRegLink.classList.remove("text-white");
+    courseRegLink.style.pointerEvents = "none";
+    courseRegLink.style.opacity = "0.5";
+
+    if (courseRegIcon) {
+      courseRegIcon.className = "fas fa-ban me-2";
+    }
+
+    // Update link text and add disabled indicator
+    courseRegLink.innerHTML = `
+      <i class="fas fa-ban me-2"></i>
+      Course Registration (Disabled)
+    `;
+
+    // Store the disabled message for when user tries to click
+    courseRegLink.setAttribute("data-disabled-message", message);
+
+    console.log("❌ Course registration DISABLED for students");
+  }
+}
+
 // Show specific student page
 function showStudentPage(pageType) {
   console.log("Showing student page:", pageType);
+
+  // Check if trying to access disabled course registration
+  if (pageType === "course-registration") {
+    const courseRegLink = document.getElementById(
+      "student-course-registration-link"
+    );
+    if (courseRegLink && courseRegLink.classList.contains("disabled")) {
+      const message =
+        courseRegLink.getAttribute("data-disabled-message") ||
+        "Course registration is currently disabled by administration";
+      showStudentAlert(message, "warning");
+      return; // Don't navigate to the page
+    }
+  }
 
   // Hide all student content pages
   const contentPages = document.querySelectorAll(".student-content-page");
@@ -134,7 +234,10 @@ function showStudentPage(pageType) {
 }
 
 // Initialize student interface navigation
-function initializeStudentNavigation() {
+async function initializeStudentNavigation() {
+  // Check registration status first
+  await checkAndUpdateRegistrationStatus();
+
   // Show dashboard by default
   showStudentPage("dashboard");
 }
