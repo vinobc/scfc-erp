@@ -107,4 +107,19 @@ router.post(
   courseRegistrationController.validateTELRegistration
 );
 
+// Get student slot timetable (read-only, always available)
+router.get(
+  "/my-timetable",
+  verifyToken,
+  // NO checkRegistrationEnabled middleware - always allow viewing
+  courseRegistrationController.getStudentSlotTimetable
+);
+
+// Get semesters where student has registrations (read-only, always available)
+router.get(
+  "/my-semesters",
+  verifyToken,
+  courseRegistrationController.getStudentRegistrationSemesters
+);
+
 module.exports = router;

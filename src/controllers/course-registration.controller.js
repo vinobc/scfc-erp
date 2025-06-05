@@ -1576,3 +1576,52 @@ exports.validateTELRegistration = async (req, res) => {
     });
   }
 };
+
+// Get semesters where student has registrations
+exports.getStudentRegistrationSemesters = async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "User ID not found in request",
+      });
+    }
+
+    // Get student details using existing helper function
+    const student = await getStudentByUserId(userId);
+
+    if (!student) {
+      return res.status(404).json({
+        message: "Student not found",
+      });
+    }
+
+    console.log(
+      `🔍 Looking for semesters for student: ${student.enrollment_number}`
+    );
+
+    // Get unique semester combinations from student registrations
+    const query = `
+      SELECT DISTINCT 
+        slot_year,
+        semester_type
+      FROM student_registrations 
+      WHERE enrollment_number = $1
+      ORDER BY slot_year DESC, semester_type
+    `;
+
+    const result = await db.query(query, [student.enrollment_number]);
+
+    console.log(
+      `Found ${result.rows.length} semesters with registrations for enrollment ${student.enrollment_number}`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error getting student registration semesters:", error);
+    res.status(500).json({
+      message: "Error getting student registration semesters",
+      error: error.message,
+    });
+  }
+};
