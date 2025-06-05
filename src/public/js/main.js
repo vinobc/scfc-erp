@@ -261,6 +261,10 @@ function setupNavigation() {
           if (typeof loadSchools === "function") {
             loadSchools();
           }
+        } else if (targetPage === "system-config-page") {
+          if (typeof initializeSystemConfig === "function") {
+            initializeSystemConfig();
+          }
         }
         // Add other page data loading as needed
       } else {

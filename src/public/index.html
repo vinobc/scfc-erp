@@ -239,10 +239,17 @@
                   </li>
                 </ul>
               </li>
+
               <li class="nav-item">
                 <a class="nav-link" href="#" id="change-password-link">
                   <i class="fas fa-key me-2"></i>
                   Change Password
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" href="#" id="system-config-link">
+                  <i class="fas fa-cog me-2"></i>
+                  System Configuration
                 </a>
               </li>
               <li class="nav-item">
@@ -1379,6 +1386,23 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <!-- System Configuration Page -->
+            <div id="system-config-page" class="content-page">
+              <div id="system-config-content">
+                <div
+                  class="d-flex justify-content-center align-items-center"
+                  style="min-height: 200px"
+                >
+                  <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading system configuration...</p>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -3898,5 +3922,6 @@
     <script src="js/users.js"></script>
     <script src="js/password-change.js"></script>
     <script src="js/course-registration.js"></script>
+    <script src="js/system-config.js"></script>
   </body>
 </html>

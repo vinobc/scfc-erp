@@ -20,6 +20,7 @@ const semesterSlotConfigRoutes = require("./routes/semester-slot-config.routes")
 const timetableCoordinatorRoutes = require("./routes/timetable-coordinator.routes");
 const userRoutes = require("./routes/user.routes");
 const studentAuthRoutes = require("./routes/student-auth.routes");
+const systemConfigRoutes = require("./routes/system-config.routes");
 
 // Initialize express app
 const app = express();
@@ -84,6 +85,7 @@ app.use(
   "/api/course-registration",
   require("./routes/course-registration.routes")
 );
+app.use("/api/system-config", systemConfigRoutes);
 
 // Root route
 app.get("/", (req, res) => {
