@@ -1,4 +1,5 @@
 const express = require("express");
+const compression = require("compression");
 const cors = require("cors");
 const morgan = require("morgan");
 const helmet = require("helmet");
@@ -25,6 +26,8 @@ const systemConfigRoutes = require("./routes/system-config.routes");
 // Initialize express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+app.use(compression());
 
 // Middleware
 // Configure Helmet with custom CSP
