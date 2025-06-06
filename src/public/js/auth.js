@@ -217,6 +217,12 @@ function handleLogin() {
         if (userNameElement) userNameElement.textContent = data.user.full_name;
         if (userRoleElement) userRoleElement.textContent = data.user.role;
 
+        // Update navigation based on role
+        updateNavigationByRole(data.user.role);
+
+        // Show refresh message for proper functionality
+        showRefreshMessage();
+
         // Close modal
         const loginModal = document.getElementById("loginModal");
         if (loginModal) {
@@ -300,4 +306,28 @@ function showAlert(message, type = "info", timeout = 5000) {
       console.log(message);
     }
   }
+}
+
+// Show refresh message after login
+function showRefreshMessage() {
+  const alertContainer = document.getElementById("alert-container");
+  if (!alertContainer) return;
+
+  const refreshAlert = document.createElement("div");
+  refreshAlert.className =
+    "alert alert-info alert-dismissible d-flex align-items-center";
+  refreshAlert.id = "refresh-prompt-alert";
+  refreshAlert.innerHTML = `
+    <i class="fas fa-info-circle me-2"></i>
+    <div class="flex-grow-1">
+      <strong>Please refresh the page to continue</strong> - Click the refresh button below or press F5 to access all features.
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="window.location.reload()">
+      <i class="fas fa-sync-alt me-1"></i> Refresh Now
+    </button>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  `;
+
+  // Insert at the top of alerts
+  alertContainer.insertBefore(refreshAlert, alertContainer.firstChild);
 }
