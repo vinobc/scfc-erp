@@ -15,8 +15,13 @@ const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
+  // ADD THESE LIMITS (safe defaults)
+  max: 20, // Maximum 20 connections
+  idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+  connectionTimeoutMillis: 2000, // 2 second timeout for new connections
 });
 
+// Rest stays exactly the same...
 pool.on("connect", () => {
   console.log(
     `Connected to database: ${process.env.DB_NAME} on ${process.env.DB_HOST}`
