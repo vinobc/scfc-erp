@@ -239,6 +239,12 @@
                   </li>
                 </ul>
               </li>
+              <li class="nav-item">
+                <a class="nav-link" href="#" id="courses-view-link">
+                  <i class="fas fa-list me-2"></i>
+                  Courses View
+                </a>
+              </li>
 
               <li class="nav-item">
                 <a class="nav-link" href="#" id="change-password-link">
@@ -1406,6 +1412,73 @@
               </div>
             </div>
 
+            <!-- Courses View Page -->
+            <div id="courses-view-page" class="content-page">
+              <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                  <h6 class="m-0 font-weight-bold text-primary">
+                    Courses View
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <div class="row mb-4">
+                    <div class="col-md-6">
+                      <div class="form-group mb-3">
+                        <label for="courses-view-year" class="form-label"
+                          >Academic Year</label
+                        >
+                        <select class="form-select" id="courses-view-year">
+                          <option value="">Select Academic Year</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="form-group mb-3">
+                        <label for="courses-view-semester" class="form-label"
+                          >Semester Type</label
+                        >
+                        <select class="form-select" id="courses-view-semester">
+                          <option value="">Select Semester</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="row mb-4">
+                    <div class="col-md-12 text-center">
+                      <button
+                        type="button"
+                        class="btn btn-primary"
+                        id="load-courses-view-btn"
+                      >
+                        Load Courses View
+                      </button>
+                    </div>
+                  </div>
+
+                  <div id="courses-view-container" style="display: none">
+                    <h5 class="text-center mb-3" id="courses-view-title"></h5>
+                    <div class="table-responsive">
+                      <table class="table table-bordered table-striped">
+                        <thead class="table-dark">
+                          <tr>
+                            <th>S. No.</th>
+                            <th>Course Code</th>
+                            <th>Course Title</th>
+                            <th>Slot</th>
+                            <th>Venue</th>
+                            <th>Faculty</th>
+                          </tr>
+                        </thead>
+                        <tbody id="courses-view-table-body">
+                          <!-- Will be populated dynamically -->
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Other content pages will be added similarly -->
           </div>
         </main>
@@ -1455,6 +1528,16 @@
                     >
                       <i class="fas fa-calendar-alt me-2"></i>
                       View my Slot TimeTable
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a
+                      class="nav-link text-white"
+                      href="#"
+                      id="student-courses-view-link"
+                    >
+                      <i class="fas fa-list me-2"></i>
+                      Courses View
                     </a>
                   </li>
                   <!-- Change Password option -->
@@ -1689,6 +1772,102 @@
                                 <p class="mt-3">
                                   Select a semester to view your timetable...
                                 </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Student Courses View Content -->
+                <div
+                  id="student-courses-view-content"
+                  class="student-content-page"
+                  style="display: none"
+                >
+                  <div class="row">
+                    <div class="col-lg-12">
+                      <div style="margin-left: 50px; margin-right: 20px">
+                        <div class="card shadow mb-4">
+                          <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">
+                              Courses View
+                            </h6>
+                          </div>
+                          <div class="card-body">
+                            <div class="row mb-4">
+                              <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                  <label
+                                    for="student-courses-view-year"
+                                    class="form-label"
+                                    >Academic Year</label
+                                  >
+                                  <select
+                                    class="form-select"
+                                    id="student-courses-view-year"
+                                  >
+                                    <option value="">
+                                      Select Academic Year
+                                    </option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                  <label
+                                    for="student-courses-view-semester"
+                                    class="form-label"
+                                    >Semester Type</label
+                                  >
+                                  <select
+                                    class="form-select"
+                                    id="student-courses-view-semester"
+                                  >
+                                    <option value="">Select Semester</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="row mb-4">
+                              <div class="col-md-12 text-center">
+                                <button
+                                  type="button"
+                                  class="btn btn-primary"
+                                  id="student-load-courses-view-btn"
+                                >
+                                  Load Courses View
+                                </button>
+                              </div>
+                            </div>
+
+                            <div
+                              id="student-courses-view-container"
+                              style="display: none"
+                            >
+                              <h5
+                                class="text-center mb-3"
+                                id="student-courses-view-title"
+                              ></h5>
+                              <div class="table-responsive">
+                                <table
+                                  class="table table-bordered table-striped"
+                                >
+                                  <thead class="table-dark">
+                                    <tr>
+                                      <th>S. No.</th>
+                                      <th>Course Code</th>
+                                      <th>Course Title</th>
+                                      <th>Slot</th>
+                                      <th>Venue</th>
+                                      <th>Faculty</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody id="student-courses-view-table-body">
+                                    <!-- Will be populated dynamically -->
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
                           </div>
@@ -3975,5 +4154,6 @@
     <script src="js/course-registration.js"></script>
     <script src="js/student-timetable.js"></script>
     <script src="js/system-config.js"></script>
+    <script src="js/courses-view.js"></script>
   </body>
 </html>

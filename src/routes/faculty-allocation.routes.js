@@ -67,4 +67,17 @@ router.get(
   facultyAllocationController.getClassTimetable
 );
 
+// Courses view routes (all authenticated users can view)
+router.get("/courses-view", facultyAllocationController.getCoursesView);
+
+router.get(
+  "/years-semesters",
+  facultyAllocationController.getAvailableYearsAndSemesters
+);
+
+// Test route
+router.get("/test", (req, res) => {
+  res.json({ message: "Test route working" });
+});
+
 module.exports = router;
