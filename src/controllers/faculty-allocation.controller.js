@@ -1840,3 +1840,121 @@ function checkTimeBasedConflicts(slotName, allocatedTimeMap, allSlots) {
 
   return { available: true };
 }
+
+// Get courses view with grouped allocations
+exports.getCoursesView = async (req, res) => {
+  try {
+    const { year, semesterType } = req.query;
+
+    if (!year || !semesterType) {
+      return res.status(400).json({
+        message: "Year and semester type are required",
+      });
+    }
+
+    // Get all allocations for the specified year and semester
+    const allocationsResult = await db.query(
+      `SELECT 
+        fa.course_code,
+        c.course_name,
+        c.theory,
+        c.practical,
+        c.credits,
+        c.course_type,
+        fa.slot_name,
+        fa.slot_day,
+        fa.slot_time,
+        fa.venue,
+        v.infra_type as venue_type,
+        f.name as faculty_name,
+        f.employee_id
+      FROM faculty_allocation fa
+      JOIN course c ON fa.course_code = c.course_code
+      JOIN faculty f ON fa.employee_id = f.employee_id
+      JOIN venue v ON fa.venue = v.venue
+      WHERE fa.slot_year = $1 AND fa.semester_type = $2
+      ORDER BY fa.course_code, fa.slot_name, fa.slot_day, fa.slot_time`,
+      [year, semesterType]
+    );
+
+    // Group allocations by course
+    const coursesMap = new Map();
+
+    allocationsResult.rows.forEach((allocation) => {
+      const courseCode = allocation.course_code;
+
+      if (!coursesMap.has(courseCode)) {
+        coursesMap.set(courseCode, {
+          course_code: allocation.course_code,
+          course_name: allocation.course_name,
+          theory: allocation.theory,
+          practical: allocation.practical,
+          credits: allocation.credits,
+          course_type: allocation.course_type,
+          allocations: [],
+        });
+      }
+
+      // Add this allocation to the course
+      coursesMap.get(courseCode).allocations.push({
+        slot_name: allocation.slot_name,
+        slot_day: allocation.slot_day,
+        slot_time: allocation.slot_time,
+        venue: allocation.venue,
+        venue_type: allocation.venue_type,
+        faculty_name: allocation.faculty_name,
+        employee_id: allocation.employee_id,
+      });
+    });
+
+    // Convert map to array
+    const courses = Array.from(coursesMap.values());
+
+    res.status(200).json({
+      year,
+      semesterType,
+      courses,
+      totalCourses: courses.length,
+      totalAllocations: allocationsResult.rows.length,
+    });
+  } catch (error) {
+    console.error("Get courses view error:", error);
+    res.status(500).json({
+      message: "Server error while fetching courses view",
+    });
+  }
+};
+
+// Get available years and semesters for courses view
+exports.getAvailableYearsAndSemesters = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT DISTINCT fa.slot_year, fa.semester_type
+      FROM faculty_allocation fa
+      ORDER BY fa.slot_year DESC, fa.semester_type`
+    );
+
+    // Group by year
+    const yearsMap = new Map();
+
+    result.rows.forEach((row) => {
+      const year = row.slot_year;
+      if (!yearsMap.has(year)) {
+        yearsMap.set(year, {
+          year: year,
+          semesters: [],
+        });
+      }
+      yearsMap.get(year).semesters.push(row.semester_type);
+    });
+
+    const years = Array.from(yearsMap.values());
+
+    res.status(200).json(years);
+  } catch (error) {
+    console.error("Get available years and semesters error:", error);
+    res.status(500).json({
+      message: "Server error while fetching available years and semesters",
+    });
+  }
+};
