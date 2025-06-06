@@ -389,6 +389,9 @@ function handleStudentLoginSuccess(data) {
     updateStudentHeader(data.user);
     showStudentAlert(`Welcome, ${data.user.student_name}!`, "success");
 
+    // Show refresh message for proper functionality
+    showStudentRefreshMessage();
+
     // Initialize student navigation
     initializeStudentNavigation();
   }
@@ -796,6 +799,30 @@ function hideVoluntaryAlert() {
   if (alertDiv) {
     alertDiv.classList.add("d-none");
   }
+}
+
+// Show refresh message after student login
+function showStudentRefreshMessage() {
+  const alertContainer = document.getElementById("student-alert-container");
+  if (!alertContainer) return;
+
+  const refreshAlert = document.createElement("div");
+  refreshAlert.className =
+    "alert alert-info alert-dismissible d-flex align-items-center";
+  refreshAlert.id = "student-refresh-prompt-alert";
+  refreshAlert.innerHTML = `
+    <i class="fas fa-info-circle me-2"></i>
+    <div class="flex-grow-1">
+      <strong>Please refresh the page to continue</strong> - Click the refresh button below or press F5 to access all features.
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="window.location.reload()">
+      <i class="fas fa-sync-alt me-1"></i> Refresh Now
+    </button>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  `;
+
+  // Insert at the top of alerts
+  alertContainer.insertBefore(refreshAlert, alertContainer.firstChild);
 }
 
 // Export functions for use in other files
