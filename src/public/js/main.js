@@ -103,6 +103,7 @@ function updateNavigationByRole(userRole) {
     students: document.getElementById("students-link"),
     timetable: document.getElementById("timetable-link"),
     timetableCoordinator: document.getElementById("timetable-coordinator-link"),
+    systemConfig: document.getElementById("system-config-link"),
     logout: document.getElementById("logout-link"),
   };
 
