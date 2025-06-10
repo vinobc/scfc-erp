@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const XLSX = require("xlsx");
+const bcrypt = require("bcrypt");
 
 // Get all students
 exports.getAllStudents = async (req, res) => {
@@ -470,6 +471,173 @@ exports.importStudents = async (req, res) => {
     res.status(500).json({
       message: "Server error while importing students",
       error: error.message,
+    });
+  }
+};
+
+// Admin reset student password to default
+exports.adminResetStudentPassword = async (req, res) => {
+  try {
+    const { enrollment_no } = req.params;
+
+    // Get student details
+    const studentResult = await db.query(
+      `SELECT s.enrollment_no, s.user_id, s.student_name, u.username 
+       FROM student s
+       JOIN "user" u ON s.user_id = u.user_id
+       WHERE s.enrollment_no = $1 AND u.role = 'student'`,
+      [enrollment_no]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Student not found or does not have a user account",
+      });
+    }
+
+    const student = studentResult.rows[0];
+    const defaultPassword = `Student@${enrollment_no}`;
+
+    // Hash the default password
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(defaultPassword, saltRounds);
+
+    // Update user password
+    await db.query(
+      `UPDATE "user" 
+       SET password_hash = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $2`,
+      [passwordHash, student.user_id]
+    );
+
+    // Reset password change flag for student
+    await db.query(
+      `UPDATE student 
+       SET must_reset_password = TRUE, last_password_change = NULL 
+       WHERE user_id = $1`,
+      [student.user_id]
+    );
+
+    res.status(200).json({
+      message: "Student password reset successfully",
+      student_name: student.student_name,
+      enrollment_no: enrollment_no,
+      username: student.username,
+      new_password: defaultPassword,
+    });
+  } catch (error) {
+    console.error("Admin reset student password error:", error);
+    res.status(500).json({
+      message: "Server error while resetting student password",
+    });
+  }
+};
+
+// Admin create user accounts for students
+exports.adminCreateStudentUsers = async (req, res) => {
+  try {
+    const { enrollment_numbers } = req.body;
+
+    // Validate input
+    if (
+      !enrollment_numbers ||
+      !Array.isArray(enrollment_numbers) ||
+      enrollment_numbers.length === 0
+    ) {
+      return res.status(400).json({
+        message: "Please provide an array of enrollment numbers",
+      });
+    }
+
+    const results = {
+      created: [],
+      skipped: [],
+      errors: [],
+    };
+
+    for (const enrollment_no of enrollment_numbers) {
+      try {
+        // Check if student exists and doesn't have user account
+        const studentResult = await db.query(
+          `SELECT s.enrollment_no, s.student_name, s.email_id 
+           FROM student s
+           LEFT JOIN "user" u ON s.user_id = u.user_id
+           WHERE s.enrollment_no = $1`,
+          [enrollment_no]
+        );
+
+        if (studentResult.rows.length === 0) {
+          results.errors.push({
+            enrollment_no,
+            message: "Student not found",
+          });
+          continue;
+        }
+
+        const student = studentResult.rows[0];
+
+        // Check if user account already exists
+        const existingUser = await db.query(
+          `SELECT user_id FROM "user" WHERE username = $1`,
+          [`${enrollment_no}@blr.amity.edu`]
+        );
+
+        if (existingUser.rows.length > 0) {
+          results.skipped.push({
+            enrollment_no,
+            student_name: student.student_name,
+            message: "User account already exists",
+          });
+          continue;
+        }
+
+        // Create user account
+        const username = `${enrollment_no}@blr.amity.edu`;
+        const email = student.email_id || username;
+        const defaultPassword = `Student@${enrollment_no}`;
+        const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+        const userResult = await db.query(
+          `INSERT INTO "user" 
+           (username, email, password_hash, full_name, role) 
+           VALUES ($1, $2, $3, $4, $5) 
+           RETURNING user_id`,
+          [username, email, passwordHash, student.student_name, "student"]
+        );
+
+        const userId = userResult.rows[0].user_id;
+
+        // Update student table with user_id
+        await db.query(
+          `UPDATE student 
+           SET user_id = $1, must_reset_password = TRUE 
+           WHERE enrollment_no = $2`,
+          [userId, enrollment_no]
+        );
+
+        results.created.push({
+          enrollment_no,
+          student_name: student.student_name,
+          username,
+          default_password: defaultPassword,
+        });
+      } catch (error) {
+        console.error(`Error creating user for ${enrollment_no}:`, error);
+        results.errors.push({
+          enrollment_no,
+          message: error.message,
+        });
+      }
+    }
+
+    res.status(200).json({
+      message: `User creation completed. Created: ${results.created.length}, Skipped: ${results.skipped.length}, Errors: ${results.errors.length}`,
+      results,
+    });
+  } catch (error) {
+    console.error("Admin create student users error:", error);
+    res.status(500).json({
+      message: "Server error while creating student user accounts",
     });
   }
 };

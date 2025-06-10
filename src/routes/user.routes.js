@@ -14,5 +14,11 @@ router.post("/faculty", isAdmin, userController.createFacultyUser);
 router.post("/admin", isAdmin, userController.createAdminUser);
 router.put("/:id", isAdmin, userController.updateUser);
 router.delete("/:id", isAdmin, userController.deleteUser);
+// Admin reset faculty/coordinator password (admin only)
+router.put(
+  "/:id/reset-password",
+  isAdmin,
+  userController.adminResetUserPassword
+);
 
 module.exports = router;

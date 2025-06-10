@@ -286,3 +286,60 @@ exports.createAdminUser = async (req, res) => {
       .json({ message: "Server error while creating admin account" });
   }
 };
+
+// Admin reset faculty/coordinator password to default
+exports.adminResetUserPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get user details
+    const userResult = await db.query(
+      `SELECT u.user_id, u.username, u.full_name, u.role, u.employee_id
+       FROM "user" u
+       WHERE u.user_id = $1 AND u.role IN ('faculty', 'timetable_coordinator')`,
+      [parseInt(id)]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Faculty or coordinator user not found",
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    if (!user.employee_id) {
+      return res.status(400).json({
+        message: "Cannot reset password: user has no employee ID",
+      });
+    }
+
+    const defaultPassword = `Faculty@${user.employee_id}`;
+
+    // Hash the default password
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(defaultPassword, saltRounds);
+
+    // Update user password
+    await db.query(
+      `UPDATE "user" 
+       SET password_hash = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $2`,
+      [passwordHash, user.user_id]
+    );
+
+    res.status(200).json({
+      message: "User password reset successfully",
+      user_name: user.full_name,
+      username: user.username,
+      role: user.role,
+      employee_id: user.employee_id,
+      new_password: defaultPassword,
+    });
+  } catch (error) {
+    console.error("Admin reset user password error:", error);
+    res.status(500).json({
+      message: "Server error while resetting user password",
+    });
+  }
+};
