@@ -122,6 +122,17 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
+  // Add event listener for create user accounts
+  const createUserAccountsBtn = document.getElementById(
+    "create-user-accounts-btn"
+  );
+  if (createUserAccountsBtn) {
+    createUserAccountsBtn.addEventListener(
+      "click",
+      showCreateUserAccountsModal
+    );
+  }
+
   if (studentSearchInput) {
     studentSearchInput.addEventListener("input", filterStudents);
   }
@@ -357,17 +368,22 @@ function renderStudents(students) {
       <td>${student.year_admitted}</td>
       <td>${student.email_id || "-"}</td>
       <td>
-        <button class="btn btn-sm btn-primary action-btn edit-student-btn" data-enrollment="${
-          student.enrollment_no
-        }">
-          <i class="fas fa-edit"></i>
-        </button>
-        <button class="btn btn-sm btn-danger action-btn delete-student-btn" data-enrollment="${
-          student.enrollment_no
-        }" data-name="${student.student_name}">
-          <i class="fas fa-trash"></i>
-        </button>
-      </td>
+  <button class="btn btn-sm btn-primary action-btn edit-student-btn" data-enrollment="${
+    student.enrollment_no
+  }">
+    <i class="fas fa-edit"></i>
+  </button>
+  <button class="btn btn-sm btn-warning action-btn reset-student-password-btn" data-enrollment="${
+    student.enrollment_no
+  }" data-name="${student.student_name}" title="Reset Password">
+    <i class="fas fa-key"></i>
+  </button>
+  <button class="btn btn-sm btn-danger action-btn delete-student-btn" data-enrollment="${
+    student.enrollment_no
+  }" data-name="${student.student_name}">
+    <i class="fas fa-trash"></i>
+  </button>
+</td>
     `;
 
     studentsTableBody.appendChild(row);
@@ -396,6 +412,18 @@ function addStudentButtonListeners() {
 
     button.addEventListener("click", () => {
       openStudentDeleteModal(enrollmentNo, studentName);
+    });
+  });
+
+  // Reset password buttons
+  const resetPasswordButtons = document.querySelectorAll(
+    ".reset-student-password-btn"
+  );
+  resetPasswordButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const enrollmentNo = button.getAttribute("data-enrollment");
+      const studentName = button.getAttribute("data-name");
+      confirmResetStudentPassword(enrollmentNo, studentName);
     });
   });
 }
@@ -760,30 +788,181 @@ function handleStudentDeleteConfirm() {
     });
 }
 
-// Show alert message
-// Show alert message
+// Show alert message - use existing alert container
 function showAlert(message, type = "info", timeout = 5000) {
-  // Direct implementation to avoid recursion
   const alertContainer = document.getElementById("alert-container");
   if (!alertContainer) {
-    console.error("Alert container not found");
-    console.log(message); // Log the message instead
+    console.log(`Alert: ${message}`);
     return;
   }
 
-  const alertDiv = document.createElement("div");
-  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-  alertDiv.innerHTML = `
+  // Make sure container is visible and positioned
+  alertContainer.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    width: 400px;
+  `;
+
+  const alertId = `alert-${Date.now()}`;
+
+  const alertHTML = `
+    <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
       ${message}
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  `;
 
-  alertContainer.appendChild(alertDiv);
+  // Add to container (don't clear existing alerts)
+  alertContainer.insertAdjacentHTML("beforeend", alertHTML);
 
+  // Auto-dismiss after timeout
   if (timeout) {
     setTimeout(() => {
-      alertDiv.classList.remove("show");
-      setTimeout(() => alertDiv.remove(), 150);
+      const alert = document.getElementById(alertId);
+      if (alert) {
+        alert.remove();
+      }
     }, timeout);
   }
+}
+
+// Confirm and reset student password
+function confirmResetStudentPassword(enrollmentNo, studentName) {
+  if (
+    confirm(
+      `Are you sure you want to reset the password for ${studentName} (${enrollmentNo})?\n\nThis will reset their password to the default format: Student@${enrollmentNo}`
+    )
+  ) {
+    resetStudentPassword(enrollmentNo, studentName);
+  }
+}
+
+// Reset student password to default
+function resetStudentPassword(enrollmentNo, studentName) {
+  fetch(`${window.API_URL}/students/${enrollmentNo}/reset-password`, {
+    method: "PUT",
+    headers: {
+      Authorization: localStorage.getItem("token"),
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then((data) => {
+          throw new Error(data.message || "Failed to reset password");
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      showAlert(
+        `Password reset successful for ${data.student_name}!<br><br>
+       <strong>Username:</strong> ${data.username}<br>
+       <strong>New Password:</strong> ${data.new_password}<br><br>
+       <small>Please share these credentials with the student.</small>`,
+        "success",
+        10000
+      );
+    })
+    .catch((error) => {
+      console.error("Reset student password error:", error);
+      showAlert(error.message, "danger");
+    });
+}
+
+// Show students without user accounts and allow creating them
+function showCreateUserAccountsModal() {
+  // Get all students and check which ones don't have user accounts
+  fetch(`${window.API_URL}/students`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((students) => {
+      // For now, we'll use a simple approach with prompt
+      // In a full implementation, you'd create a proper modal
+      const enrollmentNumbers = students.map((s) => s.enrollment_no);
+      const selectedStudents = prompt(
+        `Enter enrollment numbers separated by commas to create user accounts for:\n\nAvailable students: ${enrollmentNumbers
+          .slice(0, 10)
+          .join(", ")}${
+          enrollmentNumbers.length > 10 ? "..." : ""
+        }\n\nExample: A101,A102,A103`
+      );
+
+      if (selectedStudents) {
+        const enrollmentList = selectedStudents
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s);
+        if (enrollmentList.length > 0) {
+          createStudentUserAccounts(enrollmentList);
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error fetching students:", error);
+      showAlert("Failed to load students", "danger");
+    });
+}
+
+// Create user accounts for selected students
+function createStudentUserAccounts(enrollmentNumbers) {
+  fetch(`${window.API_URL}/students/create-users`, {
+    method: "POST",
+    headers: {
+      Authorization: localStorage.getItem("token"),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      enrollment_numbers: enrollmentNumbers,
+    }),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then((data) => {
+          throw new Error(data.message || "Failed to create user accounts");
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      let message = data.message + "<br><br>";
+
+      if (data.results.created.length > 0) {
+        message += "<strong>Created Accounts:</strong><br>";
+        data.results.created.forEach((student) => {
+          message += `• ${student.student_name} (${student.enrollment_no}): ${student.default_password}<br>`;
+        });
+        message += "<br>";
+      }
+
+      if (data.results.skipped.length > 0) {
+        message += "<strong>Skipped (already exists):</strong><br>";
+        data.results.skipped.forEach((student) => {
+          message += `• ${student.student_name} (${student.enrollment_no})<br>`;
+        });
+        message += "<br>";
+      }
+
+      if (data.results.errors.length > 0) {
+        message += "<strong>Errors:</strong><br>";
+        data.results.errors.forEach((error) => {
+          message += `• ${error.enrollment_no}: ${error.message}<br>`;
+        });
+      }
+
+      showAlert(
+        message,
+        data.results.errors.length > 0 ? "warning" : "success",
+        15000
+      );
+    })
+    .catch((error) => {
+      console.error("Create user accounts error:", error);
+      showAlert(error.message, "danger");
+    });
 }

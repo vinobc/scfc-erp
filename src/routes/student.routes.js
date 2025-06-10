@@ -36,4 +36,18 @@ router.post(
   studentController.importStudents
 );
 
+// Admin reset student password (admin only)
+router.put(
+  "/:enrollment_no/reset-password",
+  isAdmin,
+  studentController.adminResetStudentPassword
+);
+
+// Admin create user accounts for students (admin only)
+router.post(
+  "/create-users",
+  isAdmin,
+  studentController.adminCreateStudentUsers
+);
+
 module.exports = router;
