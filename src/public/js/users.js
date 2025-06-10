@@ -163,24 +163,35 @@ function renderUsers(users) {
       <td>${lastLogin}</td>
       <td>${statusBadge}</td>
       <td>
-        ${
-          user.role !== "admin"
-            ? `
-          <button class="btn btn-sm btn-outline-primary edit-user-btn" 
-            data-user-id="${user.user_id}">
-            <i class="fas fa-edit"></i>
-          </button>
-          <button class="btn btn-sm btn-outline-danger delete-user-btn" 
-            data-user-id="${user.user_id}" 
-            data-user-name="${user.full_name}">
-            <i class="fas fa-trash"></i>
-          </button>
-        `
-            : `
-          <span class="text-muted">Protected</span>
-        `
-        }
-      </td>
+  ${
+    user.role !== "admin"
+      ? `
+    <button class="btn btn-sm btn-outline-primary edit-user-btn" 
+      data-user-id="${user.user_id}">
+      <i class="fas fa-edit"></i>
+    </button>
+    ${
+      user.role === "faculty" || user.role === "timetable_coordinator"
+        ? `<button class="btn btn-sm btn-outline-warning reset-user-password-btn" 
+          data-user-id="${user.user_id}" 
+          data-user-name="${user.full_name}"
+          data-employee-id="${user.employee_id}"
+          title="Reset Password">
+          <i class="fas fa-key"></i>
+        </button>`
+        : ""
+    }
+    <button class="btn btn-sm btn-outline-danger delete-user-btn" 
+      data-user-id="${user.user_id}" 
+      data-user-name="${user.full_name}">
+      <i class="fas fa-trash"></i>
+    </button>
+  `
+      : `
+    <span class="text-muted">Protected</span>
+  `
+  }
+</td>
     `;
     usersTableBody.appendChild(row);
   });
@@ -198,6 +209,16 @@ function renderUsers(users) {
       const userId = btn.getAttribute("data-user-id");
       const userName = btn.getAttribute("data-user-name");
       confirmDeleteUser(userId, userName);
+    });
+  });
+
+  // Reset password buttons
+  document.querySelectorAll(".reset-user-password-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const userId = btn.getAttribute("data-user-id");
+      const userName = btn.getAttribute("data-user-name");
+      const employeeId = btn.getAttribute("data-employee-id");
+      confirmResetUserPassword(userId, userName, employeeId);
     });
   });
 }
@@ -354,15 +375,87 @@ function deleteUser(userId) {
     });
 }
 
-// Show alert message
-function showAlert(message, type = "info", timeout = 5000) {
-  // Use the global showAlert function from main.js
+// Confirm and reset user password
+function confirmResetUserPassword(userId, userName, employeeId) {
   if (
-    typeof window.showAlert === "function" &&
-    window.showAlert !== showAlert
+    confirm(
+      `Are you sure you want to reset the password for ${userName}?\n\nThis will reset their password to the default format: Faculty@${employeeId}`
+    )
   ) {
-    window.showAlert(message, type, timeout);
-  } else {
-    console.log(`${type}: ${message}`);
+    resetUserPassword(userId, userName, employeeId);
+  }
+}
+
+// Reset user password to default
+function resetUserPassword(userId, userName, employeeId) {
+  fetch(`${window.API_URL}/users/${userId}/reset-password`, {
+    method: "PUT",
+    headers: {
+      Authorization: localStorage.getItem("token"),
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then((data) => {
+          throw new Error(data.message || "Failed to reset password");
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      showAlert(
+        `Password reset successful for ${data.user_name}!<br><br>
+       <strong>Username:</strong> ${data.username}<br>
+       <strong>New Password:</strong> ${data.new_password}<br>
+       <strong>Role:</strong> ${data.role}<br><br>
+       <small>Please share these credentials with the user.</small>`,
+        "success",
+        10000
+      );
+    })
+    .catch((error) => {
+      console.error("Reset user password error:", error);
+      showAlert(error.message, "danger");
+    });
+}
+
+// Show alert message - use existing alert container
+function showAlert(message, type = "info", timeout = 5000) {
+  const alertContainer = document.getElementById("alert-container");
+  if (!alertContainer) {
+    console.log(`Alert: ${message}`);
+    return;
+  }
+
+  // Make sure container is visible and positioned
+  alertContainer.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    width: 400px;
+  `;
+
+  const alertId = `alert-${Date.now()}`;
+
+  const alertHTML = `
+    <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+      ${message}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  `;
+
+  // Add to container (don't clear existing alerts)
+  alertContainer.insertAdjacentHTML("beforeend", alertHTML);
+
+  // Auto-dismiss after timeout
+  if (timeout) {
+    setTimeout(() => {
+      const alert = document.getElementById(alertId);
+      if (alert) {
+        alert.remove();
+      }
+    }, timeout);
   }
 }
