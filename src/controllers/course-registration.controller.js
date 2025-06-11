@@ -363,21 +363,37 @@ exports.getCourseOfferings = async (req, res) => {
           }
           seenSlotCombinations.add(normalizedSlots);
 
-          // Check if any allocation matches this configuration
+          // Find ALL allocations that match this configuration
           const slotsInConfig = [
             config.slot_name,
             ...(config.linked_slots || []),
           ];
-          const matchingAllocation = allocationsResult.rows.find((alloc) =>
+
+          // Get all matching allocations (not just first one)
+          const matchingAllocations = allocationsResult.rows.filter((alloc) =>
             slotsInConfig.includes(alloc.slot_name)
           );
 
-          if (matchingAllocation) {
-            // Build combined schedule from all slots in the combination
+          // Group by unique venue+faculty combinations
+          const uniqueCombinations = new Map();
+
+          matchingAllocations.forEach((alloc) => {
+            const key = `${alloc.venue}-${alloc.faculty_name}`;
+            if (!uniqueCombinations.has(key)) {
+              uniqueCombinations.set(key, alloc);
+            }
+          });
+
+          // Create offerings for each unique venue+faculty combination
+          uniqueCombinations.forEach((allocation) => {
+            // Build combined schedule from all slots in the combination for this specific venue+faculty
             const combinedSchedule = [];
             slotsInConfig.forEach((slotName) => {
               const slotAllocations = allocationsResult.rows.filter(
-                (alloc) => alloc.slot_name === slotName
+                (alloc) =>
+                  alloc.slot_name === slotName &&
+                  alloc.venue === allocation.venue &&
+                  alloc.faculty_name === allocation.faculty_name
               );
               slotAllocations.forEach((alloc) => {
                 combinedSchedule.push({
@@ -392,12 +408,12 @@ exports.getCourseOfferings = async (req, res) => {
               course_title: courseData.course_name,
               course_type: "T",
               slots_offered: normalizedSlots,
-              venue: matchingAllocation.venue,
-              faculty_name: matchingAllocation.faculty_name,
-              available_seats: matchingAllocation.available_seats,
+              venue: allocation.venue,
+              faculty_name: allocation.faculty_name,
+              available_seats: allocation.available_seats,
               schedule: combinedSchedule,
             });
-          }
+          });
         });
       } else {
         // 2-credit and 3-credit theory courses - show individual slots
