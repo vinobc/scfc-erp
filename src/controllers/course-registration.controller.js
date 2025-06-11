@@ -291,27 +291,40 @@ exports.getCourseOfferings = async (req, res) => {
           }
           seenSlotCombinations.add(normalizedSlots);
 
-          // Check if any allocation matches this configuration
+          // Find ALL allocations that match this configuration
           const slotsInConfig = [
             config.slot_name,
             ...(config.linked_slots || []),
           ];
-          const matchingAllocation = practicalAllocations.find((alloc) =>
+
+          // Get all matching allocations (not just first one)
+          const matchingAllocations = practicalAllocations.filter((alloc) =>
             slotsInConfig.includes(alloc.slot_name)
           );
 
-          if (matchingAllocation) {
+          // Group by unique venue+faculty combinations
+          const uniqueCombinations = new Map();
+
+          matchingAllocations.forEach((alloc) => {
+            const key = `${alloc.venue}-${alloc.faculty_name}`;
+            if (!uniqueCombinations.has(key)) {
+              uniqueCombinations.set(key, alloc);
+            }
+          });
+
+          // Create offerings for each unique venue+faculty combination
+          uniqueCombinations.forEach((allocation) => {
             offerings.push({
               course_code: courseData.course_code,
               course_title: courseData.course_name,
               course_type: "P",
               slots_offered: normalizedSlots,
-              venue: matchingAllocation.venue,
-              faculty_name: matchingAllocation.faculty_name,
-              available_seats: matchingAllocation.available_seats,
+              venue: allocation.venue,
+              faculty_name: allocation.faculty_name,
+              available_seats: allocation.available_seats,
               schedule: [],
             });
-          }
+          });
         });
       }
     } else if (courseType === "T") {
@@ -452,27 +465,40 @@ exports.getCourseOfferings = async (req, res) => {
         }
         seenSlotCombinations.add(normalizedSlots);
 
-        // Check if any allocation matches this configuration
+        // Find ALL allocations that match this configuration
         const slotsInConfig = [
           config.slot_name,
           ...(config.linked_slots || []),
         ];
-        const matchingAllocation = allocationsResult.rows.find((alloc) =>
+
+        // Get all matching allocations (not just first one)
+        const matchingAllocations = allocationsResult.rows.filter((alloc) =>
           slotsInConfig.includes(alloc.slot_name)
         );
 
-        if (matchingAllocation) {
+        // Group by unique venue+faculty combinations
+        const uniqueCombinations = new Map();
+
+        matchingAllocations.forEach((alloc) => {
+          const key = `${alloc.venue}-${alloc.faculty_name}`;
+          if (!uniqueCombinations.has(key)) {
+            uniqueCombinations.set(key, alloc);
+          }
+        });
+
+        // Create offerings for each unique venue+faculty combination
+        uniqueCombinations.forEach((allocation) => {
           offerings.push({
             course_code: courseData.course_code,
             course_title: courseData.course_name,
             course_type: "P",
             slots_offered: normalizedSlots,
-            venue: matchingAllocation.venue,
-            faculty_name: matchingAllocation.faculty_name,
-            available_seats: matchingAllocation.available_seats,
+            venue: allocation.venue,
+            faculty_name: allocation.faculty_name,
+            available_seats: allocation.available_seats,
             schedule: [],
           });
-        }
+        });
       });
     }
 
