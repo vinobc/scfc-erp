@@ -418,3 +418,202 @@ body.authenticated.student-user {
   max-width: 100%;
   overflow-x: hidden;
 }
+
+/* ===== AUB BANNER STYLING ===== */
+
+/* Banner container */
+.aub-banner-container {
+  width: 100%;
+  background-color: #ffffff;
+  border-bottom: 3px solid #fbbf24;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Banner image */
+.aub-banner {
+  max-width: 100%;
+  height: auto;
+  max-height: 80px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Banner in login modal - make it smaller */
+.modal-content .aub-banner-container {
+  max-height: 60px;
+  overflow: hidden;
+}
+
+.modal-content .aub-banner {
+  max-height: 50px;
+  width: auto;
+}
+
+/* Responsive banner sizing */
+@media (max-width: 768px) {
+  .aub-banner {
+    max-height: 60px;
+  }
+
+  .modal-content .aub-banner {
+    max-height: 40px;
+  }
+}
+
+/* Update primary colors to match AUB branding */
+:root {
+  --aub-blue: #1e3a8a;
+  --aub-gold: #fbbf24;
+  --aub-light-blue: #3b82f6;
+}
+
+/* Update button colors to AUB branding */
+.btn-primary {
+  background-color: var(--aub-blue) !important;
+  border-color: var(--aub-blue) !important;
+}
+
+.btn-primary:hover {
+  background-color: var(--aub-light-blue) !important;
+  border-color: var(--aub-light-blue) !important;
+}
+
+/* ===== COMPLETE AUB COLOR SCHEME UPDATE ===== */
+
+/* Update sidebar with AUB colors */
+.sidebar {
+  background-color: var(--aub-blue) !important;
+}
+
+.sidebar .nav-link {
+  color: #e5e7eb !important;
+}
+
+.sidebar .nav-link:hover {
+  color: #ffffff !important;
+  background-color: rgba(251, 191, 36, 0.1) !important;
+}
+
+.sidebar .nav-link.active {
+  color: #ffffff !important;
+  background-color: rgba(251, 191, 36, 0.2) !important;
+  border-left: 3px solid var(--aub-gold) !important;
+}
+
+/* Update card headers with AUB colors */
+.card .card-header {
+  background-color: var(--aub-blue) !important;
+  color: white !important;
+  border-bottom: 2px solid var(--aub-gold) !important;
+}
+
+/* Update table headers */
+.table thead th {
+  background-color: var(--aub-blue) !important;
+  color: white !important;
+  border-color: var(--aub-gold) !important;
+}
+
+.table-dark {
+  background-color: var(--aub-blue) !important;
+  color: white !important;
+}
+
+.table-primary {
+  background-color: var(--aub-blue) !important;
+  color: white !important;
+}
+
+/* Update border accent colors */
+.border-left-primary {
+  border-left: 4px solid var(--aub-blue) !important;
+}
+
+.border-left-success {
+  border-left: 4px solid var(--aub-gold) !important;
+}
+
+.border-left-info {
+  border-left: 4px solid var(--aub-light-blue) !important;
+}
+
+/* Update alert colors */
+.alert-primary {
+  background-color: rgba(30, 58, 138, 0.1) !important;
+  border-color: var(--aub-blue) !important;
+  color: var(--aub-blue) !important;
+}
+
+.alert-info {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border-color: var(--aub-light-blue) !important;
+  color: var(--aub-light-blue) !important;
+}
+
+/* Update badge colors */
+.badge.bg-primary {
+  background-color: var(--aub-blue) !important;
+}
+
+/* Update form focus colors */
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--aub-gold) !important;
+  box-shadow: 0 0 0 0.2rem rgba(251, 191, 36, 0.25) !important;
+}
+
+/* Update student interface colors */
+#student-interface .sidebar {
+  background-color: var(--aub-blue) !important;
+}
+
+#student-interface .nav-link {
+  color: #e5e7eb !important;
+}
+
+#student-interface .nav-link:hover {
+  color: #ffffff !important;
+  background-color: rgba(251, 191, 36, 0.1) !important;
+}
+
+#student-interface .nav-link.active {
+  color: #ffffff !important;
+  background-color: rgba(251, 191, 36, 0.2) !important;
+}
+
+/* Update text colors for better contrast */
+.text-primary {
+  color: var(--aub-blue) !important;
+}
+
+.font-weight-bold.text-primary {
+  color: var(--aub-blue) !important;
+}
+
+/* Update button variants */
+.btn-success {
+  background-color: var(--aub-gold) !important;
+  border-color: var(--aub-gold) !important;
+  color: #000000 !important;
+}
+
+.btn-success:hover {
+  background-color: #f59e0b !important;
+  border-color: #f59e0b !important;
+  color: #000000 !important;
+}
+
+.btn-info {
+  background-color: var(--aub-light-blue) !important;
+  border-color: var(--aub-light-blue) !important;
+}
+
+.btn-info:hover {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+}
