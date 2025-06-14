@@ -114,6 +114,18 @@ const SYNC_TABLES = [
       "allowed_slot_times",
     ],
   },
+  {
+    name: "student_registrations",
+    primaryKey: "id",
+    dependencies: [
+      "student",
+      "course",
+      "venue",
+      "program",
+      "slot",
+      "semester_slot_config",
+    ],
+  },
 ];
 
 async function testConnections() {
