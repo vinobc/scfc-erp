@@ -1022,6 +1022,130 @@ exports.registerCourseOffering = async (req, res) => {
       `✅ All conflict checks passed for ${course_code} - ${slot_name}`
     );
 
+    // ===== FACULTY ALLOCATION VALIDATION =====
+    console.log(
+      `🎯 Validating specific faculty allocation: ${faculty_name} at ${venue} for slot ${slot_name}`
+    );
+
+    // Check if this is a compound slot (contains commas)
+    const isCompoundSlot = slot_name.includes(",");
+
+    if (isCompoundSlot) {
+      // Handle compound slots (e.g., "L3+L4,L23+L24")
+      console.log(`🔍 Compound slot detected: ${slot_name}`);
+
+      const individualSlots = slot_name
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      console.log(`🔍 Individual slots to validate:`, individualSlots);
+
+      // Validate each individual slot
+      for (const individualSlot of individualSlots) {
+        const slotCheck = await db.query(
+          `SELECT fa.*, f.name as faculty_name, v.venue as venue_name, v.capacity
+           FROM faculty_allocation fa
+           JOIN faculty f ON fa.employee_id = f.employee_id
+           JOIN venue v ON fa.venue = v.venue
+           WHERE fa.course_code = $1 
+             AND fa.slot_year = $2 
+             AND fa.semester_type = $3
+             AND fa.slot_name = $4
+             AND fa.venue = $5
+             AND f.name = $6`,
+          [
+            course_code,
+            slot_year,
+            semester_type,
+            individualSlot,
+            venue,
+            faculty_name,
+          ]
+        );
+
+        if (slotCheck.rows.length === 0) {
+          console.log(
+            `❌ Individual slot not found: ${individualSlot} for ${faculty_name} at ${venue}`
+          );
+
+          // Show what's available for this individual slot
+          const availableForSlot = await db.query(
+            `SELECT f.name as faculty_name, fa.venue, fa.slot_name
+             FROM faculty_allocation fa
+             JOIN faculty f ON fa.employee_id = f.employee_id
+             WHERE fa.course_code = $1 AND fa.slot_year = $2 AND fa.semester_type = $3 AND fa.slot_name = $4
+             ORDER BY fa.venue`,
+            [course_code, slot_year, semester_type, individualSlot]
+          );
+
+          return res.status(400).json({
+            message: `Invalid selection: ${faculty_name} is not assigned to teach ${course_code} in slot ${individualSlot} at venue ${venue} for ${slot_year} ${semester_type}`,
+            debug_info: {
+              compound_slot: slot_name,
+              failed_individual_slot: individualSlot,
+              requested: { faculty_name, venue, slot_name: individualSlot },
+              available_for_this_slot: availableForSlot.rows,
+            },
+          });
+        } else {
+          console.log(`✅ Individual slot validated: ${individualSlot}`);
+        }
+      }
+
+      console.log(
+        `✅ All individual slots validated for compound slot: ${slot_name}`
+      );
+    } else {
+      // Handle single slots (existing logic)
+      console.log(`🔍 Single slot validation: ${slot_name}`);
+
+      const facultyAllocationCheck = await db.query(
+        `SELECT fa.*, f.name as faculty_name, v.venue as venue_name, v.capacity
+         FROM faculty_allocation fa
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         JOIN venue v ON fa.venue = v.venue
+         WHERE fa.course_code = $1 
+           AND fa.slot_year = $2 
+           AND fa.semester_type = $3
+           AND fa.slot_name = $4
+           AND fa.venue = $5
+           AND f.name = $6`,
+        [course_code, slot_year, semester_type, slot_name, venue, faculty_name]
+      );
+
+      if (facultyAllocationCheck.rows.length === 0) {
+        console.log(
+          `❌ Faculty allocation not found for: ${faculty_name} at ${venue} for slot ${slot_name}`
+        );
+
+        // Log what allocations DO exist for debugging
+        const availableAllocations = await db.query(
+          `SELECT f.name as faculty_name, fa.venue, fa.slot_name
+           FROM faculty_allocation fa
+           JOIN faculty f ON fa.employee_id = f.employee_id
+           WHERE fa.course_code = $1 AND fa.slot_year = $2 AND fa.semester_type = $3
+           ORDER BY fa.slot_name, fa.venue`,
+          [course_code, slot_year, semester_type]
+        );
+
+        console.log(`Available allocations:`, availableAllocations.rows);
+
+        return res.status(400).json({
+          message: `Invalid selection: ${faculty_name} is not assigned to teach ${course_code} in slot ${slot_name} at venue ${venue} for ${slot_year} ${semester_type}`,
+          debug_info: {
+            requested: { faculty_name, venue, slot_name },
+            available_allocations: availableAllocations.rows,
+          },
+        });
+      }
+
+      console.log(`✅ Single slot validated: ${slot_name}`);
+    }
+
+    console.log(
+      `✅ Faculty allocation validation completed for: ${faculty_name} at ${venue} for slot ${slot_name}`
+    );
+    // ===== END FACULTY ALLOCATION VALIDATION =====
     // Check seat availability before registration
     console.log(
       `🎫 Checking seat availability for ${course_code} - ${slot_name} at ${venue}`

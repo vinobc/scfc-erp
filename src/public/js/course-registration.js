@@ -628,13 +628,18 @@ function displayCourseOfferings(data) {
                     offering.available_seats
                   }</td>
                   <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
-                    <button onclick="registerCourseOffering('${
-                      offering.course_code
-                    }', '${offering.slots_offered}', '${offering.course_type}')"
+                  <button onclick="registerCourseOffering('${
+                    offering.course_code
+                  }', '${offering.slots_offered}', '${
+                    offering.course_type
+                  }', '${offering.faculty_name.replace(/'/g, "\\'")}', '${
+                    offering.venue
+                  }')"
                             style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;"
                             onmouseover="this.style.background='#218838'" onmouseout="this.style.background='#28a745'">
                       Register
                     </button>
+                   
                   </td>
                   <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
                     <button onclick="deleteCourseOffering('${
@@ -676,9 +681,17 @@ function displayCourseOfferings(data) {
   );
 }
 
-// Register course offering - WORKING VERSION
-async function registerCourseOffering(courseCode, slotOffered, courseType) {
-  console.log(`📝 Register: ${courseCode} - ${slotOffered} (${courseType})`);
+// Register course offering
+async function registerCourseOffering(
+  courseCode,
+  slotOffered,
+  courseType,
+  facultyName,
+  venue
+) {
+  console.log(
+    `📝 Register: ${courseCode} - ${slotOffered} (${courseType}) with ${facultyName} at ${venue}`
+  );
 
   try {
     // Get current semester selection
@@ -690,26 +703,14 @@ async function registerCourseOffering(courseCode, slotOffered, courseType) {
 
     const [year, type] = semesterSelect.value.split("|");
 
-    // Get course and faculty details for this offering
-    const offeringData = await getCourseOfferingDetails(
-      courseCode,
-      slotOffered,
-      year,
-      type
-    );
-    if (!offeringData) {
-      showAlert("Could not find offering details", "danger");
-      return;
-    }
-
-    // Prepare registration data
+    // FIXED: Prepare registration data with specific faculty and venue
     const registrationData = {
       course_code: courseCode,
       slot_name: slotOffered,
       slot_year: year,
       semester_type: type,
-      venue: offeringData.venue,
-      faculty_name: offeringData.faculty_name,
+      venue: venue, // FIXED: Use specific venue from button click
+      faculty_name: facultyName, // FIXED: Use specific faculty from button click
     };
 
     console.log("📤 Sending registration request:", registrationData);
@@ -739,18 +740,15 @@ async function registerCourseOffering(courseCode, slotOffered, courseType) {
 
     // Show success message
     showAlert(
-      `✅ Successfully registered for ${courseCode} - ${slotOffered}! ` +
+      `✅ Successfully registered for ${courseCode} - ${slotOffered}!<br>` +
+        `Faculty: ${facultyName}, Venue: ${venue}<br>` +
         `Credits: ${result.registration.credits}, Total Credits: ${result.registration.new_total_credits}`,
       "success"
     );
 
-    // Refresh credit summary
+    // Refresh displays
     await loadCreditSummary();
-
-    // Refresh timetable if it's currently displayed
     await refreshTimetableIfVisible();
-
-    // Refresh the course offerings to show updated state
     await loadCourseOfferings(courseCode);
   } catch (error) {
     console.error("Registration error:", error);
@@ -828,46 +826,6 @@ async function deleteCourseOffering(courseCode, slotOffered, courseType) {
   } catch (error) {
     console.error("Deletion error:", error);
     showAlert(`❌ Deletion failed: ${error.message}`, "danger");
-  }
-}
-
-// Helper function to get course offering details
-async function getCourseOfferingDetails(courseCode, slotOffered, year, type) {
-  try {
-    const response = await fetch(
-      `${
-        window.API_URL
-      }/course-registration/course-offerings/${encodeURIComponent(
-        courseCode
-      )}/${encodeURIComponent(year)}/${encodeURIComponent(type)}`,
-      {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to get offering details`);
-    }
-
-    const data = await response.json();
-
-    // Find the specific offering
-    const offering = data.offerings.find(
-      (off) => off.slots_offered === slotOffered
-    );
-
-    if (offering) {
-      return {
-        venue: offering.venue,
-        faculty_name: offering.faculty_name,
-        available_seats: offering.available_seats,
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error("Error getting offering details:", error);
-    return null;
   }
 }
 
