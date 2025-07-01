@@ -1435,10 +1435,11 @@ exports.getStudentSlotTimetable = async (req, res) => {
       `🔍 Looking for registrations for student: ${student.enrollment_number}`
     );
 
-    // Get raw student registrations first
+    // Get raw student registrations first (exclude withdrawn courses)
     const rawRegistrations = await db.query(
       `SELECT * FROM student_registrations 
        WHERE enrollment_number = $1 AND slot_year = $2 AND semester_type = $3
+         AND (withdrawn = false OR withdrawn IS NULL)
        ORDER BY course_code, component_type`,
       [student.enrollment_number, slot_year, semester_type]
     );

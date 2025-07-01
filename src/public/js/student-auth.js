@@ -53,6 +53,17 @@ function setupStudentNavigation() {
     });
   }
 
+  // Initialize course withdrawal navigation
+  const studentCourseWithdrawalLink = document.getElementById(
+    "student-course-withdrawal-link"
+  );
+  if (studentCourseWithdrawalLink) {
+    studentCourseWithdrawalLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("course-withdrawal");
+    });
+  }
+
   // Initialize student timetable navigation
   const studentTimetableLink = document.getElementById(
     "student-timetable-link"
@@ -115,6 +126,38 @@ async function checkAndUpdateRegistrationStatus() {
   }
 }
 
+// Check course withdrawal status and update navigation
+async function checkAndUpdateWithdrawalStatus() {
+  try {
+    console.log("🔍 Checking course withdrawal status...");
+
+    const response = await fetch(
+      `${window.API_URL}/course-withdrawal/withdrawal-status`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn("Could not check withdrawal status, assuming enabled");
+      return;
+    }
+
+    const statusData = await response.json();
+    console.log("📋 Withdrawal status:", statusData);
+
+    // Update navigation based on status
+    updateCourseWithdrawalNavigation(statusData.enabled, statusData.message);
+  } catch (error) {
+    console.error("❌ Error checking withdrawal status:", error);
+    // Fail-safe: assume withdrawal is disabled if we can't check (more conservative)
+    updateCourseWithdrawalNavigation(
+      false,
+      "Course withdrawal status could not be determined"
+    );
+  }
+}
+
 // Update course registration navigation item
 function updateCourseRegistrationNavigation(isEnabled, message) {
   const courseRegLink = document.getElementById(
@@ -169,6 +212,60 @@ function updateCourseRegistrationNavigation(isEnabled, message) {
   }
 }
 
+// Update course withdrawal navigation item
+function updateCourseWithdrawalNavigation(isEnabled, message) {
+  const courseWithdrawalLink = document.getElementById(
+    "student-course-withdrawal-link"
+  );
+  const courseWithdrawalIcon = courseWithdrawalLink?.querySelector("i");
+
+  if (!courseWithdrawalLink) {
+    console.error("Course withdrawal link not found");
+    return;
+  }
+
+  if (isEnabled) {
+    // Enable withdrawal
+    courseWithdrawalLink.classList.remove("disabled", "text-muted");
+    courseWithdrawalLink.classList.add("text-white");
+    courseWithdrawalLink.style.pointerEvents = "auto";
+    courseWithdrawalLink.style.opacity = "1";
+
+    if (courseWithdrawalIcon) {
+      courseWithdrawalIcon.className = "fas fa-times-circle me-2";
+    }
+
+    // Update link text
+    courseWithdrawalLink.innerHTML = `
+      <i class="fas fa-times-circle me-2"></i>
+      Course Withdrawal
+    `;
+
+    console.log("✅ Course withdrawal ENABLED for students");
+  } else {
+    // Disable withdrawal
+    courseWithdrawalLink.classList.add("disabled", "text-muted");
+    courseWithdrawalLink.classList.remove("text-white");
+    courseWithdrawalLink.style.pointerEvents = "none";
+    courseWithdrawalLink.style.opacity = "0.5";
+
+    if (courseWithdrawalIcon) {
+      courseWithdrawalIcon.className = "fas fa-ban me-2";
+    }
+
+    // Update link text and add disabled indicator
+    courseWithdrawalLink.innerHTML = `
+      <i class="fas fa-ban me-2"></i>
+      Course Withdrawal (Disabled)
+    `;
+
+    // Store the disabled message for when user tries to click
+    courseWithdrawalLink.setAttribute("data-disabled-message", message);
+
+    console.log("❌ Course withdrawal DISABLED for students");
+  }
+}
+
 // Show specific student page
 function showStudentPage(pageType) {
   console.log("Showing student page:", pageType);
@@ -182,6 +279,20 @@ function showStudentPage(pageType) {
       const message =
         courseRegLink.getAttribute("data-disabled-message") ||
         "Course registration is currently disabled by administration";
+      showStudentAlert(message, "warning");
+      return; // Don't navigate to the page
+    }
+  }
+
+  // Check if trying to access disabled course withdrawal
+  if (pageType === "course-withdrawal") {
+    const courseWithdrawalLink = document.getElementById(
+      "student-course-withdrawal-link"
+    );
+    if (courseWithdrawalLink && courseWithdrawalLink.classList.contains("disabled")) {
+      const message =
+        courseWithdrawalLink.getAttribute("data-disabled-message") ||
+        "Course withdrawal is currently disabled by administration";
       showStudentAlert(message, "warning");
       return; // Don't navigate to the page
     }
@@ -242,6 +353,30 @@ function showStudentPage(pageType) {
       }
       break;
 
+    case "course-withdrawal":
+      const withdrawalContent = document.getElementById(
+        "student-course-withdrawal-content"
+      );
+      if (withdrawalContent) {
+        withdrawalContent.style.display = "block";
+      }
+      const withdrawalLink = document.getElementById(
+        "student-course-withdrawal-link"
+      );
+      if (withdrawalLink) {
+        withdrawalLink.classList.add("active");
+      }
+      const withdrawalTitleElement = document.getElementById("student-page-title");
+      if (withdrawalTitleElement) {
+        withdrawalTitleElement.textContent = "Course Withdrawal";
+      }
+
+      // Initialize course withdrawal if not already done
+      if (typeof initializeCourseWithdrawal === "function") {
+        initializeCourseWithdrawal();
+      }
+      break;
+
     case "timetable":
       const timetableContent = document.getElementById(
         "student-timetable-page"
@@ -269,8 +404,9 @@ function showStudentPage(pageType) {
 
 // Initialize student interface navigation
 async function initializeStudentNavigation() {
-  // Check registration status first
+  // Check registration and withdrawal status first
   await checkAndUpdateRegistrationStatus();
+  await checkAndUpdateWithdrawalStatus();
 
   // Show dashboard by default
   showStudentPage("dashboard");
