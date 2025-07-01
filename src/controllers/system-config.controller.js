@@ -88,6 +88,14 @@ exports.updateConfigSetting = async (req, res) => {
       }
     }
 
+    if (configKey === "course_withdrawal_enabled") {
+      if (!["true", "false"].includes(valueString.toLowerCase())) {
+        return res.status(400).json({
+          message: "course_withdrawal_enabled must be 'true' or 'false'",
+        });
+      }
+    }
+
     // Check if configuration exists
     const existingResult = await db.query(
       `SELECT config_key FROM system_config WHERE config_key = $1`,

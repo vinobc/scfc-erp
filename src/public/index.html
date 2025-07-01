@@ -1542,6 +1542,17 @@
                       Course Registration
                     </a>
                   </li>
+                  <!-- Course Withdrawal -->
+                  <li class="nav-item">
+                    <a
+                      class="nav-link text-white"
+                      href="#"
+                      id="student-course-withdrawal-link"
+                    >
+                      <i class="fas fa-times-circle me-2"></i>
+                      Course Withdrawal
+                    </a>
+                  </li>
                   <!-- View my Slot TimeTable -->
                   <li class="nav-item">
                     <a
@@ -1758,6 +1769,56 @@
                               class="mb-4"
                             >
                               <!-- Course details table will be populated here -->
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Course Withdrawal Content -->
+                <div
+                  id="student-course-withdrawal-content"
+                  class="student-content-page"
+                  style="display: none"
+                >
+                  <div class="row">
+                    <div class="col-lg-12">
+                      <div style="margin-left: 50px; margin-right: 20px">
+                        <div class="card shadow mb-4">
+                          <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">
+                              Course Withdrawal
+                            </h6>
+                          </div>
+                          <div class="card-body">
+                            <!-- Academic Year/Semester Selection -->
+                            <div class="mb-4">
+                              <h5>Select Academic Year & Semester</h5>
+                              <div class="row">
+                                <div class="col-md-8">
+                                  <select
+                                    class="form-select"
+                                    id="withdrawal-semester-select"
+                                  >
+                                    <option value="">
+                                      Loading semesters...
+                                    </option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <!-- Registered Courses Display -->
+                            <div
+                              id="withdrawal-courses-section"
+                              style="display: none"
+                              class="mb-4"
+                            >
+                              <h5>Your Registered Courses</h5>
+                              <div id="withdrawal-courses-list">
+                                <!-- Courses will be loaded here -->
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -4185,6 +4246,7 @@
     <script src="js/users.js"></script>
     <script src="js/password-change.js"></script>
     <script src="js/course-registration.js"></script>
+    <script src="js/course-withdrawal.js"></script>
     <script src="js/student-timetable.js"></script>
     <script src="js/system-config.js"></script>
     <script src="js/courses-view.js"></script>

@@ -88,6 +88,11 @@ app.use(
   "/api/course-registration",
   require("./routes/course-registration.routes")
 );
+// Course Withdrawal Routes
+app.use(
+  "/api/course-withdrawal",
+  require("./routes/course-withdrawal.routes")
+);
 app.use("/api/system-config", systemConfigRoutes);
 
 // Root route
