@@ -149,7 +149,7 @@ async function loadSelectedTimetable() {
     const data = await response.json();
 
     if (data.registrations && data.registrations.length > 0) {
-      generateStandaloneTimetable(data.student, data.registrations, year, type);
+      generateStandaloneTimetable(data.student, data.registrations, data.allRegistrations || data.registrations, year, type);
     } else {
       showNoRegistrationsMessage(year, type);
     }
@@ -181,7 +181,7 @@ function showNoRegistrationsMessage(year, semester) {
 }
 
 // Generate standalone timetable (extracted from course-registration.js)
-function generateStandaloneTimetable(student, registrations, year, semester) {
+function generateStandaloneTimetable(student, registrations, allRegistrations, year, semester) {
   const displayArea = document.getElementById("standalone-timetable-display");
   if (!displayArea) {
     console.error("Timetable display area not found");
@@ -264,7 +264,7 @@ function generateStandaloneTimetable(student, registrations, year, semester) {
         slotMap,
         allocationMap
       );
-      let summaryTable = generateSummaryTable(registrations);
+      let summaryTable = generateEnhancedSummaryTable(allRegistrations);
 
       // Update display area
       displayArea.innerHTML = `
@@ -443,7 +443,150 @@ function generateTimetableHTML(days, timeSlots, slotMap, allocationMap) {
   return tableHtml;
 }
 
-// Generate summary table
+// Generate enhanced summary table with all course types
+function generateEnhancedSummaryTable(allRegistrations) {
+  if (!allRegistrations || allRegistrations.length === 0) {
+    return `
+      <div class="mt-4">
+        <h6 style="color: #007bff; margin-bottom: 15px;">📋 Course Registration Summary</h6>
+        <div class="alert alert-info">No course registrations found.</div>
+      </div>
+    `;
+  }
+
+  // Group registrations by course code and categorize
+  const courseMap = new Map();
+  let totalRegisteredCredits = 0;
+  let totalWithdrawnCredits = 0;
+
+  allRegistrations.forEach((reg) => {
+    const key = reg.course_code;
+    
+    if (!courseMap.has(key)) {
+      courseMap.set(key, {
+        course_code: reg.course_code,
+        course_name: reg.course_name,
+        credits: reg.credits,
+        course_type: reg.course_type,
+        theory: reg.theory,
+        practical: reg.practical,
+        withdrawn: reg.withdrawn,
+        faculty_name: reg.faculty_name,
+        components: []
+      });
+
+      // Add to credit totals (only count each course once)
+      if (reg.withdrawn) {
+        totalWithdrawnCredits += reg.credits;
+      } else {
+        totalRegisteredCredits += reg.credits;
+      }
+    }
+
+    // Add component info
+    courseMap.get(key).components.push({
+      slot_name: reg.slot_name,
+      venue: reg.venue,
+      component_type: reg.component_type
+    });
+  });
+
+  const courses = Array.from(courseMap.values());
+  const registeredCourses = courses.filter(course => !course.withdrawn);
+  const withdrawnCourses = courses.filter(course => course.withdrawn);
+
+  let tableHtml = `
+    <div class="mt-4">
+      <h6 style="color: #007bff; margin-bottom: 15px;">📋 Course Registration Summary</h6>
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+          <thead class="table-primary">
+            <tr>
+              <th>Sl. No.</th>
+              <th>Course Code</th>
+              <th>Course Title</th>
+              <th>Credits</th>
+              <th>Type</th>
+              <th>Slot</th>
+              <th>Venue</th>
+              <th>Faculty</th>
+              <th>Component</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
+
+  let slNo = 1;
+
+  // Display registered courses
+  registeredCourses.forEach((course) => {
+    const isBackendCourse = course.theory === 0 && course.practical === 0;
+    const rowClass = isBackendCourse ? 'table-info' : 'table-success';
+    
+    course.components.forEach((comp, index) => {
+      tableHtml += `
+        <tr class="${rowClass}">
+          <td>${index === 0 ? slNo++ : ''}</td>
+          <td>${index === 0 ? course.course_code : ''}</td>
+          <td>${index === 0 ? course.course_name : ''}</td>
+          <td>${index === 0 ? course.credits : ''}</td>
+          <td>${index === 0 ? course.course_type : ''}</td>
+          <td>${comp.slot_name}</td>
+          <td>${comp.venue}</td>
+          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.component_type}</td>
+          <td>${index === 0 ? '<span class="badge bg-success">Registered</span>' : ''}</td>
+        </tr>
+      `;
+    });
+  });
+
+  // Display withdrawn courses
+  withdrawnCourses.forEach((course) => {
+    course.components.forEach((comp, index) => {
+      tableHtml += `
+        <tr class="table-danger text-muted" style="text-decoration: line-through;">
+          <td>${index === 0 ? slNo++ : ''}</td>
+          <td>${index === 0 ? course.course_code : ''}</td>
+          <td>${index === 0 ? course.course_name : ''}</td>
+          <td>${index === 0 ? course.credits : ''}</td>
+          <td>${index === 0 ? course.course_type : ''}</td>
+          <td>${comp.slot_name}</td>
+          <td>${comp.venue}</td>
+          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.component_type}</td>
+          <td>${index === 0 ? '<span class="badge bg-danger">Withdrawn</span>' : ''}</td>
+        </tr>
+      `;
+    });
+  });
+
+  // Add summary row
+  tableHtml += `
+          </tbody>
+          <tfoot class="table-dark">
+            <tr>
+              <th colspan="3">Total Credits Summary</th>
+              <th>${totalRegisteredCredits}</th>
+              <th colspan="4">Registered Credits</th>
+              <th colspan="2">Withdrawn: ${totalWithdrawnCredits}</th>
+            </tr>
+            <tr>
+              <th colspan="3">Grand Total Attempted</th>
+              <th>${totalRegisteredCredits + totalWithdrawnCredits}</th>
+              <th colspan="6">Total Credits Attempted</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+
+  return tableHtml;
+}
+
+// Generate summary table (keep original for backward compatibility)
 function generateSummaryTable(registrations) {
   // Group compound slots back together
   const summaryMap = new Map();
