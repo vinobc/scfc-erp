@@ -222,8 +222,7 @@ function confirmWithdrawal(courseCode, courseName) {
             <p><strong>Course:</strong> ${courseCode} - ${courseName}</p>
             <div class="alert alert-warning">
               <i class="fas fa-exclamation-triangle"></i> 
-              <strong>Warning:</strong> This action cannot be undone. 
-              You will need to re-register for this course if you want to take it again.
+              <strong>Warning:</strong> You are attempting to withdraw the course ${courseCode} - ${courseName}. A course once withdrawn can not be reinstated. This action cannot be undone. Do you wish to continue with this course withdrawal?
             </div>
           </div>
           <div class="modal-footer">
