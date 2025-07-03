@@ -1308,7 +1308,7 @@ async function loadStudentTimetable() {
     }
 
     const data = await response.json();
-    generateStudentTimetable(data.student, data.registrations, year, type);
+    generateStudentTimetable(data.student, data.registrations, data.allRegistrations || data.registrations, year, type);
   } catch (error) {
     console.error("Error loading student timetable:", error);
     showAlert(`Error loading timetable: ${error.message}`, "danger");
@@ -1316,7 +1316,7 @@ async function loadStudentTimetable() {
 }
 
 // Generate student timetable (based on faculty timetable logic)
-function generateStudentTimetable(student, registrations, year, semester) {
+function generateStudentTimetable(student, registrations, allRegistrations, year, semester) {
   const contentDiv = document.getElementById("student-timetable-content");
   if (!contentDiv) {
     console.error("Timetable content div not found");
@@ -1568,72 +1568,8 @@ function generateStudentTimetable(student, registrations, year, semester) {
 
       tableHtml += "</tbody></table>";
 
-      // Generate summary table - group compound slots back together
-      const summaryMap = new Map();
-
-      registrations.forEach((reg) => {
-        const key = `${reg.course_code}-${reg.component_type}`;
-
-        if (!summaryMap.has(key)) {
-          summaryMap.set(key, {
-            ...reg,
-            slots: [reg.slot_name],
-          });
-        } else {
-          // Add slot to existing entry if not already present
-          const existing = summaryMap.get(key);
-          if (!existing.slots.includes(reg.slot_name)) {
-            existing.slots.push(reg.slot_name);
-          }
-        }
-      });
-
-      // Convert map to array and format slot names
-      const uniqueRegistrations = Array.from(summaryMap.values()).map(
-        (reg) => ({
-          ...reg,
-          slot_name: reg.slots.join(","), // Combine slots back: "L9+L10,L29+L30"
-        })
-      );
-      let summaryTable = `
-        <div class="mt-3">
-          <h6>Summary</h6>
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>Sl. No.</th>
-                <th>Course Code</th>
-                <th>Course Title</th>
-                <th>Slot</th>
-                <th>Venue</th>
-                <th>Faculty</th>
-                <th>Component</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-
-      uniqueRegistrations.forEach((reg, index) => {
-        summaryTable += `
-          <tr>
-            <td>${index + 1}.</td>
-            <td>${reg.course_code}</td>
-            <td>${reg.course_name}</td>
-            <td>${reg.slot_name}</td>
-            <td>${reg.venue}</td>
-            <td>${reg.faculty_name}</td>
-            <td><span class="badge ${
-              reg.component_type === "T"
-                ? "bg-primary"
-                : reg.component_type === "P"
-                ? "bg-success"
-                : "bg-secondary"
-            }">${reg.component_type}</span></td>
-          </tr>
-        `;
-      });
-
-      summaryTable += "</tbody></table></div>";
+      // Generate enhanced summary table with all course types
+      let summaryTable = generateEnhancedSummaryTable(allRegistrations);
 
       // Update content
       contentDiv.innerHTML = `
@@ -1649,6 +1585,149 @@ function generateStudentTimetable(student, registrations, year, semester) {
         <div class="alert alert-danger">Error loading timetable. Please try again.</div>
       `;
     });
+}
+
+// Generate enhanced summary table with all course types
+function generateEnhancedSummaryTable(allRegistrations) {
+  if (!allRegistrations || allRegistrations.length === 0) {
+    return `
+      <div class="mt-4">
+        <h6 style="color: #007bff; margin-bottom: 15px;">📋 Course Registration Summary</h6>
+        <div class="alert alert-info">No course registrations found.</div>
+      </div>
+    `;
+  }
+
+  // Group registrations by course code and categorize
+  const courseMap = new Map();
+  let totalRegisteredCredits = 0;
+  let totalWithdrawnCredits = 0;
+
+  allRegistrations.forEach((reg) => {
+    const key = reg.course_code;
+    
+    if (!courseMap.has(key)) {
+      courseMap.set(key, {
+        course_code: reg.course_code,
+        course_name: reg.course_name,
+        credits: reg.credits,
+        course_type: reg.course_type,
+        theory: reg.theory,
+        practical: reg.practical,
+        withdrawn: reg.withdrawn,
+        faculty_name: reg.faculty_name,
+        components: []
+      });
+
+      // Add to credit totals (only count each course once)
+      if (reg.withdrawn) {
+        totalWithdrawnCredits += reg.credits;
+      } else {
+        totalRegisteredCredits += reg.credits;
+      }
+    }
+
+    // Add component info
+    courseMap.get(key).components.push({
+      slot_name: reg.slot_name,
+      venue: reg.venue,
+      component_type: reg.component_type
+    });
+  });
+
+  const courses = Array.from(courseMap.values());
+  const registeredCourses = courses.filter(course => !course.withdrawn);
+  const withdrawnCourses = courses.filter(course => course.withdrawn);
+
+  let tableHtml = `
+    <div class="mt-4">
+      <h6 style="color: #007bff; margin-bottom: 15px;">📋 Course Registration Summary</h6>
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+          <thead class="table-primary">
+            <tr>
+              <th>Sl. No.</th>
+              <th>Course Code</th>
+              <th>Course Title</th>
+              <th>Credits</th>
+              <th>Type</th>
+              <th>Slot</th>
+              <th>Venue</th>
+              <th>Faculty</th>
+              <th>Component</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
+
+  let slNo = 1;
+
+  // Display registered courses
+  registeredCourses.forEach((course) => {
+    const isBackendCourse = course.theory === 0 && course.practical === 0;
+    const rowClass = isBackendCourse ? 'table-info' : 'table-success';
+    
+    course.components.forEach((comp, index) => {
+      tableHtml += `
+        <tr class="${rowClass}">
+          <td>${index === 0 ? slNo++ : ''}</td>
+          <td>${index === 0 ? course.course_code : ''}</td>
+          <td>${index === 0 ? course.course_name : ''}</td>
+          <td>${index === 0 ? course.credits : ''}</td>
+          <td>${index === 0 ? course.course_type : ''}</td>
+          <td>${comp.slot_name}</td>
+          <td>${comp.venue}</td>
+          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.component_type}</td>
+          <td>${index === 0 ? '<span class="badge bg-success">Registered</span>' : ''}</td>
+        </tr>
+      `;
+    });
+  });
+
+  // Display withdrawn courses
+  withdrawnCourses.forEach((course) => {
+    course.components.forEach((comp, index) => {
+      tableHtml += `
+        <tr class="table-danger text-muted" style="text-decoration: line-through;">
+          <td>${index === 0 ? slNo++ : ''}</td>
+          <td>${index === 0 ? course.course_code : ''}</td>
+          <td>${index === 0 ? course.course_name : ''}</td>
+          <td>${index === 0 ? course.credits : ''}</td>
+          <td>${index === 0 ? course.course_type : ''}</td>
+          <td>${comp.slot_name}</td>
+          <td>${comp.venue}</td>
+          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.component_type}</td>
+          <td>${index === 0 ? '<span class="badge bg-danger">Withdrawn</span>' : ''}</td>
+        </tr>
+      `;
+    });
+  });
+
+  // Add summary row
+  tableHtml += `
+          </tbody>
+          <tfoot class="table-dark">
+            <tr>
+              <th colspan="3">Total Credits Summary</th>
+              <th>${totalRegisteredCredits}</th>
+              <th colspan="4">Registered Credits</th>
+              <th colspan="2">Withdrawn: ${totalWithdrawnCredits}</th>
+            </tr>
+            <tr>
+              <th colspan="3">Grand Total Attempted</th>
+              <th>${totalRegisteredCredits + totalWithdrawnCredits}</th>
+              <th colspan="6">Total Credits Attempted</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+
+  return tableHtml;
 }
 
 // Make functions available globally

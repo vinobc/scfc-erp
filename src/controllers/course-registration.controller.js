@@ -1446,6 +1446,16 @@ exports.getStudentSlotTimetable = async (req, res) => {
 
     console.log(`🔍 Raw student registrations:`, rawRegistrations.rows);
 
+    // Get ALL registrations for summary display (including withdrawn and backend courses)
+    const allRegistrations = await db.query(
+      `SELECT * FROM student_registrations 
+       WHERE enrollment_number = $1 AND slot_year = $2 AND semester_type = $3
+       ORDER BY course_code, component_type`,
+      [student.enrollment_number, slot_year, semester_type]
+    );
+
+    console.log(`🔍 All student registrations (including withdrawn):`, allRegistrations.rows);
+
     // Process each registration to handle compound slots
     const processedRegistrations = [];
 
@@ -1531,6 +1541,7 @@ exports.getStudentSlotTimetable = async (req, res) => {
         semester_type,
       },
       registrations: processedRegistrations,
+      allRegistrations: allRegistrations.rows, // Include all registrations for summary display
     });
   } catch (error) {
     console.error("Get student slot timetable error:", error);
