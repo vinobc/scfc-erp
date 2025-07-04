@@ -1,0 +1,984 @@
+=== CSE3002 COURSE MIGRATION BACKUP REPORT ===
+Generated on: 2025-07-04T14:22:46.880Z
+Purpose: Pre-migration backup for CSE3002 -> CSE1035 migration
+
+=== COURSE DETAILS ===
+Course Code: CSE3002
+Course Name: Fundamentals of Artificial Intelligence and Machine Learning
+Course Owner: ASET & AIIT
+Theory Hours: 2
+Practical Hours: 2
+Credits: 3
+Course Type: TEL
+Programs Offered To: B.Tech.(CSE), B.Tech.(AI&ML)
+Is Active: true
+Created At: Sat Apr 19 2025 05:43:56 GMT+0530 (India Standard Time)
+Updated At: Fri Jul 04 2025 15:21:42 GMT+0530 (India Standard Time)
+
+=== FACULTY ALLOCATIONS ===
+Total Faculty Allocations: 44
+
+Faculty Allocation Details:
+No. | Year | Semester | Employee ID | Venue | Day | Slot Name | Time
+----+------+----------+-------------+-------+-----+-----------+------
+  1 | 2024-25 | SUMMER   | 311639      | 507   | MON | L3+L4     | 10.50–12.30
+  2 | 2024-25 | SUMMER   | 311639      | 206   | MON | F         | 2.10-3.00
+  3 | 2024-25 | SUMMER   | 311639      | 507   | MON | L23+L24   | 3.05–4.45
+  4 | 2024-25 | SUMMER   | 311639      | 206   | MON | F         | 9.55-10.45
+  5 | 2024-25 | SUMMER   | 311639      | 507   | THU | L33+L34   | 1.15–2.55
+  6 | 2024-25 | SUMMER   | 311639      | 206   | THU | F         | 10.50-11.40
+  7 | 2024-25 | SUMMER   | 311639      | 206   | THU | F         | 3.05–3.55
+  8 | 2024-25 | SUMMER   | 311639      | 507   | THU | L13+L14   | 9.00–10:40
+  9 | 2024-25 | SUMMER   | 311639      | 508   | TUE | L7+L8     | 10.50–12.30
+ 10 | 2024-25 | SUMMER   | 311639      | 508   | TUE | L27+L28   | 3.05–4.45
+ 11 | 2024-25 | SUMMER   | 312818      | 207   | MON | F         | 2.10-3.00
+ 12 | 2024-25 | SUMMER   | 312818      | 207   | MON | F         | 9.55-10.45
+ 13 | 2024-25 | SUMMER   | 312818      | 207   | THU | F         | 10.50-11.40
+ 14 | 2024-25 | SUMMER   | 312818      | 207   | THU | F         | 3.05–3.55
+ 15 | 2024-25 | SUMMER   | 312819      | 207   | FRI | E         | 1.15–2.05
+ 16 | 2024-25 | SUMMER   | 312819      | 207   | FRI | E         | 9.00-9.50
+ 17 | 2024-25 | SUMMER   | 312819      | 508   | MON | L21+L22   | 1.15–2.55
+ 18 | 2024-25 | SUMMER   | 312819      | 508   | MON | L1+L2     | 9.00–10:40
+ 19 | 2024-25 | SUMMER   | 312819      | 207   | WED | E         | 10.50-11.40
+ 20 | 2024-25 | SUMMER   | 312819      | 207   | WED | E         | 3.05–3.55
+ 21 | 2024-25 | SUMMER   | 312926      | 507   | THU | L15+L16   | 10.50–12.30
+ 22 | 2024-25 | SUMMER   | 312926      | 507   | THU | L35+L36   | 3.05–4.45
+ 23 | 2024-25 | SUMMER   | 314670      | 206   | FRI | E         | 1.15–2.05
+ 24 | 2024-25 | SUMMER   | 314670      | 206   | FRI | E         | 9.00-9.50
+ 25 | 2024-25 | SUMMER   | 314670      | 206   | MON | H         | 11.45-12.35
+ 26 | 2024-25 | SUMMER   | 314670      | 206   | MON | H         | 4.00–4.50
+ 27 | 2024-25 | SUMMER   | 314670      | 206   | WED | E         | 10.50-11.40
+ 28 | 2024-25 | SUMMER   | 314670      | 206   | WED | H         | 2.10-3.00
+ 29 | 2024-25 | SUMMER   | 314670      | 206   | WED | E         | 3.05–3.55
+ 30 | 2024-25 | SUMMER   | 314670      | 206   | WED | H         | 9.55-10.45
+ 31 | 2024-25 | SUMMER   | 315032      | 509   | TUE | L25+L26   | 1.15–2.55
+ 32 | 2024-25 | SUMMER   | 315032      | 509   | TUE | L5+L6     | 9.00–10:40
+ 33 | 2024-25 | SUMMER   | 315032      | 507   | WED | L11+L12   | 10.50–12.30
+ 34 | 2024-25 | SUMMER   | 315032      | 507   | WED | L31+L32   | 3.05–4.45
+ 35 | 2024-25 | SUMMER   | 315318      | 207   | MON | H         | 11.45-12.35
+ 36 | 2024-25 | SUMMER   | 315318      | 207   | MON | H         | 4.00–4.50
+ 37 | 2024-25 | SUMMER   | 315318      | 207   | WED | H         | 2.10-3.00
+ 38 | 2024-25 | SUMMER   | 315318      | 207   | WED | H         | 9.55-10.45
+ 39 | 2024-25 | SUMMER   | 315430      | 208   | FRI | E         | 1.15–2.05
+ 40 | 2024-25 | SUMMER   | 315430      | 208   | FRI | E         | 9.00-9.50
+ 41 | 2024-25 | SUMMER   | 315430      | 507   | MON | L21+L22   | 1.15–2.55
+ 42 | 2024-25 | SUMMER   | 315430      | 507   | MON | L1+L2     | 9.00–10:40
+ 43 | 2024-25 | SUMMER   | 315430      | 208   | WED | E         | 10.50-11.40
+ 44 | 2024-25 | SUMMER   | 315430      | 208   | WED | E         | 3.05–3.55
+
+=== STUDENT REGISTRATIONS ===
+Total Student Registrations: 893
+
+Summary by Semester:
+2024-25-SUMMER: 893 total (893 active, 0 withdrawn)
+  - Theory components: 448
+  - Practical components: 445
+
+Detailed Student Registration List:
+No. | Enrollment | Student Name | Program | Year | Semester | Component | Venue | Faculty | Status
+----+------------+--------------+---------+------+----------+-----------+-------+---------+-------
+  1 | A86605124005 | Ms GANGIREDD... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+  2 | A86605124005 | Ms GANGIREDD... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+  3 | A86605124010 | Ms AMULYA K ... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+  4 | A86605124010 | Ms AMULYA K ... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+  5 | A86605124011 | Mr DISHANK B... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+  6 | A86605124011 | Mr DISHANK B... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+  7 | A86605124013 | Ms NETTEM MO... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+  8 | A86605124013 | Ms NETTEM MO... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+  9 | A86605124016 | Ms SWATHI V  | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 10 | A86605124016 | Ms SWATHI V  | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 11 | A86605124017 | Mr JEEVAN M ... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+ 12 | A86605124017 | Mr JEEVAN M ... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 13 | A86605124019 | Ms MANYA M   | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+ 14 | A86605124019 | Ms MANYA M   | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 15 | A86605124020 | Mr ARJUN M   | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 16 | A86605124020 | Mr ARJUN M   | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+ 17 | A86605124021 | Ms ANNAPOORN... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+ 18 | A86605124021 | Ms ANNAPOORN... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 19 | A86605124022 | Mr PEDDAKA S... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 20 | A86605124022 | Mr PEDDAKA S... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 21 | A86605124023 | Ms RASHMI C  | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 22 | A86605124023 | Ms RASHMI C  | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 23 | A86605124024 | Mr HEMANTH K | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 24 | A86605124024 | Mr HEMANTH K | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 25 | A86605124025 | Mr SATHWIK N | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 26 | A86605124025 | Mr SATHWIK N | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 27 | A86605124031 | Mr VISHWAS T... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 28 | A86605124031 | Mr VISHWAS T... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 29 | A86605124035 | Mr MOHAMMED ... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 30 | A86605124035 | Mr MOHAMMED ... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 31 | A86605124036 | Mr SAI SANJE... | B.Tech. (ECE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 32 | A86605124036 | Mr SAI SANJE... | B.Tech. (ECE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 33 | A86605223001 | Ms NEHA T V  | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 34 | A86605223001 | Ms NEHA T V  | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 35 | A86605223004 | Mr DRUPAD G  | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 36 | A86605223004 | Mr DRUPAD G  | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+ 37 | A86605223005 | Ms NEHA B N  | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+ 38 | A86605223005 | Ms NEHA B N  | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+ 39 | A86605223007 | Ms NITHYASHR... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 40 | A86605223007 | Ms NITHYASHR... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+ 41 | A86605223010 | Mr SANJAN B ... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 42 | A86605223010 | Mr SANJAN B ... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+ 43 | A86605223011 | Ms DAYASHREE... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 44 | A86605223011 | Ms DAYASHREE... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 45 | A86605223012 | Mr SUPREETH ... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 46 | A86605223012 | Mr SUPREETH ... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 47 | A86605223017 | Ms KHUSHI M ... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 48 | A86605223017 | Ms KHUSHI M ... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+ 49 | A86605223025 | Ms KAVYA M   | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 50 | A86605223025 | Ms KAVYA M   | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 51 | A86605223031 | Mr KISHOR G  | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 52 | A86605223031 | Mr KISHOR G  | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 53 | A86605223035 | Ms TEJASHWIN... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 54 | A86605223035 | Ms TEJASHWIN... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 55 | A86605223042 | Mr GONDI SAI... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 56 | A86605223042 | Mr GONDI SAI... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+ 57 | A86605223043 | Mr BHADDAROL... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 58 | A86605223043 | Mr BHADDAROL... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+ 59 | A86605223044 | Mr POKURI HA... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 60 | A86605223044 | Mr POKURI HA... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+ 61 | A86605223046 | Mr KANAM HAR... | B.Tech. (CSE) | 2023 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 62 | A86605223046 | Mr KANAM HAR... | B.Tech. (CSE) | 2023 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+ 63 | A86605224001 | Mr YASHWANTH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+ 64 | A86605224001 | Mr YASHWANTH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+ 65 | A86605224002 | Mr NISANTH S | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 66 | A86605224002 | Mr NISANTH S | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+ 67 | A86605224004 | Ms RACHARLA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 68 | A86605224004 | Ms RACHARLA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+ 69 | A86605224006 | Mr PREETPAL ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+ 70 | A86605224006 | Mr PREETPAL ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+ 71 | A86605224010 | Mr MARNENI R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 72 | A86605224010 | Mr MARNENI R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+ 73 | A86605224011 | Ms MEHER ANG... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 74 | A86605224011 | Ms MEHER ANG... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+ 75 | A86605224013 | Ms LIVIA MAR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+ 76 | A86605224013 | Ms LIVIA MAR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+ 77 | A86605224014 | Mr AVINASH S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+ 78 | A86605224014 | Mr AVINASH S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+ 79 | A86605224016 | Mr SHREYAS R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+ 80 | A86605224016 | Mr SHREYAS R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+ 81 | A86605224017 | Mr AMOGH ARU... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 82 | A86605224017 | Mr AMOGH ARU... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+ 83 | A86605224018 | Ms AMULYA N ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 84 | A86605224018 | Ms AMULYA N ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+ 85 | A86605224020 | Ms SANVI YEL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 86 | A86605224020 | Ms SANVI YEL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 87 | A86605224021 | Mr MAHESH R  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 88 | A86605224021 | Mr MAHESH R  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 89 | A86605224024 | Ms KIRTI MOH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 90 | A86605224024 | Ms KIRTI MOH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+ 91 | A86605224026 | Mr OM CHANNA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+ 92 | A86605224026 | Mr OM CHANNA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 93 | A86605224029 | Mr SUHAS P K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+ 94 | A86605224029 | Mr SUHAS P K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+ 95 | A86605224030 | Ms MADHUMITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+ 96 | A86605224030 | Ms MADHUMITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+ 97 | A86605224032 | Mr MEGHAN G ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+ 98 | A86605224032 | Mr MEGHAN G ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+ 99 | A86605224033 | Mr NIRANJAN ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+100 | A86605224033 | Mr NIRANJAN ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+101 | A86605224036 | Mr ARYAN JEO... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+102 | A86605224036 | Mr ARYAN JEO... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+103 | A86605224039 | Ms HARSHINI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+104 | A86605224039 | Ms HARSHINI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+105 | A86605224040 | Ms SNEHASHRI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+106 | A86605224040 | Ms SNEHASHRI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+107 | A86605224042 | Ms GUNASHREE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+108 | A86605224042 | Ms GUNASHREE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+109 | A86605224043 | Mr JAYANTH R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+110 | A86605224043 | Mr JAYANTH R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+111 | A86605224045 | Ms ADITI S N... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+112 | A86605224045 | Ms ADITI S N... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+113 | A86605224047 | Ms KOTHA YAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+114 | A86605224047 | Ms KOTHA YAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+115 | A86605224050 | Ms SHYLAJA R | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+116 | A86605224050 | Ms SHYLAJA R | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+117 | A86605224051 | Ms SUJITHA R | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+118 | A86605224051 | Ms SUJITHA R | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+119 | A86605224053 | Mr AKASH GOW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+120 | A86605224053 | Mr AKASH GOW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+121 | A86605224055 | Ms PUNYASHRE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+122 | A86605224055 | Ms PUNYASHRE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+123 | A86605224057 | Mr ISHRIT RA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+124 | A86605224057 | Mr ISHRIT RA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+125 | A86605224060 | Ms RAKSHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+126 | A86605224060 | Ms RAKSHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+127 | A86605224061 | Mr CHATRAJU ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+128 | A86605224061 | Mr CHATRAJU ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+129 | A86605224062 | Ms NELLURI B... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+130 | A86605224062 | Ms NELLURI B... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+131 | A86605224063 | Mr HAYAS MOH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+132 | A86605224063 | Mr HAYAS MOH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+133 | A86605224065 | Mr ROHITH M  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+134 | A86605224065 | Mr ROHITH M  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+135 | A86605224069 | Mr POTHINENI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+136 | A86605224069 | Mr POTHINENI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+137 | A86605224070 | Ms NISCHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+138 | A86605224070 | Ms NISCHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+139 | A86605224071 | Ms RAKSHA MS | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+140 | A86605224071 | Ms RAKSHA MS | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+141 | A86605224073 | Mr GAWRAV C ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+142 | A86605224073 | Mr GAWRAV C ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+143 | A86605224074 | Ms LIKITHA K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+144 | A86605224074 | Ms LIKITHA K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+145 | A86605224077 | Mr DEVA PRAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+146 | A86605224077 | Mr DEVA PRAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+147 | A86605224078 | Mr VISHAL BE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+148 | A86605224078 | Mr VISHAL BE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+149 | A86605224079 | Mr VINOD G A | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+150 | A86605224079 | Mr VINOD G A | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+151 | A86605224081 | Mr SANIN MUH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+152 | A86605224081 | Mr SANIN MUH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+153 | A86605224082 | Mr KENNY RAV... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+154 | A86605224082 | Mr KENNY RAV... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+155 | A86605224083 | Ms CHILLA ME... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+156 | A86605224083 | Ms CHILLA ME... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+157 | A86605224084 | Mr GALI ROHI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+158 | A86605224084 | Mr GALI ROHI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+159 | A86605224087 | Mr NISCHAYKU... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+160 | A86605224087 | Mr NISCHAYKU... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+161 | A86605224088 | Mr BATTA CHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+162 | A86605224088 | Mr BATTA CHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+163 | A86605224089 | Mr YUVAN VAR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+164 | A86605224089 | Mr YUVAN VAR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+165 | A86605224090 | Mr MANVANTH ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+166 | A86605224090 | Mr MANVANTH ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+167 | A86605224091 | Mr CHITRA SR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+168 | A86605224091 | Mr CHITRA SR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+169 | A86605224092 | Mr MITHUN K  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+170 | A86605224092 | Mr MITHUN K  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+171 | A86605224093 | Mr GURU MAHE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+172 | A86605224093 | Mr GURU MAHE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+173 | A86605224095 | Ms AAHANA SI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+174 | A86605224095 | Ms AAHANA SI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+175 | A86605224096 | Mr BODDU VIS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+176 | A86605224096 | Mr BODDU VIS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+177 | A86605224099 | Mr HIMANSU P... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+178 | A86605224099 | Mr HIMANSU P... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+179 | A86605224100 | Mr ASGAR PAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+180 | A86605224100 | Mr ASGAR PAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+181 | A86605224101 | Ms DHRUTI PA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+182 | A86605224101 | Ms DHRUTI PA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+183 | A86605224102 | Mr ADITYA BA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+184 | A86605224102 | Mr ADITYA BA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+185 | A86605224107 | Mr ALEX NOEL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+186 | A86605224107 | Mr ALEX NOEL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+187 | A86605224108 | Mr MANOJ S   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+188 | A86605224108 | Mr MANOJ S   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+189 | A86605224110 | Mr FARAZ AHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+190 | A86605224110 | Mr FARAZ AHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+191 | A86605224111 | Mr NALLAPATI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+192 | A86605224111 | Mr NALLAPATI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+193 | A86605224112 | Mr BANDARU S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+194 | A86605224112 | Mr BANDARU S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+195 | A86605224116 | Mr AAYAN HAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+196 | A86605224116 | Mr AAYAN HAS... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+197 | A86605224117 | Mr MANEESH S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+198 | A86605224117 | Mr MANEESH S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+199 | A86605224118 | Mr K R GOKUL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+200 | A86605224118 | Mr K R GOKUL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+201 | A86605224119 | Ms ALEENA SC... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+202 | A86605224119 | Ms ALEENA SC... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+203 | A86605224120 | Mr NAMAN P N | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+204 | A86605224120 | Mr NAMAN P N | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+205 | A86605224121 | Ms BHOOMIKA.... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+206 | A86605224121 | Ms BHOOMIKA.... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+207 | A86605224122 | Mr YESHAS S  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+208 | A86605224122 | Mr YESHAS S  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+209 | A86605224127 | Ms KHUSHI SU... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+210 | A86605224127 | Ms KHUSHI SU... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+211 | A86605224132 | Mr DEEKSHITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+212 | A86605224132 | Mr DEEKSHITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+213 | A86605224133 | Mr VAMSHIKRI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+214 | A86605224133 | Mr VAMSHIKRI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+215 | A86605224135 | Mr PULLAGURA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+216 | A86605224135 | Mr PULLAGURA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+217 | A86605224136 | Mr SUMUKHA S | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+218 | A86605224136 | Mr SUMUKHA S | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+219 | A86605224137 | Mr DOMINIC A... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+220 | A86605224137 | Mr DOMINIC A... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+221 | A86605224138 | Mr AKSHAT ME... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+222 | A86605224138 | Mr AKSHAT ME... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+223 | A86605224139 | Mr DHEERAJ U... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+224 | A86605224139 | Mr DHEERAJ U... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+225 | A86605224141 | Mr MEDI RAKE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+226 | A86605224141 | Mr MEDI RAKE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+227 | A86605224142 | Mr HEMANTH M... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+228 | A86605224142 | Mr HEMANTH M... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+229 | A86605224143 | Mr VARUN MAN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+230 | A86605224143 | Mr VARUN MAN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+231 | A86605224144 | Mr ADWIT SIN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+232 | A86605224144 | Mr ADWIT SIN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+233 | A86605224146 | Mr BEEMAKOND... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+234 | A86605224146 | Mr BEEMAKOND... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+235 | A86605224150 | Ms MEGHA. M  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+236 | A86605224150 | Ms MEGHA. M  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+237 | A86605224151 | Mr TARUN S S | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+238 | A86605224151 | Mr TARUN S S | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+239 | A86605224152 | Mr DARSHAN K | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+240 | A86605224152 | Mr DARSHAN K | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+241 | A86605224153 | Ms NEHA K A  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+242 | A86605224153 | Ms NEHA K A  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+243 | A86605224154 | Mr PAVAN.C.A | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+244 | A86605224154 | Mr PAVAN.C.A | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+245 | A86605224155 | Ms CHARITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+246 | A86605224155 | Ms CHARITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+247 | A86605224156 | Ms INDRANI S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+248 | A86605224156 | Ms INDRANI S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+249 | A86605224157 | Mr CHETHAN M | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+250 | A86605224157 | Mr CHETHAN M | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+251 | A86605224159 | Mr SACHITH K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+252 | A86605224159 | Mr SACHITH K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+253 | A86605224160 | Mr MOHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+254 | A86605224160 | Mr MOHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+255 | A86605224163 | Ms BARGONDA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+256 | A86605224163 | Ms BARGONDA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+257 | A86605224164 | Mr SAGAR M   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+258 | A86605224164 | Mr SAGAR M   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+259 | A86605224165 | Mr SHASHANK ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+260 | A86605224165 | Mr SHASHANK ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+261 | A86605224166 | Ms NITHYASHR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+262 | A86605224166 | Ms NITHYASHR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+263 | A86605224167 | Mr PRASHANT  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+264 | A86605224167 | Mr PRASHANT  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+265 | A86605224171 | Mr SAMUEL A  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+266 | A86605224171 | Mr SAMUEL A  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+267 | A86605224172 | Mr ASHWIN SK... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+268 | A86605224172 | Mr ASHWIN SK... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+269 | A86605224174 | Mr GAGAN R   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+270 | A86605224174 | Mr GAGAN R   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+271 | A86605224175 | Ms SHREETHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+272 | A86605224175 | Ms SHREETHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+273 | A86605224177 | Ms REKHA M   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+274 | A86605224177 | Ms REKHA M   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+275 | A86605224179 | Ms KAVANA. A | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+276 | A86605224179 | Ms KAVANA. A | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+277 | A86605224181 | Mr GANESH BH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+278 | A86605224181 | Mr GANESH BH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+279 | A86605224182 | Ms AROHI D   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+280 | A86605224182 | Ms AROHI D   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+281 | A86605224183 | Mr SAGAR R   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+282 | A86605224183 | Mr SAGAR R   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+283 | A86605224184 | Ms BHAVITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+284 | A86605224184 | Ms BHAVITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+285 | A86605224185 | Mr GAGAN N   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+286 | A86605224185 | Mr GAGAN N   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+287 | A86605224186 | Ms NISHA Y M | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+288 | A86605224186 | Ms NISHA Y M | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+289 | A86605224188 | Mr ANJAN SHE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+290 | A86605224188 | Mr ANJAN SHE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+291 | A86605224191 | Mr GOKUL VEL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+292 | A86605224191 | Mr GOKUL VEL... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+293 | A86605224192 | Mr SUYOG B C | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+294 | A86605224192 | Mr SUYOG B C | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+295 | A86605224193 | Mr KISHAN R  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+296 | A86605224193 | Mr KISHAN R  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+297 | A86605224194 | Ms CHANDANA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+298 | A86605224194 | Ms CHANDANA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+299 | A86605224195 | Ms VARSHINI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+300 | A86605224195 | Ms VARSHINI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+301 | A86605224196 | Ms BRUNDA H ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+302 | A86605224196 | Ms BRUNDA H ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+303 | A86605224197 | Ms V SNEHA   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+304 | A86605224197 | Ms V SNEHA   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+305 | A86605224199 | Mr PRADEEP M | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+306 | A86605224199 | Mr PRADEEP M | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+307 | A86605224200 | Mr SHINDE PR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+308 | A86605224200 | Mr SHINDE PR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+309 | A86605224202 | Mr AKSHAYGOW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+310 | A86605224202 | Mr AKSHAYGOW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+311 | A86605224204 | Mr DEEKSHITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+312 | A86605224204 | Mr DEEKSHITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+313 | A86605224205 | Mr B R AJAY ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+314 | A86605224205 | Mr B R AJAY ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+315 | A86605224206 | Mr VIGNESH S | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+316 | A86605224206 | Mr VIGNESH S | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+317 | A86605224207 | Mr ROHITH GO... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+318 | A86605224207 | Mr ROHITH GO... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+319 | A86605224210 | Ms YASHASWIN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+320 | A86605224210 | Ms YASHASWIN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+321 | A86605224211 | Mr JANUSH R  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+322 | A86605224211 | Mr JANUSH R  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+323 | A86605224212 | Ms INCHARA K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+324 | A86605224212 | Ms INCHARA K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+325 | A86605224213 | Mr ABHIJEET ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+326 | A86605224213 | Mr ABHIJEET ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+327 | A86605224215 | Ms VYSHNAVI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+328 | A86605224215 | Ms VYSHNAVI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+329 | A86605224217 | Ms NISCHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+330 | A86605224217 | Ms NISCHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+331 | A86605224219 | Mr THARUN D ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+332 | A86605224219 | Mr THARUN D ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+333 | A86605224222 | Mr SAKE SAI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+334 | A86605224222 | Mr SAKE SAI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+335 | A86605224223 | Mr SRUJAN M ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+336 | A86605224223 | Mr SRUJAN M ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+337 | A86605224224 | Mr PRAKASH R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+338 | A86605224224 | Mr PRAKASH R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+339 | A86605224225 | Ms DEEKSHA G... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+340 | A86605224225 | Ms DEEKSHA G... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+341 | A86605224226 | Mr ROHIT S   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+342 | A86605224226 | Mr ROHIT S   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+343 | A86605224227 | Mr SHESHADRI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+344 | A86605224227 | Mr SHESHADRI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+345 | A86605224228 | Mr KRISHNA M | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+346 | A86605224228 | Mr KRISHNA M | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+347 | A86605224229 | Mr SHANKARAG... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+348 | A86605224229 | Mr SHANKARAG... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+349 | A86605224230 | Mr MOHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+350 | A86605224230 | Mr MOHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+351 | A86605224232 | Mr ARJUN B   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+352 | A86605224232 | Mr ARJUN B   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+353 | A86605224233 | Mr SUHAS P M... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+354 | A86605224233 | Mr SUHAS P M... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+355 | A86605224234 | Mr D S BASAW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+356 | A86605224234 | Mr D S BASAW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+357 | A86605224235 | Ms ISHA D    | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+358 | A86605224235 | Ms ISHA D    | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+359 | A86605224236 | Mr HARSHA VA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+360 | A86605224236 | Mr HARSHA VA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+361 | A86605224237 | Ms CHANDANA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+362 | A86605224237 | Ms CHANDANA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+363 | A86605224238 | Mr ABHISHEK ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+364 | A86605224238 | Mr ABHISHEK ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+365 | A86605224239 | Ms SUNITA    | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+366 | A86605224239 | Ms SUNITA    | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+367 | A86605224240 | Mr R V SUJAY | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+368 | A86605224240 | Mr R V SUJAY | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+369 | A86605224242 | Mr TARUN G A | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+370 | A86605224242 | Mr TARUN G A | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+371 | A86605224243 | Ms TEJASWINI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+372 | A86605224243 | Ms TEJASWINI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+373 | A86605224246 | Ms ASHWINI N | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+374 | A86605224246 | Ms ASHWINI N | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+375 | A86605224247 | Mr MANJUNATH | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+376 | A86605224247 | Mr MANJUNATH | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+377 | A86605224248 | Ms JEEVITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+378 | A86605224248 | Ms JEEVITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+379 | A86605224249 | Mr HARSHA P  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+380 | A86605224249 | Mr HARSHA P  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+381 | A86605224250 | Ms SAI SAHIT... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+382 | A86605224250 | Ms SAI SAHIT... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+383 | A86605224251 | Ms PALLAVI S | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+384 | A86605224251 | Ms PALLAVI S | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+385 | A86605224252 | Mr NIKUNJ NI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+386 | A86605224252 | Mr NIKUNJ NI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+387 | A86605224253 | Mr DEEPAK D ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+388 | A86605224253 | Mr DEEPAK D ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+389 | A86605224254 | Mr S BHARATH | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+390 | A86605224254 | Mr S BHARATH | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+391 | A86605224255 | Ms ANIKHA AI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+392 | A86605224255 | Ms ANIKHA AI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+393 | A86605224256 | Ms NAVYA G   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+394 | A86605224256 | Ms NAVYA G   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+395 | A86605224259 | Ms ANUSHREE ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+396 | A86605224259 | Ms ANUSHREE ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+397 | A86605224260 | Mr RAJASHEKH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+398 | A86605224260 | Mr RAJASHEKH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+399 | A86605224262 | Mr MAHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+400 | A86605224262 | Mr MAHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+401 | A86605224263 | Ms SYEDA RAM... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+402 | A86605224263 | Ms SYEDA RAM... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+403 | A86605224265 | Ms HARSHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+404 | A86605224265 | Ms HARSHITHA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+405 | A86605224267 | Mr SHRIKAR   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+406 | A86605224267 | Mr SHRIKAR   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+407 | A86605224270 | Mr PRABEER G... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+408 | A86605224270 | Mr PRABEER G... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+409 | A86605224273 | Ms PRUTHVI R | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+410 | A86605224273 | Ms PRUTHVI R | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+411 | A86605224274 | Mr DEEPAK H ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+412 | A86605224274 | Mr DEEPAK H ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+413 | A86605224275 | Mr VIJAY R T | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+414 | A86605224275 | Mr VIJAY R T | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+415 | A86605224279 | Mr PREETHAM ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+416 | A86605224279 | Mr PREETHAM ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+417 | A86605224280 | Mr SWAPNIL S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+418 | A86605224280 | Mr SWAPNIL S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+419 | A86605224281 | Ms PALLAVI. ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+420 | A86605224281 | Ms PALLAVI. ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+421 | A86605224282 | Mr YASHITH U | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+422 | A86605224282 | Mr YASHITH U | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+423 | A86605224283 | Mr RUTHVIK D... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+424 | A86605224283 | Mr RUTHVIK D... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+425 | A86605224284 | Ms POOJITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+426 | A86605224284 | Ms POOJITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+427 | A86605224285 | Mr RAKESH J ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+428 | A86605224285 | Mr RAKESH J ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+429 | A86605224286 | Mr ANEESH PR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+430 | A86605224286 | Mr ANEESH PR... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+431 | A86605224287 | Ms MONIKA G  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+432 | A86605224287 | Ms MONIKA G  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+433 | A86605224288 | Ms PALLAVI S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+434 | A86605224288 | Ms PALLAVI S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+435 | A86605224291 | Ms TANU S RE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+436 | A86605224291 | Ms TANU S RE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+437 | A86605224292 | Ms SONA MARI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+438 | A86605224292 | Ms SONA MARI... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+439 | A86605224293 | Ms NAMRUTHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+440 | A86605224293 | Ms NAMRUTHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+441 | A86605224294 | Ms SADANA T  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+442 | A86605224294 | Ms SADANA T  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+443 | A86605224296 | Ms KEERTHISH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+444 | A86605224296 | Ms KEERTHISH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+445 | A86605224297 | Ms SPOORTHI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+446 | A86605224297 | Ms SPOORTHI ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+447 | A86605224298 | Mr CHETHAN K | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+448 | A86605224298 | Mr CHETHAN K | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+449 | A86605224301 | Mr MADAN GOW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+450 | A86605224301 | Mr MADAN GOW... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+451 | A86605224303 | Mr PAVANKUMA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+452 | A86605224303 | Mr PAVANKUMA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+453 | A86605224304 | Mr DARSHAN S | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+454 | A86605224304 | Mr DARSHAN S | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+455 | A86605224305 | Mr VINAY B S | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+456 | A86605224306 | Mr SHREYAS M | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+457 | A86605224306 | Mr SHREYAS M | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+458 | A86605224307 | Mr VISHNUTEJ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+459 | A86605224307 | Mr VISHNUTEJ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+460 | A86605224309 | Mr SIDDESH P... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+461 | A86605224311 | Ms AISHWARYA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+462 | A86605224311 | Ms AISHWARYA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+463 | A86605224312 | Mr MOHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+464 | A86605224312 | Mr MOHAMMED ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+465 | A86605224313 | Mr SIDDESH M... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+466 | A86605224313 | Mr SIDDESH M... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+467 | A86605224316 | Mr VARUN     | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+468 | A86605224316 | Mr VARUN     | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+469 | A86605224317 | Ms HARSHITA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+470 | A86605224317 | Ms HARSHITA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+471 | A86605224319 | Mr DEEKSHITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+472 | A86605224319 | Mr DEEKSHITH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+473 | A86605224322 | Mr RAGHAV GO... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+474 | A86605224322 | Mr RAGHAV GO... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+475 | A86605224323 | Mr CHETHAN S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+476 | A86605224323 | Mr CHETHAN S... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+477 | A86605224324 | Mr TOUHID PA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+478 | A86605224324 | Mr TOUHID PA... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+479 | A86605224327 | Mr ADARSH    | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+480 | A86605224327 | Mr ADARSH    | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+481 | A86605224328 | Ms POOJASHRE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+482 | A86605224328 | Ms POOJASHRE... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+483 | A86605224333 | Ms RACHITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+484 | A86605224333 | Ms RACHITHA ... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+485 | A86605224334 | Ms LAHARI N  | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+486 | A86605224334 | Ms LAHARI N  | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+487 | A86605224336 | Mr MARUTHI K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+488 | A86605224336 | Mr MARUTHI K... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+489 | A86605224338 | Ms TEJASHWIN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+490 | A86605224338 | Ms TEJASHWIN... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+491 | A86605224340 | Ms G SHREE R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+492 | A86605224340 | Ms G SHREE R... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+493 | A86605224341 | Mr SUHAS G   | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+494 | A86605224341 | Mr SUHAS G   | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+495 | A86605224345 | Mr JASHWANTH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+496 | A86605224345 | Mr JASHWANTH... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+497 | A866132523018 | Mr SHYAMJI P... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+498 | A866132523018 | Mr SHYAMJI P... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+499 | A866132523022 | Mr TONY PART... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+500 | A866132523022 | Mr TONY PART... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+501 | A866132523029 | Mr SHARAN    | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+502 | A866132523029 | Mr SHARAN    | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+503 | A866132523031 | Mr SAMSON PR... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+504 | A866132523031 | Mr SAMSON PR... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+505 | A866132523032 | Mr NEHEMIAH ... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+506 | A866132523032 | Mr NEHEMIAH ... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+507 | A866132523038 | Ms NEHA MAIY... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+508 | A866132523038 | Ms NEHA MAIY... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+509 | A866132523041 | Mr G PREM SA... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+510 | A866132523041 | Mr G PREM SA... | B.Tech. (AI & ML) | 2023 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+511 | A866132524004 | Mr NADAR SHA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+512 | A866132524004 | Mr NADAR SHA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+513 | A866132524005 | Mr ASHMIT BA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+514 | A866132524005 | Mr ASHMIT BA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+515 | A866132524006 | Ms S SMITHAS... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+516 | A866132524006 | Ms S SMITHAS... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+517 | A866132524007 | Mr BHUVAN GO... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+518 | A866132524007 | Mr BHUVAN GO... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+519 | A866132524011 | Mr MADHUSUDA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+520 | A866132524011 | Mr MADHUSUDA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+521 | A866132524013 | Ms PACHIPALA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+522 | A866132524013 | Ms PACHIPALA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+523 | A866132524017 | Mr T NIKHIL  | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+524 | A866132524017 | Mr T NIKHIL  | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+525 | A866132524018 | Mr TARUN MS  | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+526 | A866132524018 | Mr TARUN MS  | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+527 | A866132524019 | Ms MEGHANA N | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+528 | A866132524019 | Ms MEGHANA N | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+529 | A866132524024 | Mr PATIL NEE... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+530 | A866132524024 | Mr PATIL NEE... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+531 | A866132524026 | Mr MOHAMMED ... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+532 | A866132524026 | Mr MOHAMMED ... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+533 | A866132524028 | Mr DIREESH P... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+534 | A866132524028 | Mr DIREESH P... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+535 | A866132524030 | Mr RAJASHEKA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+536 | A866132524030 | Mr RAJASHEKA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+537 | A866132524034 | Ms THAMMINEN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+538 | A866132524034 | Ms THAMMINEN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+539 | A866132524035 | Ms SAMRIDDHI... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+540 | A866132524035 | Ms SAMRIDDHI... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+541 | A866132524036 | Ms BODANAPAT... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+542 | A866132524036 | Ms BODANAPAT... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+543 | A866132524038 | Mr PRAMODH K... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+544 | A866132524038 | Mr PRAMODH K... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+545 | A866132524039 | Mr SHARATH G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+546 | A866132524039 | Mr SHARATH G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+547 | A866132524042 | Ms VARSHA K ... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+548 | A866132524042 | Ms VARSHA K ... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+549 | A866132524043 | Mr MACHA YES... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+550 | A866132524043 | Mr MACHA YES... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+551 | A866132524044 | Mr CHIRANTH.... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+552 | A866132524044 | Mr CHIRANTH.... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+553 | A866132524045 | Mr MITHIL RA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+554 | A866132524045 | Mr MITHIL RA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+555 | A866132524047 | Mr D B RAHUL... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+556 | A866132524047 | Mr D B RAHUL... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+557 | A866132524050 | Mr CHANDAN G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+558 | A866132524050 | Mr CHANDAN G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+559 | A866132524053 | Ms PATCHIPUL... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+560 | A866132524053 | Ms PATCHIPUL... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+561 | A866132524054 | Mr MAKIREDDY... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+562 | A866132524054 | Mr MAKIREDDY... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+563 | A866132524055 | Ms SAVIRAMSM... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+564 | A866132524055 | Ms SAVIRAMSM... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+565 | A866132524057 | Mr BARLA MAN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+566 | A866132524057 | Mr BARLA MAN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+567 | A866132524059 | Ms HASINI SR | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+568 | A866132524059 | Ms HASINI SR | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+569 | A866132524060 | Mr MADHUSUDH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+570 | A866132524060 | Mr MADHUSUDH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+571 | A866132524061 | Mr D PRANEET... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+572 | A866132524061 | Mr D PRANEET... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+573 | A866132524063 | Mr SHAIK FAR... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+574 | A866132524063 | Mr SHAIK FAR... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+575 | A866132524064 | Ms BATHALA H... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+576 | A866132524064 | Ms BATHALA H... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+577 | A866132524067 | Mr RAJUPALEM... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+578 | A866132524067 | Mr RAJUPALEM... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+579 | A866132524070 | Mr CHINMAY S | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+580 | A866132524070 | Mr CHINMAY S | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+581 | A866132524071 | Mr PATAM VEN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+582 | A866132524071 | Mr PATAM VEN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+583 | A866132524072 | Ms KEERTHI J... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+584 | A866132524072 | Ms KEERTHI J... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+585 | A866132524073 | Ms ADDANKI H... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+586 | A866132524073 | Ms ADDANKI H... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+587 | A866132524076 | Mr MADA VEER... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+588 | A866132524076 | Mr MADA VEER... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+589 | A866132524079 | Ms BELLARY A... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+590 | A866132524079 | Ms BELLARY A... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+591 | A866132524080 | Mr POOJITH M | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+592 | A866132524080 | Mr POOJITH M | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+593 | A866132524081 | Ms SINDU.K   | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+594 | A866132524081 | Ms SINDU.K   | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+595 | A866132524082 | Mr GALI REDD... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+596 | A866132524082 | Mr GALI REDD... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+597 | A866132524083 | Mr B VENKATA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+598 | A866132524083 | Mr B VENKATA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+599 | A866132524086 | Mr PITTU SAI... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+600 | A866132524086 | Mr PITTU SAI... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+601 | A866132524088 | Ms SUHANI BO... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+602 | A866132524088 | Ms SUHANI BO... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+603 | A866132524090 | Mr SYED AMAA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+604 | A866132524090 | Mr SYED AMAA... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+605 | A866132524091 | Mr SAYYAD UM... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+606 | A866132524091 | Mr SAYYAD UM... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+607 | A866132524094 | Mr MANGALI S... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+608 | A866132524094 | Mr MANGALI S... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+609 | A866132524095 | Mr SAMPAT IS... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+610 | A866132524095 | Mr SAMPAT IS... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+611 | A866132524096 | Mr DEEKSHITH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+612 | A866132524096 | Mr DEEKSHITH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+613 | A866132524097 | Mr NAVANEETH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+614 | A866132524097 | Mr NAVANEETH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+615 | A866132524098 | Mr KALYAN KU... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+616 | A866132524098 | Mr KALYAN KU... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+617 | A866132524102 | Ms PAMISETTY... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+618 | A866132524102 | Ms PAMISETTY... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+619 | A866132524103 | Mr PALAKOLAN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+620 | A866132524103 | Mr PALAKOLAN... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+621 | A866132524104 | Mr SUKRUTH G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+622 | A866132524104 | Mr SUKRUTH G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+623 | A866132524109 | Mr VINAYAK P... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+624 | A866132524109 | Mr VINAYAK P... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+625 | A866132524111 | Mr DHRUTHVIK | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+626 | A866132524115 | Mr PRITHAM K | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+627 | A866132524115 | Mr PRITHAM K | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+628 | A866132524116 | Ms BHAVANA B | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+629 | A866132524116 | Ms BHAVANA B | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+630 | A866132524119 | Mr HARSHAN G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+631 | A866132524119 | Mr HARSHAN G... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+632 | A866132524123 | Mr PAVAN N   | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+633 | A866132524123 | Mr PAVAN N   | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+634 | A866132524127 | Ms SAMSKRUTH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+635 | A866132524127 | Ms SAMSKRUTH... | B.Tech. (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+636 | A866175124001 | Mr S.ASHWIN ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+637 | A866175124001 | Mr S.ASHWIN ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+638 | A866175124002 | Ms ABHIPSHA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+639 | A866175124002 | Ms ABHIPSHA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+640 | A866175124003 | Mr NITHIN GO... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+641 | A866175124003 | Mr NITHIN GO... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+642 | A866175124004 | Ms S SONIYA  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+643 | A866175124004 | Ms S SONIYA  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+644 | A866175124006 | Mr BHAVANAM ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+645 | A866175124006 | Mr BHAVANAM ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+646 | A866175124007 | Ms RAJANENI ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+647 | A866175124007 | Ms RAJANENI ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+648 | A866175124008 | Mr R POORNES... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+649 | A866175124008 | Mr R POORNES... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+650 | A866175124009 | Mr Y MANOJ K... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+651 | A866175124009 | Mr Y MANOJ K... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+652 | A866175124010 | Mr SHAIK GOU... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+653 | A866175124010 | Mr SHAIK GOU... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+654 | A866175124011 | Ms LAKSHMI N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+655 | A866175124011 | Ms LAKSHMI N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+656 | A866175124013 | Mr MOHAMMED ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+657 | A866175124013 | Mr MOHAMMED ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+658 | A866175124015 | Mr PRUTHVIRA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+659 | A866175124015 | Mr PRUTHVIRA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+660 | A866175124016 | Ms AKSHATHA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+661 | A866175124016 | Ms AKSHATHA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+662 | A866175124018 | Mr VIKAS D   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+663 | A866175124018 | Mr VIKAS D   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+664 | A866175124019 | Mr NIVEDAN M | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+665 | A866175124019 | Mr NIVEDAN M | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+666 | A866175124020 | Ms VARSHINI ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+667 | A866175124020 | Ms VARSHINI ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+668 | A866175124022 | Ms D S SUMAN... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+669 | A866175124022 | Ms D S SUMAN... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+670 | A866175124024 | Ms SPOORTI G... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+671 | A866175124024 | Ms SPOORTI G... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+672 | A866175124025 | Ms NIHARIKA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+673 | A866175124025 | Ms NIHARIKA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+674 | A866175124026 | Ms SRUJANA.N | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+675 | A866175124026 | Ms SRUJANA.N | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+676 | A866175124028 | Mr H R THEJA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+677 | A866175124028 | Mr H R THEJA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+678 | A866175124029 | Mr JAYANTH V... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+679 | A866175124029 | Mr JAYANTH V... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+680 | A866175124031 | Mr APPU MADA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+681 | A866175124031 | Mr APPU MADA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+682 | A866175124032 | Mr ANUJ PREE... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+683 | A866175124032 | Mr ANUJ PREE... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+684 | A866175124033 | Mr YASHWANTH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+685 | A866175124033 | Mr YASHWANTH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+686 | A866175124034 | Mr VIKAS M   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+687 | A866175124034 | Mr VIKAS M   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+688 | A866175124035 | Mr DEV BHART... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+689 | A866175124035 | Mr DEV BHART... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+690 | A866175124036 | Mr DHYAN MOH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+691 | A866175124036 | Mr DHYAN MOH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+692 | A866175124037 | Mr NANDAN V  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+693 | A866175124037 | Mr NANDAN V  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+694 | A866175124038 | Ms SAMIKSHA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+695 | A866175124038 | Ms SAMIKSHA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+696 | A866175124040 | Ms RAMYA N R | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+697 | A866175124040 | Ms RAMYA N R | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+698 | A866175124041 | Mr LIKHITH C... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+699 | A866175124041 | Mr LIKHITH C... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+700 | A866175124042 | Mr DHANUSH R... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+701 | A866175124042 | Mr DHANUSH R... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+702 | A866175124045 | Ms KAVANA V ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+703 | A866175124045 | Ms KAVANA V ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+704 | A866175124046 | Ms VARJI P   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+705 | A866175124046 | Ms VARJI P   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+706 | A866175124047 | Mr P SRISHAN... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+707 | A866175124047 | Mr P SRISHAN... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+708 | A866175124049 | Mr N MAHESH  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+709 | A866175124049 | Mr N MAHESH  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+710 | A866175124051 | Ms SHREYA N ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+711 | A866175124051 | Ms SHREYA N ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+712 | A866175124052 | Ms SPANDANA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+713 | A866175124052 | Ms SPANDANA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+714 | A866175124053 | Mr PRAJWAL N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+715 | A866175124053 | Mr PRAJWAL N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+716 | A866175124054 | Mr PARTH SAR... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+717 | A866175124054 | Mr PARTH SAR... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+718 | A866175124055 | Ms HAMSA R   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+719 | A866175124055 | Ms HAMSA R   | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+720 | A866175124056 | Mr AKASH N G... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+721 | A866175124056 | Mr AKASH N G... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+722 | A866175124058 | Mr ADITHYA K... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+723 | A866175124058 | Mr ADITHYA K... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+724 | A866175124059 | Mr T MANIKAN... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+725 | A866175124059 | Mr T MANIKAN... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+726 | A866175124060 | Mr POORVIK U... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+727 | A866175124060 | Mr POORVIK U... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+728 | A866175124061 | Mr BHOUMIK M... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+729 | A866175124061 | Mr BHOUMIK M... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+730 | A866175124062 | Ms SHRAVANI ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+731 | A866175124062 | Ms SHRAVANI ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+732 | A866175124063 | Mr HARSHA VA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+733 | A866175124063 | Mr HARSHA VA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+734 | A866175124064 | Mr RITHESH K... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+735 | A866175124064 | Mr RITHESH K... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+736 | A866175124066 | Mr JEEVAN S ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+737 | A866175124066 | Mr JEEVAN S ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+738 | A866175124067 | Ms APARNA SH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+739 | A866175124067 | Ms APARNA SH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+740 | A866175124069 | Mr K VISHVA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+741 | A866175124069 | Mr K VISHVA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+742 | A866175124070 | Mr RAKSHIT N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+743 | A866175124070 | Mr RAKSHIT N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+744 | A866175124071 | Mr H R VINEE... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+745 | A866175124071 | Mr H R VINEE... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+746 | A866175124073 | Ms SANGEETA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+747 | A866175124073 | Ms SANGEETA ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+748 | A866175124074 | Mr PARAS ANI... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+749 | A866175124074 | Mr PARAS ANI... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+750 | A866175124078 | Mr RAKESH B  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+751 | A866175124078 | Mr RAKESH B  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+752 | A866175124079 | Mr SRINIVASA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+753 | A866175124079 | Mr SRINIVASA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+754 | A866175124080 | Mr SALMAN    | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+755 | A866175124080 | Mr SALMAN    | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+756 | A866175124081 | Mr YASH MARU... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+757 | A866175124081 | Mr YASH MARU... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+758 | A866175124082 | Mr ABHISHEK ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+759 | A866175124082 | Mr ABHISHEK ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+760 | A866175124085 | Ms SHARANYA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+761 | A866175124085 | Ms SHARANYA.... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+762 | A866175124086 | Ms RAKSHITHA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+763 | A866175124086 | Ms RAKSHITHA... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+764 | A866175124088 | Mr SHRIDHARA | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+765 | A866175124088 | Mr SHRIDHARA | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+766 | A866175124090 | Mr SUHAS A. ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+767 | A866175124090 | Mr SUHAS A. ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+768 | A866175124091 | Ms K RAGHAVI | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+769 | A866175124091 | Ms K RAGHAVI | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+770 | A866175124092 | Mr PRATHISH ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+771 | A866175124092 | Mr PRATHISH ... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+772 | A866175124093 | Ms DEVIKA S  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+773 | A866175124093 | Ms DEVIKA S  | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+774 | A866175124095 | Mr PRAJWAL R | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+775 | A866175124095 | Mr PRAJWAL R | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+776 | A866175124096 | Ms KAKARLA N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+777 | A866175124096 | Ms KAKARLA N... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+778 | A866175124098 | Mr SRIVASTAV... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+779 | A866175124098 | Mr SRIVASTAV... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+780 | A866175124099 | Ms BHANU PRI... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+781 | A866175124099 | Ms BHANU PRI... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+782 | A866175124100 | Mr M. PARIKS... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+783 | A866175124100 | Mr M. PARIKS... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+784 | A866175124104 | Ms S R JEEVI... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+785 | A866175124104 | Ms S R JEEVI... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+786 | A866175124106 | Mr NITIN KUM... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+787 | A866175124106 | Mr NITIN KUM... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+788 | A866175124107 | Mr DEEKSHITH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+789 | A866175124107 | Mr DEEKSHITH... | B.Tech. CSE (AI & ML) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+790 | A866175124108 | S.Divya Dhar... | B.Tech. (CSE) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+791 | A866175124108 | S.Divya Dhar... | B.Tech. (CSE) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+792 | A866181524004 | Ms PUNYASHRE... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+793 | A866181524004 | Ms PUNYASHRE... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+794 | A866181524006 | Mr NAVATEJA ... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+795 | A866181524006 | Mr NAVATEJA ... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+796 | A866181524008 | Mr PUSHKAR R... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+797 | A866181524008 | Mr PUSHKAR R... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+798 | A866181524010 | Ms ANKITHA S | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+799 | A866181524010 | Ms ANKITHA S | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+800 | A866181524014 | Mr NITHIN KU... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+801 | A866181524014 | Mr NITHIN KU... | B.Tech. (ES & VLSI) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+802 | A866185724001 | Ms THULASI S | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+803 | A866185724001 | Ms THULASI S | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+804 | A866185724004 | Mr VINAY V   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+805 | A866185724004 | Mr VINAY V   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+806 | A866185724005 | Ms MEGHANA S... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+807 | A866185724005 | Ms MEGHANA S... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+808 | A866185724006 | Mr SHIVU URS... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+809 | A866185724006 | Mr SHIVU URS... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+810 | A866185724008 | Mr SHASHIDHA... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+811 | A866185724008 | Mr SHASHIDHA... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+812 | A866185724010 | Mr DHRUVA RA... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+813 | A866185724010 | Mr DHRUVA RA... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+814 | A866185724011 | Ms VARSHINI.... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+815 | A866185724011 | Ms VARSHINI.... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+816 | A866185724012 | Mr DHANUSH   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+817 | A866185724012 | Mr DHANUSH   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+818 | A866185724013 | Mr MANOJ V   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+819 | A866185724013 | Mr MANOJ V   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+820 | A866185724014 | Mr SHAIK MOH... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+821 | A866185724014 | Mr SHAIK MOH... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+822 | A866185724017 | Mr UDAY GOWD... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+823 | A866185724017 | Mr UDAY GOWD... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+824 | A866185724019 | Ms VANITHA   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+825 | A866185724019 | Ms VANITHA   | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+826 | A866185724021 | Ms ISHIKA YA... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+827 | A866185724021 | Ms ISHIKA YA... | B.Tech. CSE (IoT) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+828 | A866185824001 | Ms PAVANI B ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+829 | A866185824001 | Ms PAVANI B ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+830 | A866185824002 | Mr VARSHITH ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+831 | A866185824002 | Mr VARSHITH ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+832 | A866185824003 | Ms PURVI N   | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+833 | A866185824003 | Ms PURVI N   | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+834 | A866185824004 | Ms SATHVIKA ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+835 | A866185824004 | Ms SATHVIKA ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+836 | A866185824005 | Mr PAVAN KUM... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+837 | A866185824005 | Mr PAVAN KUM... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+838 | A866185824006 | Mr SRUJAN GO... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+839 | A866185824006 | Mr SRUJAN GO... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+840 | A866185824007 | Mr SYED FISA... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+841 | A866185824007 | Mr SYED FISA... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+842 | A866185824008 | Ms BHAVANA R | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+843 | A866185824008 | Ms BHAVANA R | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+844 | A866185824009 | Mr JEEVAN CK | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+845 | A866185824009 | Mr JEEVAN CK | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+846 | A866185824011 | Mr SANTOSH S... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+847 | A866185824011 | Mr SANTOSH S... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+848 | A866185824013 | Mr RANJITH K... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+849 | A866185824013 | Mr RANJITH K... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+850 | A866185824014 | Ms KETHA SIR... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+851 | A866185824014 | Ms KETHA SIR... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+852 | A866185824016 | Mr CHINMAI A | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+853 | A866185824016 | Mr CHINMAI A | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+854 | A866185824017 | Mr HARSHA N  | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+855 | A866185824017 | Mr HARSHA N  | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+856 | A866185824018 | Mr UJWAL. R  | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Raje... | ACTIVE
+857 | A866185824018 | Mr UJWAL. R  | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+858 | A866185824019 | Mr BHOOMPALL... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+859 | A866185824019 | Mr BHOOMPALL... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+860 | A866185824020 | Mr MUKUNDA P | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+861 | A866185824020 | Mr MUKUNDA P | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+862 | A866185824021 | Ms MRUDULA G | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+863 | A866185824021 | Ms MRUDULA G | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+864 | A866185824023 | Mr MOHAMMED ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+865 | A866185824023 | Mr MOHAMMED ... | B.Tech. CSE (Robotics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+866 | A866185924003 | Mr NIKHIL M  | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+867 | A866185924003 | Mr NIKHIL M  | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+868 | A866185924005 | Ms BRUNDA M  | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+869 | A866185924005 | Ms BRUNDA M  | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+870 | A866185924006 | Mr KISHAN S  | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+871 | A866185924006 | Mr KISHAN S  | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+872 | A866185924007 | Mr RAYAN AHA... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+873 | A866185924007 | Mr RAYAN AHA... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+874 | A866185924008 | Mr TARUN V   | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+875 | A866185924008 | Mr TARUN V   | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+876 | A866185924009 | Mr HARI PRAS... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 508   | Dr. Kuma... | ACTIVE
+877 | A866185924009 | Mr HARI PRAS... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 208   | Dr. Jaga... | ACTIVE
+878 | A866185924010 | Mr SHARATH M... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+879 | A866185924010 | Mr SHARATH M... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+880 | A866185924011 | Mr IMRAN     | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+881 | A866185924011 | Mr IMRAN     | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+882 | A866185924012 | Mr SHAIK MUH... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 508   | Dr. Puna... | ACTIVE
+883 | A866185924012 | Mr SHAIK MUH... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 206   | Dr. Puna... | ACTIVE
+884 | A866185924013 | Mr MALLIKARJ... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+885 | A866185924013 | Mr MALLIKARJ... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+886 | A866185924015 | Mr MOHAMMED ... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 507   | Mr. Moha... | ACTIVE
+887 | A866185924015 | Mr MOHAMMED ... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Jude... | ACTIVE
+888 | A866185924017 | Mr SUHAS R   | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Puna... | ACTIVE
+889 | A866185924017 | Mr SUHAS R   | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Arsh... | ACTIVE
+890 | A866185924019 | Ms AISHATHUL... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | P         | 507   | Dr. Jaga... | ACTIVE
+891 | A866185924019 | Ms AISHATHUL... | B.Tech. CSE (Data Analytics) | 2024 | 2024-25-SUM | T         | 207   | Dr. Kuma... | ACTIVE
+892 | A86706924008 | Ms MEDA PRAT... | B.A. (Applied Psychology) | 2024 | 2024-25-SUM | P         | 509   | Mr. Moha... | ACTIVE
+893 | A86706924008 | Ms MEDA PRAT... | B.A. (Applied Psychology) | 2024 | 2024-25-SUM | T         | 206   | Dr. Sent... | ACTIVE
+
+=== VERIFICATION CHECKSUMS ===
+Course records: 1
+Faculty allocation records: 44
+Student registration records: 893
+Active student registrations: 893
+Withdrawn student registrations: 0
+Unique students: 448
+Unique faculty: 8
+Unique venues: 6
+
+=== END OF REPORT ===
