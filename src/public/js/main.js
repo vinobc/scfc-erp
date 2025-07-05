@@ -189,6 +189,7 @@ function customizeTimetableMenuForFaculty() {
   const viewSlotLink = document.getElementById("view-slot-link");
   const viewFacultySlotLink = document.getElementById("view-faculty-slot-link");
   const viewClassSlotLink = document.getElementById("view-class-slot-link");
+  const viewStudentTimetableLink = document.getElementById("view-student-timetable-link");
 
   if (viewSlotLink && viewSlotLink.parentElement) {
     viewSlotLink.parentElement.style.display = "block";
@@ -198,6 +199,9 @@ function customizeTimetableMenuForFaculty() {
   }
   if (viewClassSlotLink && viewClassSlotLink.parentElement) {
     viewClassSlotLink.parentElement.style.display = "block";
+  }
+  if (viewStudentTimetableLink && viewStudentTimetableLink.parentElement) {
+    viewStudentTimetableLink.parentElement.style.display = "block";
   }
 }
 
@@ -216,6 +220,7 @@ function customizeTimetableMenuForCoordinator() {
   const viewSlotLink = document.getElementById("view-slot-link");
   const facultySlotSection = document.getElementById("faculty-slot-link");
   const viewClassSlotLink = document.getElementById("view-class-slot-link");
+  const viewStudentTimetableLink = document.getElementById("view-student-timetable-link");
 
   if (viewSlotLink && viewSlotLink.parentElement) {
     viewSlotLink.parentElement.style.display = "block";
@@ -225,6 +230,9 @@ function customizeTimetableMenuForCoordinator() {
   }
   if (viewClassSlotLink && viewClassSlotLink.parentElement) {
     viewClassSlotLink.parentElement.style.display = "block";
+  }
+  if (viewStudentTimetableLink && viewStudentTimetableLink.parentElement) {
+    viewStudentTimetableLink.parentElement.style.display = "block";
   }
 }
 
@@ -240,9 +248,12 @@ function setupNavigation() {
       e.preventDefault();
 
       const targetId = link.getAttribute("id");
+      console.log("🖱️ Navigation link clicked:", targetId);
+      
       if (targetId === "logout-link") return;
 
       const targetPage = targetId.replace("-link", "-page");
+      console.log("📄 Target page:", targetPage);
 
       // Update active navigation
       navLinks.forEach((navLink) => navLink.classList.remove("active"));
@@ -265,6 +276,15 @@ function setupNavigation() {
         } else if (targetPage === "system-config-page") {
           if (typeof initializeSystemConfig === "function") {
             initializeSystemConfig();
+          }
+        } else if (targetPage === "view-student-timetable-page") {
+          console.log("🎯 Navigating to view-student-timetable-page");
+          console.log("🔍 initializeAdminStudentTimetable type:", typeof initializeAdminStudentTimetable);
+          if (typeof initializeAdminStudentTimetable === "function") {
+            console.log("✅ Calling initializeAdminStudentTimetable");
+            initializeAdminStudentTimetable();
+          } else {
+            console.error("❌ initializeAdminStudentTimetable is not a function");
           }
         }
         // Add other page data loading as needed

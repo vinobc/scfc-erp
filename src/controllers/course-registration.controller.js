@@ -1803,3 +1803,184 @@ exports.getStudentRegistrationSemesters = async (req, res) => {
     });
   }
 };
+
+// Get student timetable for admin (by enrollment number)
+exports.getAdminStudentTimetable = async (req, res) => {
+  try {
+    const { enrollment_no } = req.params;
+    const { slot_year, semester_type } = req.query;
+
+    console.log(`🔍 Admin requesting timetable for student: ${enrollment_no}`);
+
+    // Validate required parameters
+    if (!enrollment_no) {
+      return res.status(400).json({
+        message: "Enrollment number is required",
+      });
+    }
+
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({
+        message: "slot_year and semester_type are required",
+      });
+    }
+
+    // Check if user has admin/faculty/coordinator access
+    const userRole = req.userRole;
+    if (!userRole || !['admin', 'faculty', 'timetable_coordinator'].includes(userRole)) {
+      return res.status(403).json({
+        message: "Access denied. Admin, faculty, or coordinator access required.",
+      });
+    }
+
+    // Get student details by enrollment number
+    const studentResult = await db.query(
+      `SELECT s.*, p.program_name_short as program_code, sc.school_short_name
+       FROM student s
+       JOIN program p ON s.program_id = p.program_id
+       JOIN school sc ON s.school_id = sc.school_id
+       WHERE s.enrollment_no = $1`,
+      [enrollment_no]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Student not found with the provided enrollment number",
+      });
+    }
+
+    const student = studentResult.rows[0];
+    console.log(`✅ Found student: ${student.student_name} (${student.enrollment_no})`);
+
+    // Get student registrations (excluding withdrawn ones for timetable display)
+    const rawRegistrations = await db.query(
+      `SELECT sr.*, c.course_name, c.credits, c.course_type, c.theory, c.practical
+       FROM student_registrations sr
+       JOIN course c ON sr.course_code = c.course_code
+       WHERE sr.enrollment_number = $1 
+         AND sr.slot_year = $2 
+         AND sr.semester_type = $3
+         AND (sr.withdrawn = false OR sr.withdrawn IS NULL)
+       ORDER BY sr.course_code, sr.component_type`,
+      [student.enrollment_no, slot_year, semester_type]
+    );
+
+    // Get all registrations (including withdrawn ones for summary)
+    const allRegistrations = await db.query(
+      `SELECT sr.*, c.course_name, c.credits, c.course_type, c.theory, c.practical
+       FROM student_registrations sr
+       JOIN course c ON sr.course_code = c.course_code
+       WHERE sr.enrollment_number = $1 
+         AND sr.slot_year = $2 
+         AND sr.semester_type = $3
+       ORDER BY sr.course_code, sr.component_type`,
+      [student.enrollment_no, slot_year, semester_type]
+    );
+
+    console.log(`📊 Found ${rawRegistrations.rows.length} active registrations`);
+    console.log(`📊 Found ${allRegistrations.rows.length} total registrations`);
+
+    // Process registrations - handle compound slots
+    const processedRegistrations = [];
+    
+    for (const reg of rawRegistrations.rows) {
+      if (reg.slot_name && reg.slot_name.includes(',')) {
+        // Handle compound slots like "L9+L10,L29+L30"
+        const slotGroups = reg.slot_name.split(',');
+        for (const slotGroup of slotGroups) {
+          const slotDetails = await db.query(
+            `SELECT slot_day, slot_time FROM slot 
+             WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+            [slotGroup.trim(), slot_year, semester_type]
+          );
+          
+          if (slotDetails.rows.length > 0) {
+            processedRegistrations.push({
+              ...reg,
+              slot_name: slotGroup.trim(),
+              slot_day: slotDetails.rows[0].slot_day,
+              slot_time: slotDetails.rows[0].slot_time
+            });
+          } else {
+            console.warn(`⚠️ No slot details found for: ${slotGroup.trim()}`);
+            processedRegistrations.push({
+              ...reg,
+              slot_name: slotGroup.trim(),
+              slot_day: null,
+              slot_time: null
+            });
+          }
+        }
+      } else {
+        // Single slot or already has slot details
+        processedRegistrations.push(reg);
+      }
+    }
+
+    // Process all registrations similarly
+    const processedAllRegistrations = [];
+    
+    for (const reg of allRegistrations.rows) {
+      if (reg.slot_name && reg.slot_name.includes(',')) {
+        const slotGroups = reg.slot_name.split(',');
+        for (const slotGroup of slotGroups) {
+          const slotDetails = await db.query(
+            `SELECT slot_day, slot_time FROM slot 
+             WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+            [slotGroup.trim(), slot_year, semester_type]
+          );
+          
+          if (slotDetails.rows.length > 0) {
+            processedAllRegistrations.push({
+              ...reg,
+              slot_name: slotGroup.trim(),
+              slot_day: slotDetails.rows[0].slot_day,
+              slot_time: slotDetails.rows[0].slot_time,
+              status: reg.withdrawn ? 'withdrawn' : 'registered'
+            });
+          } else {
+            processedAllRegistrations.push({
+              ...reg,
+              slot_name: slotGroup.trim(),
+              slot_day: null,
+              slot_time: null,
+              status: reg.withdrawn ? 'withdrawn' : 'registered'
+            });
+          }
+        }
+      } else {
+        processedAllRegistrations.push({
+          ...reg,
+          status: reg.withdrawn ? 'withdrawn' : 'registered'
+        });
+      }
+    }
+
+    console.log(`✅ Admin timetable data prepared for ${student.student_name}`);
+
+    // Return response in same format as student timetable
+    res.status(200).json({
+      student: {
+        enrollment_number: student.enrollment_no,
+        student_name: student.student_name,
+        program_code: student.program_code,
+        school_name: student.school_short_name,
+        year_admitted: student.year_admitted,
+        current_semester: student.current_semester
+      },
+      semester_info: {
+        slot_year,
+        semester_type
+      },
+      registrations: processedRegistrations,
+      allRegistrations: processedAllRegistrations
+    });
+
+  } catch (error) {
+    console.error("Admin get student timetable error:", error);
+    res.status(500).json({
+      message: "Server error while fetching student timetable",
+      error: error.message,
+    });
+  }
+};

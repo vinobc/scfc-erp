@@ -222,6 +222,12 @@
                       </li>
                     </ul>
                   </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="#" id="view-student-timetable-link">
+                      <i class="fas fa-user-graduate me-2"></i>
+                      View Student Slot TimeTable
+                    </a>
+                  </li>
                 </ul>
               </li>
               <li class="nav-item">
@@ -1488,6 +1494,115 @@
                           <!-- Will be populated dynamically -->
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- View Student Timetable Page -->
+            <div id="view-student-timetable-page" class="content-page">
+              <div class="row">
+                <div class="col-12">
+                  <div class="card">
+                    <div class="card-header">
+                      <h5 class="card-title mb-0">
+                        <i class="fas fa-user-graduate me-2"></i>
+                        View Student Slot TimeTable
+                      </h5>
+                    </div>
+                    <div class="card-body">
+                      <!-- Search Section -->
+                      <div class="row mb-4">
+                        <div class="col-md-6">
+                          <div class="form-group">
+                            <label for="student-enrollment-search" class="form-label">
+                              <i class="fas fa-search me-2"></i>
+                              Enter Student Enrollment Number:
+                            </label>
+                            <input
+                              type="text"
+                              class="form-control"
+                              id="student-enrollment-search"
+                              placeholder="Enter enrollment number (e.g., 1234567890)"
+                              maxlength="20"
+                            />
+                            <div class="form-text">
+                              Enter the student's enrollment number to view their timetable
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                          <button
+                            type="button"
+                            class="btn btn-primary me-2"
+                            id="search-student-btn"
+                          >
+                            <i class="fas fa-search me-2"></i>
+                            Search Student
+                          </button>
+                          <button
+                            type="button"
+                            class="btn btn-secondary"
+                            id="clear-search-btn"
+                          >
+                            <i class="fas fa-times me-2"></i>
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Student Information Section -->
+                      <div id="student-info-section" class="mb-4" style="display: none;">
+                        <div class="card border-success">
+                          <div class="card-header bg-success text-white">
+                            <h6 class="mb-0">
+                              <i class="fas fa-user me-2"></i>
+                              Student Information
+                            </h6>
+                          </div>
+                          <div class="card-body">
+                            <div class="row">
+                              <div class="col-md-6">
+                                <p><strong>Enrollment #:</strong> <span id="student-enrollment"></span></p>
+                                <p><strong>Name:</strong> <span id="student-name"></span></p>
+                                <p><strong>School:</strong> <span id="student-school"></span></p>
+                              </div>
+                              <div class="col-md-6">
+                                <p><strong>Program:</strong> <span id="student-program"></span></p>
+                                <p><strong>Semester:</strong> <span id="student-semester"></span></p>
+                                <p><strong>Year Admitted:</strong> <span id="student-year-admitted"></span></p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Error Message Section -->
+                      <div id="student-error-section" class="mb-4" style="display: none;">
+                        <div class="alert alert-danger" role="alert">
+                          <i class="fas fa-exclamation-triangle me-2"></i>
+                          <span id="student-error-message">Student not found</span>
+                        </div>
+                      </div>
+
+                      <!-- Timetable Section -->
+                      <div id="student-timetable-section" style="display: none;">
+                        <div class="card">
+                          <div class="card-header">
+                            <h6 class="mb-0">
+                              <i class="fas fa-calendar-alt me-2"></i>
+                              Student Timetable
+                            </h6>
+                          </div>
+                          <div class="card-body">
+                            <!-- Timetable will be inserted here -->
+                            <div id="admin-student-timetable-container">
+                              <!-- Timetable display will be populated dynamically -->
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4248,6 +4363,7 @@
     <script src="js/course-registration.js"></script>
     <script src="js/course-withdrawal.js"></script>
     <script src="js/student-timetable.js"></script>
+    <script src="js/admin-student-timetable.js"></script>
     <script src="js/system-config.js"></script>
     <script src="js/courses-view.js"></script>
   </body>
