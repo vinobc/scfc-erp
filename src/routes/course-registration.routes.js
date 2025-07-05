@@ -122,4 +122,11 @@ router.get(
   courseRegistrationController.getStudentRegistrationSemesters
 );
 
+// Admin route to view any student's timetable
+router.get(
+  "/admin-student-timetable/:enrollment_no",
+  verifyToken,
+  courseRegistrationController.getAdminStudentTimetable
+);
+
 module.exports = router;
