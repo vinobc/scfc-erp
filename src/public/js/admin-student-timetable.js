@@ -349,13 +349,21 @@ function displayAdminTimetableResults(data, year, semester) {
   })
     .then((response) => response.json())
     .then((slots) => {
-      console.log("🔍 Building admin timetable for registrations:", data.allRegistrations);
+      console.log("🔍 Building admin timetable for registrations:", data.registrations);
 
-      // Create allocation map from registrations
+      // Create allocation map from registrations (excluding withdrawn courses)
       const allocationMap = {};
-      data.allRegistrations.forEach((registration) => {
-        if (registration.slot_day && registration.slot_time) {
-          // Handle compound slots (like "L9+L10,L29+L30")
+      data.registrations.forEach((registration) => {
+        // For theory slots (like C, D), add to all days and times where this slot appears
+        if (registration.slot_name && !registration.slot_name.includes("L") && !registration.slot_name.includes("+")) {
+          // This is a theory slot - add to all occurrences across all days
+          const days = ["MON", "TUE", "WED", "THU", "FRI"];
+          days.forEach((day) => {
+            const key = `${day}-${registration.slot_name}`;
+            allocationMap[key] = registration;
+          });
+        } else if (registration.slot_day && registration.slot_time) {
+          // Handle compound slots (like "L9+L10,L29+L30") - these are day-specific
           if (registration.slot_name.includes(",")) {
             const individualSlots = registration.slot_name
               .split(",")
@@ -567,13 +575,53 @@ function generateAdminTimetableHTML(days, timeSlots, slotMap, allocationMap) {
     tableHtml += rowHtml;
 
     // Lab row
-    let labRowHtml = `<tr><td class="table-secondary"><strong>Lab</strong></td>`;
+    let labRowHtml = `<tr><td class="table-warning">Lab</td>`;
 
-    // Lab slot mappings for each day
-    const morningLab1 = day === "MON" ? "L1+L2" : day === "TUE" ? "L5+L6" : day === "WED" ? "L9+L10" : day === "THU" ? "L13+L14" : "L17+L18";
-    const morningLab2 = day === "MON" ? "L3+L4" : day === "TUE" ? "L7+L8" : day === "WED" ? "L11+L12" : day === "THU" ? "L15+L16" : "L19+L20";
-    const afternoonLab1 = day === "MON" ? "L21+L22" : day === "TUE" ? "L25+L26" : day === "WED" ? "L29+L30" : day === "THU" ? "L33+L34" : "L37+L38";
-    const afternoonLab2 = day === "MON" ? "L23+L24" : day === "TUE" ? "L27+L28" : day === "WED" ? "L31+L32" : day === "THU" ? "L35+L36" : "L39+L40";
+    // Lab slot mappings for each day (matching student timetable exactly)
+    const morningLab1 = `L${
+      day === "MON"
+        ? "1+L2"
+        : day === "TUE"
+        ? "5+L6"
+        : day === "WED"
+        ? "9+L10"
+        : day === "THU"
+        ? "13+L14"
+        : "17+L18"
+    }`;
+    const morningLab2 = `L${
+      day === "MON"
+        ? "3+L4"
+        : day === "TUE"
+        ? "7+L8"
+        : day === "WED"
+        ? "11+L12"
+        : day === "THU"
+        ? "15+L16"
+        : "19+L20"
+    }`;
+    const afternoonLab1 = `L${
+      day === "MON"
+        ? "21+L22"
+        : day === "TUE"
+        ? "25+L26"
+        : day === "WED"
+        ? "29+L30"
+        : day === "THU"
+        ? "33+L34"
+        : "37+L38"
+    }`;
+    const afternoonLab2 = `L${
+      day === "MON"
+        ? "23+L24"
+        : day === "TUE"
+        ? "27+L28"
+        : day === "WED"
+        ? "31+L32"
+        : day === "THU"
+        ? "35+L36"
+        : "39+L40"
+    }`;
 
     // Morning lab slots
     [morningLab1, morningLab2].forEach((labSlot) => {
