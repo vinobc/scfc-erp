@@ -1912,8 +1912,27 @@ exports.getAdminStudentTimetable = async (req, res) => {
           }
         }
       } else {
-        // Single slot or already has slot details
-        processedRegistrations.push(reg);
+        // Handle single slots
+        const slotDetails = await db.query(
+          `SELECT slot_day, slot_time FROM slot 
+           WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+          [reg.slot_name, slot_year, semester_type]
+        );
+        
+        if (slotDetails.rows.length > 0) {
+          processedRegistrations.push({
+            ...reg,
+            slot_day: slotDetails.rows[0].slot_day,
+            slot_time: slotDetails.rows[0].slot_time
+          });
+        } else {
+          console.warn(`⚠️ No slot details found for: ${reg.slot_name}`);
+          processedRegistrations.push({
+            ...reg,
+            slot_day: null,
+            slot_time: null
+          });
+        }
       }
     }
 
@@ -1949,10 +1968,28 @@ exports.getAdminStudentTimetable = async (req, res) => {
           }
         }
       } else {
-        processedAllRegistrations.push({
-          ...reg,
-          status: reg.withdrawn ? 'withdrawn' : 'registered'
-        });
+        // Handle single slots
+        const slotDetails = await db.query(
+          `SELECT slot_day, slot_time FROM slot 
+           WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+          [reg.slot_name, slot_year, semester_type]
+        );
+        
+        if (slotDetails.rows.length > 0) {
+          processedAllRegistrations.push({
+            ...reg,
+            slot_day: slotDetails.rows[0].slot_day,
+            slot_time: slotDetails.rows[0].slot_time,
+            status: reg.withdrawn ? 'withdrawn' : 'registered'
+          });
+        } else {
+          processedAllRegistrations.push({
+            ...reg,
+            slot_day: null,
+            slot_time: null,
+            status: reg.withdrawn ? 'withdrawn' : 'registered'
+          });
+        }
       }
     }
 

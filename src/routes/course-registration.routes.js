@@ -35,11 +35,10 @@ const checkRegistrationEnabled = async (req, res, next) => {
   }
 };
 
-// Get available semesters
+// Get available semesters (always available for viewing purposes)
 router.get(
   "/semesters",
   verifyToken,
-  checkRegistrationEnabled,
   courseRegistrationController.getAvailableSemesters
 );
 
