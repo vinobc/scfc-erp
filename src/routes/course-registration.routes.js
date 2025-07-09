@@ -35,11 +35,10 @@ const checkRegistrationEnabled = async (req, res, next) => {
   }
 };
 
-// Get available semesters
+// Get available semesters (always available for viewing purposes)
 router.get(
   "/semesters",
   verifyToken,
-  checkRegistrationEnabled,
   courseRegistrationController.getAvailableSemesters
 );
 
@@ -122,7 +121,7 @@ router.get(
   courseRegistrationController.getStudentRegistrationSemesters
 );
 
-// Admin route to view any student's timetable
+// Admin route to view any student's timetable (always available for viewing)
 router.get(
   "/admin-student-timetable/:enrollment_no",
   verifyToken,
