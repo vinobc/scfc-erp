@@ -182,11 +182,6 @@ function displayAdminStudentInfo(student) {
     "admin-student-school": student.school_short_name || "N/A", 
     "admin-student-program": student.program_name_short || "N/A",
     "admin-student-year-admitted": student.year_admitted || "N/A"
-  };
-  
-  // Only add semester if it has a value
-  if (student.current_semester) {
-    fields["admin-student-semester"] = student.current_semester;
   }
   
   console.log("📝 Field mapping:", fields);
@@ -200,16 +195,6 @@ function displayAdminStudentInfo(student) {
       console.error(`❌ Element ${id} not found!`);
     }
   });
-  
-  // Hide semester paragraph if no semester data
-  const semesterElement = document.getElementById("student-semester");
-  if (semesterElement && semesterElement.parentElement) {
-    if (student.current_semester) {
-      semesterElement.parentElement.style.display = "block";
-    } else {
-      semesterElement.parentElement.style.display = "none";
-    }
-  }
   
   studentInfoSection.style.display = "block";
   console.log("✅ Student info section displayed");
