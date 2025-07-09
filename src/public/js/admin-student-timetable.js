@@ -177,16 +177,16 @@ function displayAdminStudentInfo(student) {
   }
   
   const fields = {
-    "student-enrollment": student.enrollment_no,
-    "student-name": student.student_name || "N/A",
-    "student-school": student.school_short_name || "N/A", 
-    "student-program": student.program_name_short || "N/A",
-    "student-year-admitted": student.year_admitted || "N/A"
+    "admin-student-enrollment": student.enrollment_no,
+    "admin-student-name": student.student_name || "N/A",
+    "admin-student-school": student.school_short_name || "N/A", 
+    "admin-student-program": student.program_name_short || "N/A",
+    "admin-student-year-admitted": student.year_admitted || "N/A"
   };
   
   // Only add semester if it has a value
   if (student.current_semester) {
-    fields["student-semester"] = student.current_semester;
+    fields["admin-student-semester"] = student.current_semester;
   }
   
   console.log("📝 Field mapping:", fields);

@@ -89,8 +89,8 @@ exports.studentLogin = async (req, res) => {
       role: "student",
       enrollment_no: student.enrollment_no,
       student_name: student.student_name,
-      program_name: student.program_name_short,
-      school_name: student.school_short_name,
+      program_name: student.program_name,
+      school_name: student.school_name,
       year_admitted: student.year_admitted,
       must_reset_password: student.must_reset_password,
     };
