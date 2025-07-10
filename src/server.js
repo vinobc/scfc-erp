@@ -97,7 +97,7 @@ app.use("/api/system-config", systemConfigRoutes);
 
 // Root route
 app.get("/", (req, res) => {
-  res.json({ message: "Welcome to the SCFC ERP API" });
+  res.json({ message: "Welcome to the SCFC LMS API" });
 });
 
 // Error handling middleware
