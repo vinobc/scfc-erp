@@ -1711,15 +1711,19 @@ function generateEnhancedSummaryTable(allRegistrations) {
           </tbody>
           <tfoot class="table-dark">
             <tr>
-              <th colspan="3">Total Credits Summary</th>
-              <th>${totalRegisteredCredits}</th>
-              <th colspan="4">Registered Credits</th>
-              <th colspan="2">Withdrawn: ${totalWithdrawnCredits}</th>
+              <th colspan="3">Credits Registered before Withdrawal:</th>
+              <th>${totalRegisteredCredits + totalWithdrawnCredits}</th>
+              <th colspan="6"></th>
             </tr>
             <tr>
-              <th colspan="3">Grand Total Attempted</th>
-              <th>${totalRegisteredCredits + totalWithdrawnCredits}</th>
-              <th colspan="6">Total Credits Attempted</th>
+              <th colspan="3">Credits Withdrawn:</th>
+              <th>${totalWithdrawnCredits.toString().padStart(2, '0')}</th>
+              <th colspan="6"></th>
+            </tr>
+            <tr>
+              <th colspan="3">Credits Registered after Withdrawal:</th>
+              <th>${totalRegisteredCredits}</th>
+              <th colspan="6"></th>
             </tr>
           </tfoot>
         </table>
