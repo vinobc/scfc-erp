@@ -936,15 +936,28 @@ body {
 
 /* ===== TIMETABLE-SPECIFIC MOBILE OPTIMIZATION ===== */
 
-/* Timetable responsive wrapper */
+/* Timetable responsive wrapper - Enhanced for real mobile devices */
 .timetable-responsive {
   width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-lg);
   background-color: var(--color-white);
   box-shadow: var(--shadow-sm);
   margin-bottom: var(--space-4);
+  /* Critical mobile device scrolling properties */
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  /* Force hardware acceleration on mobile */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  /* Prevent iOS bounce on container */
+  overscroll-behavior: none;
+  /* Optimize for mobile performance */
+  will-change: scroll-position;
 }
 
 /* Enhanced timetable container */
@@ -1013,42 +1026,75 @@ body {
   color: var(--color-gray-800);
 }
 
-/* Mobile-specific optimizations */
+/* Mobile-specific optimizations - Enhanced for real devices */
 @media (max-width: 767.98px) {
   .timetable-responsive {
     margin: 0 -1rem var(--space-4) -1rem; /* Full width on mobile */
     border-radius: 0;
     border-left: none;
     border-right: none;
+    /* Critical for actual mobile devices */
+    position: relative;
+    z-index: 1;
+    /* Enhanced touch scrolling */
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
+    /* Prevent momentum scrolling issues */
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    /* Force GPU acceleration */
+    will-change: scroll-position;
+    backface-visibility: hidden;
   }
   
   .timetable-responsive table {
     font-size: 0.7rem;
     min-width: 900px; /* Slightly wider for mobile to ensure all columns show */
+    /* Optimize table for mobile scrolling */
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
   }
   
   .timetable-responsive table th,
   .timetable-responsive table td {
     padding: var(--space-1) 2px;
     font-size: 0.65rem;
+    /* Prevent text selection during scroll */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    /* Optimize for touch */
+    -webkit-touch-callout: none;
   }
   
-  /* Touch scrolling optimization */
-  .timetable-responsive {
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-  }
-  
-  /* Add scroll indicator shadow */
+  /* Enhanced scroll indicator for mobile devices */
   .timetable-responsive::after {
     content: '';
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: 20px;
-    background: linear-gradient(to left, rgba(0,0,0,0.1), transparent);
+    width: 15px;
+    background: linear-gradient(to left, rgba(0,0,0,0.15), transparent);
     pointer-events: none;
+    z-index: 2;
+  }
+  
+  /* Add scroll indicator on the left for sticky column */
+  .timetable-responsive::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--color-primary);
+    pointer-events: none;
+    z-index: 11;
   }
 }
 
@@ -1071,6 +1117,54 @@ body {
 .timetable-responsive .faculty {
   color: var(--color-gray-700);
   font-size: 0.6rem;
+}
+
+/* ===== CRITICAL MOBILE DEVICE FIXES ===== */
+
+/* iOS Safari specific fixes */
+@supports (-webkit-touch-callout: none) {
+  .timetable-responsive {
+    /* Fix iOS Safari momentum scrolling */
+    -webkit-overflow-scrolling: touch !important;
+    /* Prevent iOS bounce */
+    overscroll-behavior: none !important;
+    /* Force hardware acceleration */
+    transform: translate3d(0, 0, 0) !important;
+  }
+}
+
+/* Android Chrome specific fixes */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  .timetable-responsive {
+    /* Optimize for Android devices */
+    overflow-x: scroll !important;
+    scrollbar-width: none !important; /* Hide scrollbar on Android */
+    -ms-overflow-style: none !important; /* Hide scrollbar on Edge */
+  }
+  
+  .timetable-responsive::-webkit-scrollbar {
+    display: none !important; /* Hide scrollbar on Chrome/Safari */
+  }
+}
+
+/* Force scrolling behavior on all mobile devices */
+@media (max-width: 767.98px) and (pointer: coarse) {
+  .timetable-responsive {
+    /* Target touch devices specifically */
+    overflow-x: scroll !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-x !important;
+    /* Critical for actual mobile scrolling */
+    scroll-snap-type: none !important;
+    overscroll-behavior-x: auto !important;
+  }
+  
+  .timetable-responsive table {
+    /* Ensure table is scrollable */
+    width: 900px !important;
+    max-width: none !important;
+  }
 }
 
 /* ===== STUDENT INTERFACE TIMETABLE FIXES ===== */
@@ -1153,8 +1247,16 @@ body.authenticated.student-user #student-interface .timetable-responsive table t
 body.authenticated .timetable-responsive {
   width: 100% !important;
   overflow-x: auto !important;
+  overflow-y: hidden !important;
   -webkit-overflow-scrolling: touch !important;
   scroll-behavior: smooth !important;
+  /* Critical mobile device properties */
+  touch-action: pan-x pan-y !important;
+  overscroll-behavior-x: contain !important;
+  scrollbar-width: thin !important;
+  /* Force hardware acceleration */
+  transform: translateZ(0) !important;
+  will-change: scroll-position !important;
 }
 
 /* Faculty and other user types mobile support */
