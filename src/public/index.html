@@ -276,6 +276,12 @@
                 </a>
               </li>
               <li class="nav-item">
+                <a class="nav-link" href="#" id="attendance-link">
+                  <i class="fas fa-calendar-check me-2"></i>
+                  Attendance
+                </a>
+              </li>
+              <li class="nav-item">
                 <a class="nav-link" href="#" id="system-config-link">
                   <i class="fas fa-cog me-2"></i>
                   System Configuration
@@ -1422,6 +1428,20 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <!-- Attendance Page -->
+            <div id="attendance-page" class="content-page">
+              <div id="attendance-content">
+                <div class="d-flex justify-content-center align-items-center" style="min-height: 200px">
+                  <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3">Loading attendance system...</p>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -4383,5 +4403,6 @@
     <script src="js/admin-student-timetable.js"></script>
     <script src="js/system-config.js"></script>
     <script src="js/courses-view.js"></script>
+    <script src="js/attendance.js"></script>
   </body>
 </html>
