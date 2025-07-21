@@ -44,6 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (logoutLink) {
     logoutLink.addEventListener("click", handleLogout);
   }
+
+  // Setup mobile navigation
+  setupMobileNavigation();
 });
 
 // Authentication status check
@@ -591,13 +594,128 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 });
-// ===== BOOTSTRAP DEBUG (Add temporarily) =====
-document.addEventListener("DOMContentLoaded", () => {
-  console.log("Bootstrap available:", typeof bootstrap !== "undefined");
-  console.log("Login modal element:", document.getElementById("loginModal"));
 
-  // If bootstrap is not available, let's try a fallback
-  if (typeof bootstrap === "undefined") {
-    console.error("Bootstrap is not loaded!");
+// ===== MOBILE NAVIGATION FUNCTIONALITY =====
+function setupMobileNavigation() {
+  // Admin interface mobile navigation
+  setupAdminMobileNav();
+  
+  // Student interface mobile navigation
+  setupStudentMobileNav();
+}
+
+function setupAdminMobileNav() {
+  const mobileToggle = document.getElementById('mobile-nav-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  
+  if (!mobileToggle || !sidebar || !overlay) {
+    console.log('Admin mobile navigation elements not found');
+    return;
   }
-});
+
+  // Toggle sidebar on mobile
+  mobileToggle.addEventListener('click', function() {
+    const isOpen = sidebar.classList.contains('show');
+    
+    if (isOpen) {
+      closeMobileSidebar();
+    } else {
+      openMobileSidebar();
+    }
+  });
+
+  // Close sidebar when clicking overlay
+  overlay.addEventListener('click', closeMobileSidebar);
+
+  // Close sidebar when clicking nav links on mobile
+  const navLinks = sidebar.querySelectorAll('.nav-link');
+  navLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      // Only close on mobile/tablet
+      if (window.innerWidth < 768) {
+        closeMobileSidebar();
+      }
+    });
+  });
+
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    if (window.innerWidth >= 768) {
+      closeMobileSidebar();
+    }
+  });
+
+  function openMobileSidebar() {
+    sidebar.classList.add('show');
+    overlay.classList.add('show');
+    document.body.style.overflow = 'hidden'; // Prevent scrolling
+    mobileToggle.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeMobileSidebar() {
+    sidebar.classList.remove('show');
+    overlay.classList.remove('show');
+    document.body.style.overflow = ''; // Restore scrolling
+    mobileToggle.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function setupStudentMobileNav() {
+  const studentMobileToggle = document.getElementById('student-mobile-nav-toggle');
+  const studentSidebar = document.getElementById('student-sidebar');
+  const studentOverlay = document.getElementById('student-sidebar-overlay');
+  
+  if (!studentMobileToggle || !studentSidebar || !studentOverlay) {
+    console.log('Student mobile navigation elements not found');
+    return;
+  }
+
+  // Toggle student sidebar on mobile
+  studentMobileToggle.addEventListener('click', function() {
+    const isOpen = studentSidebar.classList.contains('show');
+    
+    if (isOpen) {
+      closeStudentMobileSidebar();
+    } else {
+      openStudentMobileSidebar();
+    }
+  });
+
+  // Close student sidebar when clicking overlay
+  studentOverlay.addEventListener('click', closeStudentMobileSidebar);
+
+  // Close sidebar when clicking nav links on mobile
+  const studentNavLinks = studentSidebar.querySelectorAll('.nav-link');
+  studentNavLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      // Only close on mobile/tablet
+      if (window.innerWidth < 768) {
+        closeStudentMobileSidebar();
+      }
+    });
+  });
+
+  // Handle window resize for student interface
+  window.addEventListener('resize', () => {
+    if (window.innerWidth >= 768) {
+      closeStudentMobileSidebar();
+    }
+  });
+
+  function openStudentMobileSidebar() {
+    studentSidebar.classList.add('show');
+    studentOverlay.classList.add('show');
+    document.body.style.overflow = 'hidden'; // Prevent scrolling
+    studentMobileToggle.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeStudentMobileSidebar() {
+    studentSidebar.classList.remove('show');
+    studentOverlay.classList.remove('show');
+    document.body.style.overflow = ''; // Restore scrolling
+    studentMobileToggle.setAttribute('aria-expanded', 'false');
+  }
+}
+
+// Mobile navigation setup complete
