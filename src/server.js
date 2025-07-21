@@ -22,6 +22,7 @@ const timetableCoordinatorRoutes = require("./routes/timetable-coordinator.route
 const userRoutes = require("./routes/user.routes");
 const studentAuthRoutes = require("./routes/student-auth.routes");
 const systemConfigRoutes = require("./routes/system-config.routes");
+const attendanceRoutes = require("./routes/attendance.routes");
 
 // Initialize express app
 const app = express();
@@ -94,6 +95,8 @@ app.use(
   require("./routes/course-withdrawal.routes")
 );
 app.use("/api/system-config", systemConfigRoutes);
+console.log("Registering attendance routes at /api/attendance");
+app.use("/api/attendance", attendanceRoutes);
 
 // Root route
 app.get("/", (req, res) => {
