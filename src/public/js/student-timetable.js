@@ -270,7 +270,7 @@ function generateStandaloneTimetable(student, registrations, allRegistrations, y
       displayArea.innerHTML = `
         <h6 style="color: #007bff; margin-bottom: 15px;">📅 My Slot Timetable - ${student.student_name} (${student.enrollment_number})</h6>
         <p style="color: #666; margin-bottom: 20px;">Academic Year: <strong>${year}</strong> | Semester: <strong>${semester}</strong></p>
-        <div class="timetable-responsive">
+        <div class="timetable-responsive" style="width: 100%; overflow-x: scroll !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch !important; white-space: nowrap !important;">
           ${tableHtml}
         </div>
         ${summaryTable}

@@ -718,4 +718,74 @@ function setupStudentMobileNav() {
   }
 }
 
+// ===== AGGRESSIVE ANDROID TIMETABLE SCROLLING FIX =====
+function forceAndroidScrolling() {
+  // Detect Android devices
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  
+  if (isAndroid) {
+    console.log('Android device detected - applying aggressive scrolling fixes');
+    
+    // Function to force scrolling on timetable containers
+    function enableTimetableScrolling() {
+      const timetableContainers = document.querySelectorAll('.timetable-responsive');
+      
+      timetableContainers.forEach(container => {
+        // Force scrolling properties
+        container.style.overflowX = 'scroll';
+        container.style.overflowY = 'hidden';
+        container.style.webkitOverflowScrolling = 'touch';
+        container.style.width = '100%';
+        container.style.whiteSpace = 'nowrap';
+        
+        // Force table width
+        const table = container.querySelector('table');
+        if (table) {
+          table.style.minWidth = '900px';
+          table.style.width = '900px';
+          table.style.tableLayout = 'fixed';
+        }
+        
+        // Add touch event listeners for Android
+        let isScrolling = false;
+        
+        container.addEventListener('touchstart', function(e) {
+          isScrolling = true;
+        }, { passive: true });
+        
+        container.addEventListener('touchmove', function(e) {
+          if (isScrolling) {
+            // Allow horizontal scrolling
+            e.stopPropagation();
+          }
+        }, { passive: true });
+        
+        container.addEventListener('touchend', function(e) {
+          isScrolling = false;
+        }, { passive: true });
+      });
+    }
+    
+    // Run immediately and on DOM changes
+    enableTimetableScrolling();
+    
+    // Use MutationObserver to catch dynamically added timetables
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.addedNodes.length > 0) {
+          setTimeout(enableTimetableScrolling, 100);
+        }
+      });
+    });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+}
+
+// Initialize Android scrolling fix
+document.addEventListener('DOMContentLoaded', forceAndroidScrolling);
+
 // Mobile navigation setup complete

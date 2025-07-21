@@ -936,28 +936,21 @@ body {
 
 /* ===== TIMETABLE-SPECIFIC MOBILE OPTIMIZATION ===== */
 
-/* Timetable responsive wrapper - Enhanced for real mobile devices */
+/* Timetable responsive wrapper - Simplified for Android compatibility */
 .timetable-responsive {
   width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: scroll !important;
+  overflow-y: hidden !important;
   border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-lg);
   background-color: var(--color-white);
   box-shadow: var(--shadow-sm);
   margin-bottom: var(--space-4);
-  /* Critical mobile device scrolling properties */
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y;
-  overscroll-behavior-x: contain;
-  scroll-behavior: smooth;
-  /* Force hardware acceleration on mobile */
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  /* Prevent iOS bounce on container */
-  overscroll-behavior: none;
-  /* Optimize for mobile performance */
-  will-change: scroll-position;
+  /* Aggressive Android scrolling fixes */
+  -webkit-overflow-scrolling: touch !important;
+  /* Force scrolling on Android */
+  overflow: auto !important;
+  white-space: nowrap !important;
 }
 
 /* Enhanced timetable container */
