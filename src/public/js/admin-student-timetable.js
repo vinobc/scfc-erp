@@ -403,11 +403,13 @@ function displayAdminTimetableResults(data, year, semester) {
       );
       let summaryTable = generateAdminSummaryTable(data.allRegistrations);
 
-      // Update display area (exact same format as student timetable)
+      // Update display area with responsive wrapper
       displayArea.innerHTML = `
         <h6 style="color: #007bff; margin-bottom: 15px;">📅 My Slot Timetable - ${data.student.student_name} (${data.student.enrollment_number})</h6>
         <p style="color: #666; margin-bottom: 20px;">Academic Year: <strong>${year}</strong> | Semester: <strong>${semester}</strong></p>
-        ${tableHtml}
+        <div class="timetable-responsive">
+          ${tableHtml}
+        </div>
         ${summaryTable}
       `;
     })

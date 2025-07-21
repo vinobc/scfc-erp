@@ -2498,7 +2498,12 @@ function generateFacultyTimetable(faculty, allocations, year, semester) {
         "faculty-timetable-div"
       );
       if (facultyTimetableDiv) {
-        facultyTimetableDiv.innerHTML = tableHtml + summaryTable;
+        facultyTimetableDiv.innerHTML = `
+          <div class="timetable-responsive">
+            ${tableHtml}
+          </div>
+          ${summaryTable}
+        `;
       }
     })
     .catch((error) => {
@@ -2892,7 +2897,12 @@ function generateClassTimetable(venue, allocations, year, semester) {
       // Update the container
       const classTimetableDiv = document.getElementById("class-timetable-div");
       if (classTimetableDiv) {
-        classTimetableDiv.innerHTML = tableHtml + summaryTable;
+        classTimetableDiv.innerHTML = `
+          <div class="timetable-responsive">
+            ${tableHtml}
+          </div>
+          ${summaryTable}
+        `;
       }
     })
     .catch((error) => {

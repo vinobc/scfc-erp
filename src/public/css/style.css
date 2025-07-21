@@ -934,6 +934,258 @@ body {
   }
 }
 
+/* ===== TIMETABLE-SPECIFIC MOBILE OPTIMIZATION ===== */
+
+/* Timetable responsive wrapper */
+.timetable-responsive {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-white);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-4);
+}
+
+/* Enhanced timetable container */
+.timetable-responsive .timetable-container {
+  margin-bottom: 0;
+  border: none;
+  background-color: transparent;
+}
+
+/* Timetable styling for better mobile experience */
+.timetable-responsive table {
+  margin-bottom: 0;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  min-width: 800px; /* Ensure minimum width for proper column display */
+}
+
+/* Sticky first column for better navigation */
+.timetable-responsive table th:first-child,
+.timetable-responsive table td:first-child {
+  position: sticky;
+  left: 0;
+  background-color: var(--color-white);
+  z-index: 10;
+  border-right: 2px solid var(--color-gray-300);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Header styling */
+.timetable-responsive table th {
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  padding: var(--space-2) var(--space-1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 0.75rem;
+}
+
+/* Cell styling */
+.timetable-responsive table td {
+  padding: var(--space-2) var(--space-1);
+  text-align: center;
+  vertical-align: middle;
+  border: 1px solid var(--color-gray-200);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+/* Lab cells styling */
+.timetable-responsive table td.lab-cell {
+  background-color: #fff3cd;
+  font-weight: var(--font-weight-medium);
+}
+
+/* Lunch cells styling */
+.timetable-responsive table td.lunch-cell {
+  background-color: var(--color-gray-100);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Day labels styling */
+.timetable-responsive table td:first-child {
+  background-color: var(--color-gray-50);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-800);
+}
+
+/* Mobile-specific optimizations */
+@media (max-width: 767.98px) {
+  .timetable-responsive {
+    margin: 0 -1rem var(--space-4) -1rem; /* Full width on mobile */
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+  
+  .timetable-responsive table {
+    font-size: 0.7rem;
+    min-width: 900px; /* Slightly wider for mobile to ensure all columns show */
+  }
+  
+  .timetable-responsive table th,
+  .timetable-responsive table td {
+    padding: var(--space-1) 2px;
+    font-size: 0.65rem;
+  }
+  
+  /* Touch scrolling optimization */
+  .timetable-responsive {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Add scroll indicator shadow */
+  .timetable-responsive::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    background: linear-gradient(to left, rgba(0,0,0,0.1), transparent);
+    pointer-events: none;
+  }
+}
+
+/* Course code and venue text wrapping */
+.timetable-responsive .course-info {
+  line-height: 1.1;
+  font-size: 0.65rem;
+}
+
+.timetable-responsive .course-code {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.timetable-responsive .venue {
+  color: var(--color-gray-600);
+  font-size: 0.6rem;
+}
+
+.timetable-responsive .faculty {
+  color: var(--color-gray-700);
+  font-size: 0.6rem;
+}
+
+/* ===== STUDENT INTERFACE TIMETABLE FIXES ===== */
+
+/* Ensure timetable responsive styles work in student interface */
+body.authenticated.student-user #student-interface .timetable-responsive {
+  width: 100% !important;
+  overflow-x: auto !important;
+  border: 1px solid var(--color-gray-200) !important;
+  border-radius: var(--radius-lg) !important;
+  background-color: var(--color-white) !important;
+  box-shadow: var(--shadow-sm) !important;
+  margin-bottom: var(--space-4) !important;
+}
+
+/* Student interface timetable table styling */
+body.authenticated.student-user #student-interface .timetable-responsive table {
+  margin-bottom: 0 !important;
+  font-size: 0.875rem !important;
+  white-space: nowrap !important;
+  min-width: 800px !important;
+}
+
+/* Student interface sticky first column */
+body.authenticated.student-user #student-interface .timetable-responsive table th:first-child,
+body.authenticated.student-user #student-interface .timetable-responsive table td:first-child {
+  position: sticky !important;
+  left: 0 !important;
+  background-color: var(--color-white) !important;
+  z-index: 10 !important;
+  border-right: 2px solid var(--color-gray-300) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+/* Student interface mobile optimizations */
+@media (max-width: 767.98px) {
+  body.authenticated.student-user #student-interface main {
+    margin-left: 0 !important;
+    padding: 70px 1rem 1rem 1rem !important;
+  }
+  
+  body.authenticated.student-user #student-interface .timetable-responsive {
+    margin: 0 -1rem var(--space-4) -1rem !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+  }
+  
+  body.authenticated.student-user #student-interface .timetable-responsive table {
+    font-size: 0.7rem !important;
+    min-width: 900px !important;
+  }
+  
+  body.authenticated.student-user #student-interface .timetable-responsive table th,
+  body.authenticated.student-user #student-interface .timetable-responsive table td {
+    padding: var(--space-1) 2px !important;
+    font-size: 0.65rem !important;
+  }
+}
+
+/* Ensure student mobile navigation works */
+@media (min-width: 768px) {
+  body.authenticated.student-user #student-interface main {
+    margin-left: 280px !important;
+    padding: 1.5rem 2rem !important;
+  }
+}
+
+@media (min-width: 992px) {
+  body.authenticated.student-user #student-interface main {
+    margin-left: 250px !important;
+  }
+}
+
+/* ===== UNIVERSAL TIMETABLE RESPONSIVE SUPPORT ===== */
+
+/* Ensure timetable responsive works for all user types */
+body.authenticated .timetable-responsive {
+  width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scroll-behavior: smooth !important;
+}
+
+/* Faculty and other user types mobile support */
+@media (max-width: 767.98px) {
+  body.authenticated.admin-user main .timetable-responsive,
+  body.authenticated.staff-user main .timetable-responsive,
+  body.authenticated.faculty-user main .timetable-responsive {
+    margin: 0 -1rem var(--space-4) -1rem !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+  
+  body.authenticated.admin-user main .timetable-responsive table,
+  body.authenticated.staff-user main .timetable-responsive table,
+  body.authenticated.faculty-user main .timetable-responsive table {
+    font-size: 0.7rem !important;
+    min-width: 900px !important;
+  }
+  
+  body.authenticated.admin-user main .timetable-responsive table th,
+  body.authenticated.admin-user main .timetable-responsive table td,
+  body.authenticated.staff-user main .timetable-responsive table th,
+  body.authenticated.staff-user main .timetable-responsive table td,
+  body.authenticated.faculty-user main .timetable-responsive table th,
+  body.authenticated.faculty-user main .timetable-responsive table td {
+    padding: var(--space-1) 2px !important;
+    font-size: 0.65rem !important;
+  }
+}
+
 /* Targeted fix for student sidebar height issue */
 
 /* Fix the main sidebar container */
