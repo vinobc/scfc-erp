@@ -1571,10 +1571,12 @@ function generateStudentTimetable(student, registrations, allRegistrations, year
       // Generate enhanced summary table with all course types
       let summaryTable = generateEnhancedSummaryTable(allRegistrations);
 
-      // Update content
+      // Update content with responsive wrapper
       contentDiv.innerHTML = `
         <h6 style="color: #007bff; margin-bottom: 15px;">📅 My Slot Timetable - ${student.student_name} (${student.enrollment_number})</h6>
-        ${tableHtml}
+        <div class="timetable-responsive">
+          ${tableHtml}
+        </div>
         ${summaryTable}
       `;
     })

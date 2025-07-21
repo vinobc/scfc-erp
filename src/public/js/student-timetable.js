@@ -266,11 +266,13 @@ function generateStandaloneTimetable(student, registrations, allRegistrations, y
       );
       let summaryTable = generateEnhancedSummaryTable(allRegistrations);
 
-      // Update display area
+      // Update display area with responsive wrapper
       displayArea.innerHTML = `
         <h6 style="color: #007bff; margin-bottom: 15px;">📅 My Slot Timetable - ${student.student_name} (${student.enrollment_number})</h6>
         <p style="color: #666; margin-bottom: 20px;">Academic Year: <strong>${year}</strong> | Semester: <strong>${semester}</strong></p>
-        ${tableHtml}
+        <div class="timetable-responsive">
+          ${tableHtml}
+        </div>
         ${summaryTable}
       `;
     })
