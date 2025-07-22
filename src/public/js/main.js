@@ -130,8 +130,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "timetable_coordinator":
-      // Coordinator sees: Dashboard, TimeTable (view only), Logout
-      [navItems.dashboard, navItems.timetable, navItems.logout].forEach(
+      // Coordinator sees: Dashboard, TimeTable (view only), Attendance, Logout
+      [navItems.dashboard, navItems.timetable, navItems.attendance, navItems.logout].forEach(
         (item) => {
           if (item && item.parentElement) {
             item.parentElement.style.display = "block";
