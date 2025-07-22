@@ -5,14 +5,14 @@ exports.getAvailableSemesters = async (req, res) => {
   try {
     const facultyId = req.userId; // From JWT token
     
-    // Get employee_id for the faculty from user table
+    // Get employee_id for the faculty or timetable coordinator from user table
     const userResult = await db.query(
-      "SELECT employee_id FROM \"user\" WHERE user_id = $1 AND role = 'faculty'",
+      "SELECT employee_id FROM \"user\" WHERE user_id = $1 AND role IN ('faculty', 'timetable_coordinator')",
       [facultyId]
     );
 
     if (!userResult.rows.length || !userResult.rows[0].employee_id) {
-      return res.status(404).json({ message: "Faculty not found or not linked to employee" });
+      return res.status(404).json({ message: "User not found or not linked to employee record" });
     }
 
     const employeeId = userResult.rows[0].employee_id;
@@ -43,14 +43,14 @@ exports.getFacultyAllocations = async (req, res) => {
       return res.status(400).json({ message: "slot_year and semester_type are required" });
     }
 
-    // Get employee_id for the faculty
+    // Get employee_id for the faculty or timetable coordinator
     const userResult = await db.query(
-      "SELECT employee_id FROM \"user\" WHERE user_id = $1 AND role = 'faculty'",
+      "SELECT employee_id FROM \"user\" WHERE user_id = $1 AND role IN ('faculty', 'timetable_coordinator')",
       [facultyId]
     );
 
     if (!userResult.rows.length || !userResult.rows[0].employee_id) {
-      return res.status(404).json({ message: "Faculty not found or not linked to employee" });
+      return res.status(404).json({ message: "User not found or not linked to employee record" });
     }
 
     const employeeId = userResult.rows[0].employee_id;

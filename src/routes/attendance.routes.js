@@ -2,7 +2,7 @@ const express = require("express");
 const attendanceController = require("../controllers/attendance.controller");
 const {
   verifyToken,
-  isFaculty
+  isFacultyOrCoordinator
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -10,14 +10,14 @@ const router = express.Router();
 // Apply auth middleware to all attendance routes
 router.use(verifyToken);
 
-// Faculty attendance routes - protected by isFaculty middleware
-router.get("/semesters", isFaculty, attendanceController.getAvailableSemesters);
-router.get("/allocations", isFaculty, attendanceController.getFacultyAllocations);
-router.get("/students", isFaculty, attendanceController.getEnrolledStudents);
-router.post("/mark", isFaculty, attendanceController.markAttendance);
-router.get("/records", isFaculty, attendanceController.getAttendanceRecords);
-router.get("/report", isFaculty, attendanceController.getAttendanceReport);
-router.get("/date-range", isFaculty, attendanceController.getAttendanceByDateRange);
-router.get("/low-attendance", isFaculty, attendanceController.getLowAttendanceStudents);
+// Faculty and Timetable Coordinator attendance routes - protected by isFacultyOrCoordinator middleware
+router.get("/semesters", isFacultyOrCoordinator, attendanceController.getAvailableSemesters);
+router.get("/allocations", isFacultyOrCoordinator, attendanceController.getFacultyAllocations);
+router.get("/students", isFacultyOrCoordinator, attendanceController.getEnrolledStudents);
+router.post("/mark", isFacultyOrCoordinator, attendanceController.markAttendance);
+router.get("/records", isFacultyOrCoordinator, attendanceController.getAttendanceRecords);
+router.get("/report", isFacultyOrCoordinator, attendanceController.getAttendanceReport);
+router.get("/date-range", isFacultyOrCoordinator, attendanceController.getAttendanceByDateRange);
+router.get("/low-attendance", isFacultyOrCoordinator, attendanceController.getLowAttendanceStudents);
 
 module.exports = router;
