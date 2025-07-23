@@ -2,7 +2,8 @@ const express = require("express");
 const attendanceController = require("../controllers/attendance.controller");
 const {
   verifyToken,
-  isFacultyOrCoordinator
+  isFacultyOrCoordinator,
+  isStudent
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -19,5 +20,9 @@ router.get("/records", isFacultyOrCoordinator, attendanceController.getAttendanc
 router.get("/report", isFacultyOrCoordinator, attendanceController.getAttendanceReport);
 router.get("/date-range", isFacultyOrCoordinator, attendanceController.getAttendanceByDateRange);
 router.get("/low-attendance", isFacultyOrCoordinator, attendanceController.getLowAttendanceStudents);
+
+// Student attendance routes - protected by isStudent middleware
+router.get("/student/courses", isStudent, attendanceController.getStudentCourses);
+router.get("/student/report/:course_code/:slot_year/:semester_type", isStudent, attendanceController.getStudentAttendanceReport);
 
 module.exports = router;

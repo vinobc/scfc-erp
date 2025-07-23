@@ -75,6 +75,17 @@ function setupStudentNavigation() {
     });
   }
 
+  // Initialize student attendance navigation
+  const studentAttendanceLink = document.getElementById(
+    "student-attendance-link"
+  );
+  if (studentAttendanceLink) {
+    studentAttendanceLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("attendance");
+    });
+  }
+
   // Initialize voluntary password change
   const studentChangePasswordLink = document.getElementById(
     "student-change-password-link"
@@ -398,6 +409,26 @@ function showStudentPage(pageType) {
       if (typeof initializeStandaloneTimetable === "function") {
         initializeStandaloneTimetable();
       }
+      break;
+
+    case "attendance":
+      const attendanceContent = document.getElementById(
+        "student-attendance-page"
+      );
+      if (attendanceContent) {
+        attendanceContent.style.display = "block";
+      }
+      const attendanceLink = document.getElementById("student-attendance-link");
+      if (attendanceLink) {
+        attendanceLink.classList.add("active");
+      }
+      const attendanceTitleElement = document.getElementById("student-page-title");
+      if (attendanceTitleElement) {
+        attendanceTitleElement.textContent = "My Attendance";
+      }
+      
+      // Initialize student attendance functionality
+      initializeStudentAttendance();
       break;
   }
 }
@@ -936,6 +967,256 @@ function hideVoluntaryAlert() {
     alertDiv.classList.add("d-none");
   }
 }
+
+// Initialize student attendance functionality
+async function initializeStudentAttendance() {
+  console.log("🎓 Initializing student attendance...");
+  const contentDiv = document.getElementById("student-attendance-content");
+  
+  if (!contentDiv) {
+    console.error("Attendance content div not found");
+    return;
+  }
+
+  try {
+    // Fetch student courses with attendance
+    const response = await fetch(`${window.API_URL}/attendance/student/courses`, {
+      headers: {
+        "x-access-token": localStorage.getItem("token")
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch attendance data");
+    }
+
+    const courses = await response.json();
+    console.log("📚 Courses loaded:", courses);
+
+    if (courses.length === 0) {
+      contentDiv.innerHTML = `
+        <div class="alert alert-info text-center">
+          <i class="fas fa-info-circle me-2"></i>
+          You have no registered courses for attendance tracking.
+        </div>
+      `;
+      return;
+    }
+
+    // Display courses with attendance
+    let coursesHtml = `
+      <div class="row">
+        ${courses.map(course => {
+          const attendanceColor = course.attendance_percentage >= 75 ? 'success' : 
+                                 course.attendance_percentage >= 60 ? 'warning' : 'danger';
+          const meetsRequirement = !course.theory || course.attendance_percentage >= 75;
+          
+          return `
+            <div class="col-md-6 mb-3">
+              <div class="card h-100" style="cursor: pointer;" onclick="viewStudentAttendanceDetails('${course.course_code}', '${course.slot_year}', '${course.semester_type}')">
+                <div class="card-body">
+                  <h6 class="card-title">${course.course_code} - ${course.course_name}</h6>
+                  <p class="text-muted mb-2">${course.slot_year} | ${course.semester_type}</p>
+                  
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                      <span>Attendance</span>
+                      <span class="badge bg-${attendanceColor}">${course.attendance_percentage || 0}%</span>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                      <div class="progress-bar bg-${attendanceColor}" role="progressbar" 
+                           style="width: ${course.attendance_percentage || 0}%"
+                           aria-valuenow="${course.attendance_percentage || 0}" 
+                           aria-valuemin="0" aria-valuemax="100">
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="d-flex justify-content-between text-muted small">
+                    <span>${course.present_classes || 0}/${course.total_classes || 0} classes</span>
+                    ${course.theory > 0 ? 
+                      `<span class="badge ${meetsRequirement ? 'bg-success' : 'bg-danger'}">
+                        ${meetsRequirement ? '✓ Meets 75%' : '✗ Below 75%'}
+                      </span>` : 
+                      '<span class="badge bg-info">Lab Only</span>'
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      
+      <div class="mt-3 text-muted">
+        <small><i class="fas fa-info-circle me-1"></i>Click on a course to view detailed attendance records</small>
+      </div>
+    `;
+    
+    contentDiv.innerHTML = coursesHtml;
+
+  } catch (error) {
+    console.error("Error loading attendance:", error);
+    contentDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        Error loading attendance data. Please try again later.
+      </div>
+    `;
+  }
+}
+
+// View detailed attendance for a course
+async function viewStudentAttendanceDetails(courseCode, slotYear, semesterType) {
+  console.log("📊 Viewing attendance details for:", courseCode);
+  const contentDiv = document.getElementById("student-attendance-content");
+  
+  if (!contentDiv) return;
+
+  // Show loading
+  contentDiv.innerHTML = `
+    <div class="text-center">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2">Loading attendance details...</p>
+    </div>
+  `;
+
+  try {
+    const response = await fetch(
+      `${window.API_URL}/attendance/student/report/${courseCode}/${slotYear}/${semesterType}`,
+      {
+        headers: {
+          "x-access-token": localStorage.getItem("token")
+        }
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch attendance details");
+    }
+
+    const data = await response.json();
+    console.log("📋 Attendance details:", data);
+
+    const { course_details, summary, attendance_records } = data;
+    const attendanceColor = summary.attendance_percentage >= 75 ? 'success' : 
+                           summary.attendance_percentage >= 60 ? 'warning' : 'danger';
+
+    let detailsHtml = `
+      <div class="mb-3">
+        <button class="btn btn-sm btn-outline-primary" onclick="initializeStudentAttendance()">
+          <i class="fas fa-arrow-left me-1"></i>Back to Courses
+        </button>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header bg-primary">
+          <h6 class="mb-0 text-white">${course_details.course_code} - ${course_details.course_name}</h6>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <div class="text-center">
+                <h2 class="text-${attendanceColor}">${summary.attendance_percentage}%</h2>
+                <p class="text-muted">Overall Attendance</p>
+              </div>
+            </div>
+            <div class="col-md-8">
+              <div class="row text-center">
+                <div class="col-4">
+                  <h5>${summary.present_classes}</h5>
+                  <p class="text-muted">Present</p>
+                </div>
+                <div class="col-4">
+                  <h5>${summary.absent_classes}</h5>
+                  <p class="text-muted">Absent</p>
+                </div>
+                <div class="col-4">
+                  <h5>${summary.total_classes}</h5>
+                  <p class="text-muted">Total Classes</p>
+                </div>
+              </div>
+              ${summary.minimum_required ? `
+                <div class="alert ${summary.meets_requirement ? 'alert-success' : 'alert-danger'} mt-3">
+                  <i class="fas ${summary.meets_requirement ? 'fa-check-circle' : 'fa-exclamation-triangle'} me-2"></i>
+                  ${summary.meets_requirement ? 
+                    'You meet the 75% attendance requirement for this theory course.' : 
+                    `You need ${Math.ceil((0.75 * summary.total_classes) - summary.present_classes)} more present days to meet the 75% requirement.`
+                  }
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header bg-primary">
+          <h6 class="mb-0 text-white">Attendance History</h6>
+        </div>
+        <div class="card-body">
+          ${attendance_records.length > 0 ? `
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Day</th>
+                    <th>Time</th>
+                    <th>Venue</th>
+                    <th>Faculty</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${attendance_records.map(record => `
+                    <tr>
+                      <td>${new Date(record.attendance_date).toLocaleDateString()}</td>
+                      <td>${record.slot_day}</td>
+                      <td>${record.slot_name} - ${record.slot_time}</td>
+                      <td>${record.venue}</td>
+                      <td>${record.faculty_name}</td>
+                      <td>
+                        <span class="badge bg-${
+                          record.status === 'present' ? 'success' : 
+                          record.status === 'absent' ? 'danger' : 'info'
+                        }">
+                          ${record.status.toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : `
+            <div class="text-center text-muted">
+              <i class="fas fa-calendar-times fa-3x mb-3"></i>
+              <p>No attendance records found yet.</p>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+
+    contentDiv.innerHTML = detailsHtml;
+
+  } catch (error) {
+    console.error("Error loading attendance details:", error);
+    contentDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        Error loading attendance details. Please try again later.
+      </div>
+    `;
+  }
+}
+
+// Make functions available globally
+window.initializeStudentAttendance = initializeStudentAttendance;
+window.viewStudentAttendanceDetails = viewStudentAttendanceDetails;
 
 // Show refresh message after student login
 function showStudentRefreshMessage() {

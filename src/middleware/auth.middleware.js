@@ -61,6 +61,14 @@ exports.isFaculty = (req, res, next) => {
   next();
 };
 
+// Check if user has student role
+exports.isStudent = (req, res, next) => {
+  if (req.userRole !== "student" && req.userRole !== "admin") {
+    return res.status(403).json({ message: "Require Student or Admin Role" });
+  }
+  next();
+};
+
 // Check if user has timetable coordinator role
 exports.isTimetableCoordinator = (req, res, next) => {
   if (req.userRole !== "timetable_coordinator" && req.userRole !== "admin") {

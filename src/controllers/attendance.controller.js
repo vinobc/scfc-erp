@@ -318,6 +318,148 @@ exports.getAttendanceByDateRange = async (req, res) => {
   }
 };
 
+// Get student's registered courses with attendance
+exports.getStudentCourses = async (req, res) => {
+  try {
+    const studentId = req.userId; // From JWT token
+    
+    // Get student's enrollment number
+    const studentResult = await db.query(
+      "SELECT enrollment_no FROM student WHERE user_id = $1",
+      [studentId]
+    );
+
+    if (!studentResult.rows.length) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const enrollmentNo = studentResult.rows[0].enrollment_no;
+
+    // Get student's registered courses for current academic year
+    const result = await db.query(
+      `SELECT DISTINCT 
+         sr.course_code, 
+         sr.course_name,
+         sr.slot_year,
+         sr.semester_type,
+         c.theory,
+         c.practical,
+         c.course_type,
+         -- Calculate attendance percentage
+         (SELECT 
+           CASE 
+             WHEN COUNT(a.id) = 0 THEN 0
+             ELSE ROUND((COUNT(CASE WHEN a.status IN ('present', 'OD') THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
+           END
+          FROM attendance a
+          WHERE a.student_id = $1
+            AND a.course_code = sr.course_code
+            AND a.slot_year = sr.slot_year
+            AND a.semester_type = sr.semester_type
+         ) as attendance_percentage,
+         -- Count total classes
+         (SELECT COUNT(a.id)
+          FROM attendance a
+          WHERE a.student_id = $1
+            AND a.course_code = sr.course_code
+            AND a.slot_year = sr.slot_year
+            AND a.semester_type = sr.semester_type
+         ) as total_classes,
+         -- Count present classes
+         (SELECT COUNT(CASE WHEN a.status IN ('present', 'OD') THEN 1 END)
+          FROM attendance a
+          WHERE a.student_id = $1
+            AND a.course_code = sr.course_code
+            AND a.slot_year = sr.slot_year
+            AND a.semester_type = sr.semester_type
+         ) as present_classes
+       FROM student_registrations sr
+       JOIN course c ON sr.course_code = c.course_code
+       WHERE sr.enrollment_number = $2
+         AND sr.withdrawn = false
+       ORDER BY sr.slot_year DESC, sr.semester_type, sr.course_code`,
+      [studentId, enrollmentNo]
+    );
+
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Get student courses error:", error);
+    res.status(500).json({ message: "Server error while fetching student courses" });
+  }
+};
+
+// Get detailed attendance for a specific course
+exports.getStudentAttendanceReport = async (req, res) => {
+  try {
+    const studentId = req.userId;
+    const { course_code, slot_year, semester_type } = req.params;
+
+    if (!course_code || !slot_year || !semester_type) {
+      return res.status(400).json({ message: "Course code, slot year, and semester type are required" });
+    }
+
+    // Get course details
+    const courseResult = await db.query(
+      "SELECT course_name, theory, practical, course_type FROM course WHERE course_code = $1",
+      [course_code]
+    );
+
+    if (!courseResult.rows.length) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const course = courseResult.rows[0];
+
+    // Get detailed attendance records
+    const attendanceResult = await db.query(
+      `SELECT 
+         a.attendance_date,
+         a.slot_day,
+         a.slot_name,
+         a.slot_time,
+         a.venue,
+         a.status,
+         f.name as faculty_name
+       FROM attendance a
+       JOIN faculty f ON a.employee_id = f.employee_id
+       WHERE a.student_id = $1 
+         AND a.course_code = $2
+         AND a.slot_year = $3
+         AND a.semester_type = $4
+       ORDER BY a.attendance_date DESC, a.slot_time`,
+      [studentId, course_code, slot_year, semester_type]
+    );
+
+    // Calculate summary statistics
+    const totalClasses = attendanceResult.rows.length;
+    const presentClasses = attendanceResult.rows.filter(r => r.status === 'present' || r.status === 'OD').length;
+    const absentClasses = attendanceResult.rows.filter(r => r.status === 'absent').length;
+    const attendancePercentage = totalClasses > 0 ? Math.round((presentClasses / totalClasses) * 100 * 100) / 100 : 0;
+
+    res.status(200).json({
+      course_details: {
+        ...course,
+        course_code,
+        slot_year,
+        semester_type
+      },
+      summary: {
+        total_classes: totalClasses,
+        present_classes: presentClasses,
+        absent_classes: absentClasses,
+        attendance_percentage: attendancePercentage,
+        minimum_required: course.theory > 0 ? 75 : null,
+        meets_requirement: course.theory > 0 ? attendancePercentage >= 75 : true
+      },
+      attendance_records: attendanceResult.rows
+    });
+
+  } catch (error) {
+    console.error("Get student attendance report error:", error);
+    res.status(500).json({ message: "Server error while fetching attendance report" });
+  }
+};
+
 // Get students with low attendance (below 75%)
 exports.getLowAttendanceStudents = async (req, res) => {
   try {
