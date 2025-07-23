@@ -2,7 +2,6 @@ const express = require("express");
 const attendanceController = require("../controllers/attendance.controller");
 const {
   verifyToken,
-  isFaculty,
   isFacultyOrCoordinator,
   isStudent
 } = require("../middleware/auth.middleware");
