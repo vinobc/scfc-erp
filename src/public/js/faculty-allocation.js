@@ -3565,3 +3565,7 @@ function clearConflictIndicators() {
     saveFacultyAllocationBtn.className = "btn btn-primary";
   }
 }
+
+// Export functions globally for navigation system
+window.showCreateFacultyAllocationPage = showCreateFacultyAllocationPage;
+window.showViewFacultyTimetablePage = showViewFacultyTimetablePage;

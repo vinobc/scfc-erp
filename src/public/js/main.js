@@ -252,7 +252,15 @@ function setupNavigation() {
       
       if (targetId === "logout-link") return;
 
-      const targetPage = targetId.replace("-link", "-page");
+      // Handle special cases for faculty slot timetable
+      let targetPage;
+      if (targetId === "create-faculty-slot-link") {
+        targetPage = "create-faculty-allocation-page";
+      } else if (targetId === "view-faculty-slot-link") {
+        targetPage = "view-faculty-timetable-page";
+      } else {
+        targetPage = targetId.replace("-link", "-page");
+      }
       console.log("📄 Target page:", targetPage);
 
       // Update active navigation
@@ -285,6 +293,22 @@ function setupNavigation() {
             initializeAdminStudentTimetable();
           } else {
             console.error("❌ initializeAdminStudentTimetable is not a function");
+          }
+        } else if (targetPage === "create-faculty-allocation-page") {
+          console.log("🎯 Navigating to create-faculty-allocation-page");
+          if (typeof showCreateFacultyAllocationPage === "function") {
+            console.log("✅ Calling showCreateFacultyAllocationPage");
+            showCreateFacultyAllocationPage();
+          } else {
+            console.error("❌ showCreateFacultyAllocationPage is not a function");
+          }
+        } else if (targetPage === "view-faculty-timetable-page") {
+          console.log("🎯 Navigating to view-faculty-timetable-page");
+          if (typeof showViewFacultyTimetablePage === "function") {
+            console.log("✅ Calling showViewFacultyTimetablePage");
+            showViewFacultyTimetablePage();
+          } else {
+            console.error("❌ showViewFacultyTimetablePage is not a function");
           }
         }
         // Add other page data loading as needed
