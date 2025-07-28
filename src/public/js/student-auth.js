@@ -75,6 +75,17 @@ function setupStudentNavigation() {
     });
   }
 
+  // Initialize attendance navigation
+  const studentAttendanceLink = document.getElementById(
+    "student-attendance-link"
+  );
+  if (studentAttendanceLink) {
+    studentAttendanceLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("attendance");
+    });
+  }
+
   // Initialize voluntary password change
   const studentChangePasswordLink = document.getElementById(
     "student-change-password-link"
@@ -397,6 +408,29 @@ function showStudentPage(pageType) {
       // Initialize standalone timetable functionality
       if (typeof initializeStandaloneTimetable === "function") {
         initializeStandaloneTimetable();
+      }
+      break;
+
+    case "attendance":
+      const attendanceContent = document.getElementById(
+        "student-attendance-content"
+      );
+      if (attendanceContent) {
+        attendanceContent.style.display = "block";
+      }
+      const attendanceLink = document.getElementById("student-attendance-link");
+      if (attendanceLink) {
+        attendanceLink.classList.add("active");
+      }
+      const attendanceTitleElement =
+        document.getElementById("student-page-title");
+      if (attendanceTitleElement) {
+        attendanceTitleElement.textContent = "My Attendance";
+      }
+
+      // Initialize student attendance functionality
+      if (typeof initializeStudentAttendance === "function") {
+        initializeStudentAttendance();
       }
       break;
   }
