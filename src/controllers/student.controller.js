@@ -6,10 +6,11 @@ const bcrypt = require("bcrypt");
 exports.getAllStudents = async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT s.*, p.program_name_short, sc.school_short_name 
+      `SELECT s.*, p.program_name_short, sc.school_short_name, u.is_active 
        FROM student s
        JOIN program p ON s.program_id = p.program_id
        JOIN school sc ON s.school_id = sc.school_id
+       LEFT JOIN "user" u ON s.user_id = u.user_id
        ORDER BY s.enrollment_no`,
       []
     );
@@ -638,6 +639,51 @@ exports.adminCreateStudentUsers = async (req, res) => {
     console.error("Admin create student users error:", error);
     res.status(500).json({
       message: "Server error while creating student user accounts",
+    });
+  }
+};
+
+// Toggle student active/inactive status
+exports.toggleStudentStatus = async (req, res) => {
+  try {
+    const { enrollment_no } = req.params;
+
+    // Get student details with current status
+    const studentResult = await db.query(
+      `SELECT s.enrollment_no, s.student_name, s.user_id, u.is_active 
+       FROM student s
+       JOIN "user" u ON s.user_id = u.user_id
+       WHERE s.enrollment_no = $1 AND u.role = 'student'`,
+      [enrollment_no]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Student not found or does not have a user account",
+      });
+    }
+
+    const student = studentResult.rows[0];
+    const newStatus = !student.is_active;
+
+    // Update user status
+    await db.query(
+      `UPDATE "user" 
+       SET is_active = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE user_id = $2`,
+      [newStatus, student.user_id]
+    );
+
+    res.status(200).json({
+      message: `Student ${newStatus ? "activated" : "deactivated"} successfully`,
+      student_name: student.student_name,
+      enrollment_no: enrollment_no,
+      is_active: newStatus,
+    });
+  } catch (error) {
+    console.error("Toggle student status error:", error);
+    res.status(500).json({
+      message: "Server error while toggling student status",
     });
   }
 };

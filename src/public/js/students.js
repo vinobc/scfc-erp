@@ -231,7 +231,7 @@ function loadStudents() {
   // Show loading state
   if (studentsTableBody) {
     studentsTableBody.innerHTML =
-      '<tr><td colspan="8" class="text-center">Loading students...</td></tr>';
+      '<tr><td colspan="9" class="text-center">Loading students...</td></tr>';
   }
 
   fetch(`${window.API_URL}/students`, {
@@ -249,7 +249,7 @@ function loadStudents() {
       if (students.length === 0) {
         if (studentsTableBody) {
           studentsTableBody.innerHTML =
-            '<tr><td colspan="8" class="text-center">No students found. Add a new student or import students from Excel.</td></tr>';
+            '<tr><td colspan="9" class="text-center">No students found. Add a new student or import students from Excel.</td></tr>';
         }
         return;
       }
@@ -270,7 +270,7 @@ function loadStudents() {
       console.error("Load students error:", error);
       if (studentsTableBody) {
         studentsTableBody.innerHTML =
-          '<tr><td colspan="8" class="text-center text-danger">Error loading students. Please try again.</td></tr>';
+          '<tr><td colspan="9" class="text-center text-danger">Error loading students. Please try again.</td></tr>';
       }
       showAlert(
         "Failed to load students. Please refresh the page or try again later.",
@@ -348,7 +348,7 @@ function renderStudents(students) {
 
   if (filteredStudents.length === 0) {
     studentsTableBody.innerHTML =
-      '<tr><td colspan="8" class="text-center">No students match your filters.</td></tr>';
+      '<tr><td colspan="9" class="text-center">No students match your filters.</td></tr>';
     return;
   }
 
@@ -358,6 +358,12 @@ function renderStudents(students) {
   // Add each student to the table
   filteredStudents.forEach((student) => {
     const row = document.createElement("tr");
+    
+    // Add visual indicator for inactive students
+    if (student.is_active === false) {
+      row.style.opacity = "0.7";
+      row.style.backgroundColor = "#f8f9fa";
+    }
 
     row.innerHTML = `
       <td>${student.enrollment_no}</td>
@@ -367,6 +373,15 @@ function renderStudents(students) {
       <td>${student.school_name}</td>
       <td>${student.year_admitted}</td>
       <td>${student.email_id || "-"}</td>
+      <td>
+        <button class="btn btn-sm ${student.is_active !== false ? 'btn-success' : 'btn-danger'} action-btn toggle-student-status-btn" 
+                data-enrollment="${student.enrollment_no}" 
+                data-name="${student.student_name}" 
+                data-status="${student.is_active !== false ? 'active' : 'inactive'}"
+                title="${student.is_active !== false ? 'Click to deactivate' : 'Click to activate'}">
+          <i class="fas fa-power-off"></i> ${student.is_active !== false ? 'Active' : 'Inactive'}
+        </button>
+      </td>
       <td>
   <button class="btn btn-sm btn-primary action-btn edit-student-btn" data-enrollment="${
     student.enrollment_no
@@ -424,6 +439,19 @@ function addStudentButtonListeners() {
       const enrollmentNo = button.getAttribute("data-enrollment");
       const studentName = button.getAttribute("data-name");
       confirmResetStudentPassword(enrollmentNo, studentName);
+    });
+  });
+
+  // Toggle status buttons
+  const toggleStatusButtons = document.querySelectorAll(
+    ".toggle-student-status-btn"
+  );
+  toggleStatusButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const enrollmentNo = button.getAttribute("data-enrollment");
+      const studentName = button.getAttribute("data-name");
+      const currentStatus = button.getAttribute("data-status");
+      confirmToggleStudentStatus(enrollmentNo, studentName, currentStatus);
     });
   });
 }
@@ -906,6 +934,55 @@ function showCreateUserAccountsModal() {
     .catch((error) => {
       console.error("Error fetching students:", error);
       showAlert("Failed to load students", "danger");
+    });
+}
+
+// Confirm and toggle student status
+function confirmToggleStudentStatus(enrollmentNo, studentName, currentStatus) {
+  const newStatus = currentStatus === "active" ? "inactive" : "active";
+  const action = currentStatus === "active" ? "deactivate" : "activate";
+  
+  if (
+    confirm(
+      `Are you sure you want to ${action} ${studentName} (${enrollmentNo})?\n\n${
+        currentStatus === "active" 
+          ? "The student will not be able to login to their portal." 
+          : "The student will be able to login to their portal again."
+      }`
+    )
+  ) {
+    toggleStudentStatus(enrollmentNo, studentName);
+  }
+}
+
+// Toggle student status
+function toggleStudentStatus(enrollmentNo, studentName) {
+  fetch(`${window.API_URL}/students/${enrollmentNo}/toggle-status`, {
+    method: "PUT",
+    headers: {
+      Authorization: localStorage.getItem("token"),
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then((data) => {
+          throw new Error(data.message || "Failed to toggle student status");
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      showAlert(
+        `${data.student_name} has been ${data.is_active ? "activated" : "deactivated"} successfully!`,
+        "success"
+      );
+      // Reload students to reflect the change
+      loadStudents();
+    })
+    .catch((error) => {
+      console.error("Toggle student status error:", error);
+      showAlert(error.message, "danger");
     });
 }
 
