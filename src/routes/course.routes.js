@@ -4,6 +4,7 @@ const {
   verifyToken,
   isAdmin,
   isStaffOrAdmin,
+  isFacultyOrCoordinator,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -11,9 +12,9 @@ const router = express.Router();
 // Apply auth middleware to all course routes
 router.use(verifyToken);
 
-// Course routes
-router.get("/", courseController.getAllCourses);
-router.get("/:code", courseController.getCourseByCode);
+// Course routes - accessible by faculty, timetable coordinators, and admins
+router.get("/", isFacultyOrCoordinator, courseController.getAllCourses);
+router.get("/:code", isFacultyOrCoordinator, courseController.getCourseByCode);
 
 // Admin-only routes
 router.post("/", isAdmin, courseController.createCourse);

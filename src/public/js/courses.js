@@ -147,6 +147,33 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
+// Hide admin-only elements for faculty and timetable coordinators
+function hideAdminOnlyElements() {
+  // Check if current user is admin
+  const isAdmin = currentUser && currentUser.role === "admin";
+  
+  if (!isAdmin) {
+    // Hide Add Course button
+    if (addCourseBtn) {
+      addCourseBtn.style.display = "none";
+    }
+    
+    // Hide Import Courses button
+    if (importCoursesBtn) {
+      importCoursesBtn.style.display = "none";
+    }
+    
+    // Hide Actions column header
+    const coursesPage = document.getElementById("courses-page");
+    if (coursesPage) {
+      const actionsHeader = coursesPage.querySelector("thead th:last-child");
+      if (actionsHeader && actionsHeader.textContent.trim() === "Actions") {
+        actionsHeader.style.display = "none";
+      }
+    }
+  }
+}
+
 // Load all courses from the API
 function loadCourses() {
   console.log("courses.js: Loading courses");
@@ -154,10 +181,15 @@ function loadCourses() {
   // Set active page
   setActivePage("courses-page");
 
+  // Hide admin-only elements for faculty and timetable coordinators
+  hideAdminOnlyElements();
+
   // Show loading state
   if (coursesTableBody) {
+    const isAdmin = currentUser && currentUser.role === "admin";
+    const colspan = isAdmin ? "7" : "6";
     coursesTableBody.innerHTML =
-      '<tr><td colspan="7" class="text-center">Loading courses...</td></tr>';
+      `<tr><td colspan="${colspan}" class="text-center">Loading courses...</td></tr>`;
   }
 
   fetch(`${window.API_URL}/courses`, {
@@ -174,8 +206,10 @@ function loadCourses() {
     .then((courses) => {
       if (courses.length === 0) {
         if (coursesTableBody) {
+          const isAdmin = currentUser && currentUser.role === "admin";
+          const colspan = isAdmin ? "7" : "6";
           coursesTableBody.innerHTML =
-            '<tr><td colspan="7" class="text-center">No courses found. Add a new course or import courses to get started.</td></tr>';
+            `<tr><td colspan="${colspan}" class="text-center">No courses found. Add a new course or import courses to get started.</td></tr>`;
         }
         return;
       }
@@ -192,8 +226,10 @@ function loadCourses() {
     .catch((error) => {
       console.error("Load courses error:", error);
       if (coursesTableBody) {
+        const isAdmin = currentUser && currentUser.role === "admin";
+        const colspan = isAdmin ? "7" : "6";
         coursesTableBody.innerHTML =
-          '<tr><td colspan="7" class="text-center text-danger">Error loading courses. Please try again.</td></tr>';
+          `<tr><td colspan="${colspan}" class="text-center text-danger">Error loading courses. Please try again.</td></tr>`;
       }
       showAlert(
         "Failed to load courses. Please refresh the page or try again later.",
@@ -282,8 +318,10 @@ function renderCourses(courses) {
   });
 
   if (filteredCourses.length === 0) {
+    const isAdmin = currentUser && currentUser.role === "admin";
+    const colspan = isAdmin ? "7" : "6";
     coursesTableBody.innerHTML =
-      '<tr><td colspan="7" class="text-center">No courses match your filters.</td></tr>';
+      `<tr><td colspan="${colspan}" class="text-center">No courses match your filters.</td></tr>`;
     return;
   }
 
@@ -293,11 +331,13 @@ function renderCourses(courses) {
   // Add each course to the table
   filteredCourses.forEach((course) => {
     const row = document.createElement("tr");
+    const isAdmin = currentUser && currentUser.role === "admin";
 
     // Format the TPC (Theory, Practical, Credits)
     const tpc = `${course.theory}-${course.practical}-${course.credits}`;
 
-    row.innerHTML = `
+    // Build the row HTML based on user role
+    let rowHTML = `
       <td>${course.course_code}</td>
       <td>
         <strong>${course.course_name}</strong><br>
@@ -317,7 +357,11 @@ function renderCourses(courses) {
         } status-badge">
           ${course.is_active ? "Active" : "Inactive"}
         </span>
-      </td>
+      </td>`;
+
+    // Only add Actions column for admin users
+    if (isAdmin) {
+      rowHTML += `
       <td>
         <button class="btn btn-sm btn-primary action-btn edit-course-btn" data-code="${
           course.course_code
@@ -336,14 +380,19 @@ function renderCourses(courses) {
         }" data-name="${course.course_name}">
           <i class="fas fa-trash"></i>
         </button>
-      </td>
-    `;
+      </td>`;
+    }
+
+    row.innerHTML = rowHTML;
 
     coursesTableBody.appendChild(row);
   });
 
-  // Add event listeners to buttons
-  addCourseButtonListeners();
+  // Add event listeners to buttons (only for admin users)
+  const isAdmin = currentUser && currentUser.role === "admin";
+  if (isAdmin) {
+    addCourseButtonListeners();
+  }
 }
 
 // Helper function to truncate text
