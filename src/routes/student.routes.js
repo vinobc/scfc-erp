@@ -50,4 +50,11 @@ router.post(
   studentController.adminCreateStudentUsers
 );
 
+// Admin toggle student active/inactive status (admin only)
+router.put(
+  "/:enrollment_no/toggle-status",
+  isAdmin,
+  studentController.toggleStudentStatus
+);
+
 module.exports = router;
