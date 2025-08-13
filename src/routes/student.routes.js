@@ -21,6 +21,8 @@ router.use(verifyToken);
 
 // Student routes
 router.get("/", studentController.getAllStudents);
+// Admin get unique admission years (admin only) - MUST be before /:enrollment_no route
+router.get("/years", isAdmin, studentController.getUniqueYears);
 router.get("/:enrollment_no", studentController.getStudentByEnrollment);
 
 // Admin-only routes
@@ -56,5 +58,8 @@ router.put(
   isAdmin,
   studentController.toggleStudentStatus
 );
+
+// Admin bulk update status by years (admin only)
+router.post("/bulk-status", isAdmin, studentController.bulkUpdateStatusByYear);
 
 module.exports = router;

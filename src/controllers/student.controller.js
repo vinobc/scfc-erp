@@ -687,3 +687,87 @@ exports.toggleStudentStatus = async (req, res) => {
     });
   }
 };
+
+// Get unique admission years
+exports.getUniqueYears = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT DISTINCT year_admitted 
+       FROM student 
+       WHERE year_admitted IS NOT NULL 
+       ORDER BY year_admitted DESC`,
+      []
+    );
+
+    const years = result.rows.map(row => row.year_admitted);
+
+    res.status(200).json({
+      success: true,
+      years: years,
+    });
+  } catch (error) {
+    console.error("Get unique years error:", error);
+    res.status(500).json({
+      message: "Server error while fetching admission years",
+    });
+  }
+};
+
+// Bulk update student status by admission years
+exports.bulkUpdateStatusByYear = async (req, res) => {
+  try {
+    const { years, status } = req.body;
+
+    if (!years || !Array.isArray(years) || years.length === 0) {
+      return res.status(400).json({
+        message: "Years array is required and cannot be empty",
+      });
+    }
+
+    if (!status || !["active", "inactive"].includes(status)) {
+      return res.status(400).json({
+        message: "Status must be either 'active' or 'inactive'",
+      });
+    }
+
+    const isActive = status === "active";
+    let query;
+    let params;
+
+    if (years.includes("all")) {
+      // Update all students
+      query = `UPDATE "user" 
+               SET is_active = $1, updated_at = CURRENT_TIMESTAMP 
+               WHERE user_id IN (
+                 SELECT user_id FROM student WHERE user_id IS NOT NULL
+               )`;
+      params = [isActive];
+    } else {
+      // Update students for specific years
+      const yearPlaceholders = years.map((_, index) => `$${index + 2}`).join(',');
+      query = `UPDATE "user" 
+               SET is_active = $1, updated_at = CURRENT_TIMESTAMP 
+               WHERE user_id IN (
+                 SELECT user_id FROM student 
+                 WHERE user_id IS NOT NULL 
+                 AND year_admitted IN (${yearPlaceholders})
+               )`;
+      params = [isActive, ...years];
+    }
+
+    const result = await db.query(query, params);
+    
+    res.status(200).json({
+      success: true,
+      affectedCount: result.rowCount,
+      message: `Successfully ${status === "active" ? "activated" : "deactivated"} ${result.rowCount} students`,
+      years: years,
+      status: status,
+    });
+  } catch (error) {
+    console.error("Bulk update status error:", error);
+    res.status(500).json({
+      message: "Server error while updating student status",
+    });
+  }
+};
