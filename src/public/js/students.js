@@ -32,6 +32,15 @@ let confirmStudentDeleteBtn;
 let studentDeleteEnrollment;
 let studentDeleteName;
 
+// Bulk status elements
+let bulkStatusBtn;
+let bulkStatusModal;
+let selectAllYearsCheckbox;
+let yearsCheckboxContainer;
+let previewBulkUpdateBtn;
+let executeBulkUpdateBtn;
+let bulkPreviewDiv;
+
 // Initialize students functionality
 document.addEventListener("DOMContentLoaded", () => {
   console.log("students.js: DOM loaded");
@@ -46,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
   studentProgramFilter = document.getElementById("student-program-filter");
   studentSchoolFilter = document.getElementById("student-school-filter");
   studentYearFilter = document.getElementById("student-year-filter");
+  bulkStatusBtn = document.getElementById("bulk-status-btn");
 
   // Initialize form elements
   studentForm = document.getElementById("student-form");
@@ -71,6 +81,13 @@ document.addEventListener("DOMContentLoaded", () => {
     "confirm-student-delete-btn"
   );
 
+  // Initialize bulk status elements
+  selectAllYearsCheckbox = document.getElementById("select-all-years");
+  yearsCheckboxContainer = document.getElementById("years-checkbox-container");
+  previewBulkUpdateBtn = document.getElementById("preview-bulk-update-btn");
+  executeBulkUpdateBtn = document.getElementById("execute-bulk-update-btn");
+  bulkPreviewDiv = document.getElementById("bulk-preview");
+
   // Initialize Bootstrap modal objects
   const studentModalElement = document.getElementById("studentModal");
   const studentImportModalElement = document.getElementById(
@@ -78,6 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
   );
   const studentDeleteModalElement =
     document.getElementById("studentDeleteModal");
+  const bulkStatusModalElement = document.getElementById("bulkStatusModal");
 
   if (studentModalElement) {
     studentModal = new bootstrap.Modal(studentModalElement);
@@ -89,6 +107,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (studentDeleteModalElement) {
     studentDeleteModal = new bootstrap.Modal(studentDeleteModalElement);
+  }
+
+  if (bulkStatusModalElement) {
+    bulkStatusModal = new bootstrap.Modal(bulkStatusModalElement);
   }
 
   // Setup event listeners
@@ -131,6 +153,23 @@ document.addEventListener("DOMContentLoaded", () => {
       "click",
       showCreateUserAccountsModal
     );
+  }
+
+  // Add event listeners for bulk status functionality
+  if (bulkStatusBtn) {
+    bulkStatusBtn.addEventListener("click", showBulkStatusModal);
+  }
+
+  if (selectAllYearsCheckbox) {
+    selectAllYearsCheckbox.addEventListener("change", handleSelectAllYears);
+  }
+
+  if (previewBulkUpdateBtn) {
+    previewBulkUpdateBtn.addEventListener("click", previewBulkUpdate);
+  }
+
+  if (executeBulkUpdateBtn) {
+    executeBulkUpdateBtn.addEventListener("click", executeBulkUpdate);
   }
 
   if (studentSearchInput) {
@@ -1042,4 +1081,244 @@ function createStudentUserAccounts(enrollmentNumbers) {
       console.error("Create user accounts error:", error);
       showAlert(error.message, "danger");
     });
+}
+
+// Bulk Status Functions
+async function showBulkStatusModal() {
+  try {
+    // Load unique years
+    const response = await fetch("/api/students/years", {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch admission years");
+    }
+
+    const data = await response.json();
+    populateYearsCheckboxes(data.years);
+    
+    if (bulkStatusModal) {
+      bulkStatusModal.show();
+    }
+  } catch (error) {
+    console.error("Error loading years:", error);
+    showAlert("Failed to load admission years", "danger");
+  }
+}
+
+function populateYearsCheckboxes(years) {
+  if (!yearsCheckboxContainer) return;
+
+  let checkboxesHtml = '';
+  years.forEach(year => {
+    checkboxesHtml += `
+      <div class="form-check">
+        <input class="form-check-input year-checkbox" type="checkbox" value="${year}" id="year-${year}">
+        <label class="form-check-label" for="year-${year}">
+          ${year}
+        </label>
+      </div>
+    `;
+  });
+  
+  yearsCheckboxContainer.innerHTML = checkboxesHtml;
+
+  // Add event listeners to individual year checkboxes
+  const yearCheckboxes = document.querySelectorAll('.year-checkbox');
+  yearCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', updateSelectAllCheckbox);
+  });
+}
+
+function handleSelectAllYears() {
+  if (!selectAllYearsCheckbox || !yearsCheckboxContainer) return;
+
+  const yearCheckboxes = yearsCheckboxContainer.querySelectorAll('.year-checkbox');
+  const selectAll = selectAllYearsCheckbox.checked;
+
+  yearCheckboxes.forEach(checkbox => {
+    checkbox.checked = selectAll;
+  });
+
+  // Reset preview and execute button
+  if (bulkPreviewDiv) {
+    bulkPreviewDiv.classList.add('d-none');
+  }
+  if (executeBulkUpdateBtn) {
+    executeBulkUpdateBtn.disabled = true;
+  }
+}
+
+function updateSelectAllCheckbox() {
+  if (!selectAllYearsCheckbox || !yearsCheckboxContainer) return;
+
+  const yearCheckboxes = yearsCheckboxContainer.querySelectorAll('.year-checkbox');
+  const checkedBoxes = yearsCheckboxContainer.querySelectorAll('.year-checkbox:checked');
+
+  if (checkedBoxes.length === yearCheckboxes.length) {
+    selectAllYearsCheckbox.checked = true;
+    selectAllYearsCheckbox.indeterminate = false;
+  } else if (checkedBoxes.length > 0) {
+    selectAllYearsCheckbox.checked = false;
+    selectAllYearsCheckbox.indeterminate = true;
+  } else {
+    selectAllYearsCheckbox.checked = false;
+    selectAllYearsCheckbox.indeterminate = false;
+  }
+
+  // Reset preview and execute button
+  if (bulkPreviewDiv) {
+    bulkPreviewDiv.classList.add('d-none');
+  }
+  if (executeBulkUpdateBtn) {
+    executeBulkUpdateBtn.disabled = true;
+  }
+}
+
+async function previewBulkUpdate() {
+  const selectedYears = getSelectedYears();
+  const selectedStatus = getSelectedStatus();
+
+  if (selectedYears.length === 0) {
+    showAlert("Please select at least one year", "warning");
+    return;
+  }
+
+  if (!selectedStatus) {
+    showAlert("Please select a status (Active or Inactive)", "warning");
+    return;
+  }
+
+  try {
+    // Count students for preview
+    const students = await getStudentsData();
+    let affectedCount = 0;
+
+    if (selectedYears.includes("all") || selectAllYearsCheckbox.checked) {
+      affectedCount = students.length;
+    } else {
+      affectedCount = students.filter(student => 
+        selectedYears.includes(student.year_admitted.toString())
+      ).length;
+    }
+
+    // Show preview
+    if (bulkPreviewDiv) {
+      bulkPreviewDiv.innerHTML = `
+        <strong>Preview:</strong><br>
+        This will ${selectedStatus === 'active' ? 'activate' : 'deactivate'} 
+        <strong>${affectedCount}</strong> students 
+        ${selectedYears.includes("all") || selectAllYearsCheckbox.checked ? 'from all years' : `from year(s): ${selectedYears.join(', ')}`}.
+      `;
+      bulkPreviewDiv.classList.remove('d-none');
+    }
+
+    // Enable execute button
+    if (executeBulkUpdateBtn) {
+      executeBulkUpdateBtn.disabled = false;
+    }
+
+  } catch (error) {
+    console.error("Error previewing bulk update:", error);
+    showAlert("Failed to preview bulk update", "danger");
+  }
+}
+
+async function executeBulkUpdate() {
+  const selectedYears = getSelectedYears();
+  const selectedStatus = getSelectedStatus();
+
+  if (selectedYears.length === 0 || !selectedStatus) {
+    showAlert("Please complete the preview first", "warning");
+    return;
+  }
+
+  // Confirm action
+  const yearText = selectedYears.includes("all") || selectAllYearsCheckbox.checked 
+    ? "all years" 
+    : `year(s) ${selectedYears.join(', ')}`;
+  
+  const confirmed = confirm(
+    `Are you sure you want to ${selectedStatus === 'active' ? 'activate' : 'deactivate'} all students from ${yearText}?\n\nThis action cannot be undone.`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    // Prepare request
+    const requestYears = selectedYears.includes("all") || selectAllYearsCheckbox.checked 
+      ? ["all"] 
+      : selectedYears;
+
+    const response = await fetch("/api/students/bulk-status", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+      body: JSON.stringify({
+        years: requestYears,
+        status: selectedStatus,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update student status");
+    }
+
+    const data = await response.json();
+
+    // Show success message
+    showAlert(
+      `${data.message}`,
+      "success",
+      10000
+    );
+
+    // Close modal
+    if (bulkStatusModal) {
+      bulkStatusModal.hide();
+    }
+
+    // Reload students to reflect changes
+    loadStudents();
+
+  } catch (error) {
+    console.error("Error executing bulk update:", error);
+    showAlert("Failed to execute bulk update", "danger");
+  }
+}
+
+function getSelectedYears() {
+  if (!yearsCheckboxContainer) return [];
+  
+  const checkedBoxes = yearsCheckboxContainer.querySelectorAll('.year-checkbox:checked');
+  return Array.from(checkedBoxes).map(checkbox => checkbox.value);
+}
+
+function getSelectedStatus() {
+  const activeRadio = document.getElementById('status-active');
+  const inactiveRadio = document.getElementById('status-inactive');
+
+  if (activeRadio && activeRadio.checked) return 'active';
+  if (inactiveRadio && inactiveRadio.checked) return 'inactive';
+  return null;
+}
+
+async function getStudentsData() {
+  const response = await fetch("/api/students", {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch students");
+  }
+
+  const students = await response.json();
+  return students || [];
 }
