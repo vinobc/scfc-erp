@@ -75,8 +75,22 @@ router.get(
   facultyAllocationController.getAvailableYearsAndSemesters
 );
 
+// P=4 lab pair validation endpoint (Fall 2025-26)
+router.get(
+  "/validate-lab-pairs",
+  canManageFacultyAllocations,
+  facultyAllocationController.validateLabPairCombination
+);
+
+// P=4 faculty allocation endpoint (Fall 2025-26)
+router.post(
+  "/p4-allocation",
+  canManageFacultyAllocations,
+  facultyAllocationController.createFacultyAllocationP4
+);
+
 // Test route
-router.get("/test", (req, res) => {
+router.get("/test", (_, res) => {
   res.json({ message: "Test route working" });
 });
 

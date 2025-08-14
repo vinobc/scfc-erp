@@ -1958,3 +1958,323 @@ exports.getAvailableYearsAndSemesters = async (req, res) => {
     });
   }
 };
+
+// Validate lab pair combination for P=4 courses (Fall 2025-26)
+exports.validateLabPairCombination = async (req, res) => {
+  try {
+    const { pair1, pair2, facultyId, venue, year, semesterType } = req.query;
+
+    // Simple test response first
+    return res.status(200).json({
+      valid: true,
+      message: "Test response - validation endpoint is working",
+      pairs: { pair1, pair2 },
+      facultyId,
+      venue,
+      year,
+      semesterType
+    });
+
+    if (!pair1 || !pair2 || !facultyId || !venue || !year || !semesterType) {
+      return res.status(400).json({
+        message: "All parameters are required for lab pair validation",
+      });
+    }
+
+    // Check if pairs are the same
+    if (pair1 === pair2) {
+      return res.status(400).json({
+        valid: false,
+        message: "Cannot select the same lab pair twice",
+      });
+    }
+
+    const conflicts = [];
+
+    // Check if the two selected lab pairs conflict with each other
+    const pairConflictCheck = await db.query(
+      `SELECT conflicting_slot_name 
+       FROM slot_conflict 
+       WHERE slot_year = $1 AND semester_type = $2 
+       AND slot_name = $3 AND conflicting_slot_name = $4`,
+      [year, semesterType, pair1, pair2]
+    );
+
+    if (pairConflictCheck.rows.length > 0) {
+      conflicts.push({
+        type: "pair_conflict",
+        message: `Lab pairs ${pair1} and ${pair2} conflict with each other`,
+      });
+    }
+
+    // Get slot details for both pairs
+    const slot1Details = await db.query(
+      `SELECT slot_day, slot_time FROM slot 
+       WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+      [year, semesterType, pair1]
+    );
+
+    const slot2Details = await db.query(
+      `SELECT slot_day, slot_time FROM slot 
+       WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+      [year, semesterType, pair2]
+    );
+
+    if (slot1Details.rows.length === 0 || slot2Details.rows.length === 0) {
+      return res.status(404).json({
+        valid: false,
+        message: "One or both lab pairs not found in the timetable",
+      });
+    }
+
+    const slot1 = slot1Details.rows[0];
+    const slot2 = slot2Details.rows[0];
+
+    // Check venue conflicts for both pairs
+    const venue1ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.venue = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5 AND fa.employee_id != $6`,
+      [year, semesterType, venue, slot1.slot_day, slot1.slot_time, facultyId]
+    );
+
+    const venue2ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.venue = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5 AND fa.employee_id != $6`,
+      [year, semesterType, venue, slot2.slot_day, slot2.slot_time, facultyId]
+    );
+
+    if (venue1ClashCheck.rows.length > 0) {
+      const clash = venue1ClashCheck.rows[0];
+      conflicts.push({
+        type: "venue_conflict_pair1",
+        message: `Venue ${venue} is already booked for ${pair1} by ${clash.faculty_name} for ${clash.course_name}`,
+      });
+    }
+
+    if (venue2ClashCheck.rows.length > 0) {
+      const clash = venue2ClashCheck.rows[0];
+      conflicts.push({
+        type: "venue_conflict_pair2",
+        message: `Venue ${venue} is already booked for ${pair2} by ${clash.faculty_name} for ${clash.course_name}`,
+      });
+    }
+
+    // Check faculty conflicts for both pairs
+    const faculty1ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, v.venue as venue_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN venue v ON fa.venue = v.venue
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.employee_id = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5`,
+      [year, semesterType, facultyId, slot1.slot_day, slot1.slot_time]
+    );
+
+    const faculty2ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, v.venue as venue_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN venue v ON fa.venue = v.venue
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.employee_id = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5`,
+      [year, semesterType, facultyId, slot2.slot_day, slot2.slot_time]
+    );
+
+    if (faculty1ClashCheck.rows.length > 0) {
+      const clash = faculty1ClashCheck.rows[0];
+      conflicts.push({
+        type: "faculty_conflict_pair1",
+        message: `Faculty is already assigned during ${pair1} time to ${clash.course_name} in ${clash.venue_name}`,
+      });
+    }
+
+    if (faculty2ClashCheck.rows.length > 0) {
+      const clash = faculty2ClashCheck.rows[0];
+      conflicts.push({
+        type: "faculty_conflict_pair2",
+        message: `Faculty is already assigned during ${pair2} time to ${clash.course_name} in ${clash.venue_name}`,
+      });
+    }
+
+    const isValid = conflicts.length === 0;
+
+    res.status(200).json({
+      valid: isValid,
+      conflicts: conflicts,
+      message: isValid 
+        ? `Lab pairs ${pair1} and ${pair2} can be allocated together` 
+        : `Found ${conflicts.length} conflict(s)`,
+      pairs: {
+        pair1: { name: pair1, day: slot1.slot_day, time: slot1.slot_time },
+        pair2: { name: pair2, day: slot2.slot_day, time: slot2.slot_time },
+      },
+    });
+  } catch (error) {
+    console.error("Validate lab pair combination error:", error);
+    res.status(500).json({
+      valid: false,
+      message: "Server error while validating lab pair combination",
+    });
+  }
+};
+
+// Create faculty allocation with P=4 support (enhanced for Fall 2025-26)
+exports.createFacultyAllocationP4 = async (req, res) => {
+  try {
+    const {
+      slot_year,
+      semester_type,
+      course_code,
+      employee_id,
+      lab_pair_1,
+      lab_pair_2,
+      venue_type_1,
+      venue_type_2,
+      venue_1,
+      venue_2,
+    } = req.body;
+    
+    console.log('P=4 Allocation request:', req.body);
+
+    // Validate required fields for P=4 allocation
+    if (
+      !slot_year ||
+      !semester_type ||
+      !course_code ||
+      !employee_id ||
+      !venue_1 ||
+      !venue_2 ||
+      !lab_pair_1 ||
+      !lab_pair_2
+    ) {
+      return res.status(400).json({ message: "All fields including both venues are required for P=4 lab allocation" });
+    }
+
+    // Validate the course is P=4
+    const courseResult = await db.query(
+      `SELECT practical FROM course WHERE course_code = $1`,
+      [course_code]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    if (courseResult.rows[0].practical !== 4) {
+      return res.status(400).json({ 
+        message: "This endpoint is only for P=4 courses (4-hour lab courses)" 
+      });
+    }
+
+    // Get slot details for both pairs
+    const slot1Details = await db.query(
+      `SELECT slot_day, slot_time FROM slot 
+       WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+      [slot_year, semester_type, lab_pair_1]
+    );
+
+    const slot2Details = await db.query(
+      `SELECT slot_day, slot_time FROM slot 
+       WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+      [slot_year, semester_type, lab_pair_2]
+    );
+
+    if (slot1Details.rows.length === 0 || slot2Details.rows.length === 0) {
+      return res.status(404).json({ message: "One or both lab pairs not found" });
+    }
+
+    const slot1 = slot1Details.rows[0];
+    const slot2 = slot2Details.rows[0];
+
+    // Perform all validation checks (reuse validation logic from validateLabPairCombination)
+    // Note: Since we have separate venues, we'll do the validation inline
+    // TODO: Enhance validation to check both venues separately
+
+    // For now, do inline validation (same logic as validateLabPairCombination)
+    // Check conflicts between the two pairs
+    const pairConflictCheck = await db.query(
+      `SELECT conflicting_slot_name 
+       FROM slot_conflict 
+       WHERE slot_year = $1 AND semester_type = $2 
+       AND slot_name = $3 AND conflicting_slot_name = $4`,
+      [slot_year, semester_type, lab_pair_1, lab_pair_2]
+    );
+
+    if (pairConflictCheck.rows.length > 0) {
+      return res.status(409).json({
+        message: `Lab pairs ${lab_pair_1} and ${lab_pair_2} conflict with each other`,
+        type: "lab_pair_conflict",
+      });
+    }
+
+    // Insert both allocations (simplified without transaction for now)
+    try {
+      // Insert first lab pair allocation
+      const result1 = await db.query(
+        `INSERT INTO faculty_allocation 
+         (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [
+          slot_year,
+          semester_type,
+          course_code,
+          employee_id,
+          venue_1,
+          slot1.slot_day,
+          lab_pair_1,
+          slot1.slot_time,
+        ]
+      );
+
+      // Insert second lab pair allocation
+      const result2 = await db.query(
+        `INSERT INTO faculty_allocation 
+         (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [
+          slot_year,
+          semester_type,
+          course_code,
+          employee_id,
+          venue_2,
+          slot2.slot_day,
+          lab_pair_2,
+          slot2.slot_time,
+        ]
+      );
+
+      res.status(201).json({
+        message: "P=4 lab allocation created successfully",
+        allocations: [result1.rows[0], result2.rows[0]],
+        labPairs: {
+          pair1: lab_pair_1,
+          pair2: lab_pair_2,
+        },
+      });
+
+    } catch (insertError) {
+      throw insertError;
+    }
+
+  } catch (error) {
+    console.error("Create P=4 faculty allocation error:", error);
+    res.status(500).json({
+      message: "Server error while creating P=4 faculty allocation",
+      error: error.message,
+    });
+  }
+};

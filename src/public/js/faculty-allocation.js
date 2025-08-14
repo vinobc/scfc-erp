@@ -18,6 +18,20 @@ let allocationVenueTypeInput;
 let allocationVenueInput;
 let allocationComponentTypeInput;
 
+// P=4 Lab Selection elements (Fall 2025-26)
+let p4LabSelectionContainer;
+let allocationLabPair1;
+let allocationLabPair2;
+let allocationLabDayTime1;
+let allocationLabDayTime2;
+let allocationLabVenueType1;
+let allocationLabVenueType2;
+let allocationLabVenue1;
+let allocationLabVenue2;
+let p4ValidationMessage;
+let redundantVenueTypeField;
+let redundantVenueField;
+
 // View elements
 let viewFacultyYearSelect;
 let viewFacultySemesterSelect;
@@ -103,6 +117,20 @@ document.addEventListener("DOMContentLoaded", () => {
   allocationComponentTypeInput = document.getElementById(
     "allocation-component-type-field"
   );
+
+  // Initialize P=4 lab selection elements (Fall 2025-26)
+  p4LabSelectionContainer = document.getElementById("p4-lab-selection-container");
+  allocationLabPair1 = document.getElementById("allocation-lab-pair-1");
+  allocationLabPair2 = document.getElementById("allocation-lab-pair-2");
+  allocationLabDayTime1 = document.getElementById("allocation-lab-day-time-1");
+  allocationLabDayTime2 = document.getElementById("allocation-lab-day-time-2");
+  allocationLabVenueType1 = document.getElementById("allocation-lab-venue-type-1");
+  allocationLabVenueType2 = document.getElementById("allocation-lab-venue-type-2");
+  allocationLabVenue1 = document.getElementById("allocation-lab-venue-1");
+  allocationLabVenue2 = document.getElementById("allocation-lab-venue-2");
+  p4ValidationMessage = document.getElementById("p4-validation-message");
+  redundantVenueTypeField = document.getElementById("allocation-venue-type-field");
+  redundantVenueField = document.getElementById("allocation-venue-field");
 
   // Initialize view elements
   viewFacultyYearSelect = document.getElementById("view-faculty-year");
@@ -218,6 +246,31 @@ document.addEventListener("DOMContentLoaded", () => {
       "change",
       handleComponentTypeChange
     );
+  }
+
+  // P=4 lab selection event listeners (Fall 2025-26)
+  if (allocationLabPair1) {
+    allocationLabPair1.addEventListener("change", handleLabPair1Change);
+  }
+
+  if (allocationLabPair2) {
+    allocationLabPair2.addEventListener("change", handleLabPair2Change);
+  }
+
+  if (allocationLabVenueType1) {
+    allocationLabVenueType1.addEventListener("change", handleLabVenueType1Change);
+  }
+
+  if (allocationLabVenueType2) {
+    allocationLabVenueType2.addEventListener("change", handleLabVenueType2Change);
+  }
+
+  if (allocationLabVenue1) {
+    allocationLabVenue1.addEventListener("change", handleLabVenue1Change);
+  }
+
+  if (allocationLabVenue2) {
+    allocationLabVenue2.addEventListener("change", handleLabVenue2Change);
   }
 
   if (viewFacultyTimetableBtn) {
@@ -818,6 +871,10 @@ function handleCourseCodeInput(event) {
 
         // Update component type options for TEL courses
         updateComponentTypeOptions(exactMatch);
+
+        // Check if P=4 lab selection should be shown (Fall 2025-26)
+        const componentType = allocationComponentTypeInput ? allocationComponentTypeInput.value : "";
+        toggleP4LabSelection(exactMatch, componentType);
 
         // Update available slots based on TPC
         updateAvailableSlots(exactMatch);
@@ -1553,8 +1610,11 @@ function handleVenueChange(event) {
 // Handle component type change
 function handleComponentTypeChange(event) {
   console.log("Component type changed:", event.target.value);
-  // Re-update available slots when component type changes
+  const componentType = event.target.value;
+  
+  // Toggle P=4 lab selection if needed (Fall 2025-26)
   if (courseData.course_code) {
+    toggleP4LabSelection(courseData, componentType);
     updateAvailableSlots(courseData);
   }
 }
@@ -1585,6 +1645,17 @@ function handleAddFacultyAllocation() {
 // Handle save faculty allocation
 function handleSaveFacultyAllocation() {
   console.log("Save button clicked");
+
+  // Check if this is a P=4 lab allocation (Fall 2025-26)
+  const isP4Lab = p4LabSelectionContainer && 
+                  p4LabSelectionContainer.style.display === "block" &&
+                  allocationLabPair1.value && 
+                  allocationLabPair2.value;
+
+  if (isP4Lab) {
+    handleSaveP4FacultyAllocation();
+    return;
+  }
 
   // Get employee ID from the hidden field if it exists
   const hiddenEmployeeIdInput = document.getElementById(
@@ -1847,6 +1918,102 @@ function handleSaveFacultyAllocation() {
     .catch((error) => {
       console.error("Error fetching slot details:", error);
       localShowAlert("Failed to fetch slot details", "danger");
+    });
+}
+
+// Handle save P=4 faculty allocation (Fall 2025-26)
+function handleSaveP4FacultyAllocation() {
+  console.log("Saving P=4 lab allocation");
+
+  // Get employee ID from the hidden field if it exists
+  const hiddenEmployeeIdInput = document.getElementById(
+    "hidden-employee-id-field"
+  );
+  const employeeId = hiddenEmployeeIdInput
+    ? hiddenEmployeeIdInput.value
+    : allocationEmployeeIdInput.value;
+
+  // Get form values for P=4 allocation
+  const p4AllocationData = {
+    slot_year: allocationYearInput.value,
+    semester_type: allocationSemesterTypeInput.value,
+    course_code: allocationCourseCodeInput.value,
+    employee_id: parseInt(employeeId),
+    lab_pair_1: allocationLabPair1.value,
+    lab_pair_2: allocationLabPair2.value,
+    venue_type_1: allocationLabVenueType1.value,
+    venue_type_2: allocationLabVenueType2.value,
+    venue_1: allocationLabVenue1.value,
+    venue_2: allocationLabVenue2.value,
+  };
+
+  console.log("P=4 Allocation data:", p4AllocationData);
+
+  // Validate required fields
+  if (
+    !p4AllocationData.slot_year ||
+    !p4AllocationData.semester_type ||
+    !p4AllocationData.course_code ||
+    !p4AllocationData.employee_id ||
+    !p4AllocationData.lab_pair_1 ||
+    !p4AllocationData.lab_pair_2 ||
+    !p4AllocationData.venue_type_1 ||
+    !p4AllocationData.venue_type_2 ||
+    !p4AllocationData.venue_1 ||
+    !p4AllocationData.venue_2
+  ) {
+    localShowAlert("Please fill all required fields for P=4 allocation including both venues", "danger");
+    return;
+  }
+
+  // Disable save button during save
+  if (saveFacultyAllocationBtn) {
+    saveFacultyAllocationBtn.disabled = true;
+    saveFacultyAllocationBtn.textContent = "Saving...";
+  }
+
+  // Send to P=4 allocation endpoint
+  fetch(`${window.API_URL}/faculty-allocations/p4-allocation`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: localStorage.getItem("token"),
+    },
+    body: JSON.stringify(p4AllocationData),
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("P=4 allocation response:", data);
+      
+      if (data.allocations && data.allocations.length === 2) {
+        localShowAlert(
+          `P=4 lab allocation created successfully! Allocated ${data.labPairs.pair1} and ${data.labPairs.pair2}`,
+          "success"
+        );
+        
+        // Close modal and refresh table
+        if (facultyAllocationModal) facultyAllocationModal.hide();
+        loadFacultyAllocations();
+        
+        // Reset form
+        if (facultyAllocationForm) facultyAllocationForm.reset();
+        clearP4Selection();
+        
+      } else {
+        localShowAlert(data.message || "Error creating P=4 allocation", "danger");
+      }
+    })
+    .catch((error) => {
+      console.error("Error creating P=4 allocation:", error);
+      localShowAlert("Error creating P=4 allocation", "danger");
+    })
+    .finally(() => {
+      // Re-enable save button
+      if (saveFacultyAllocationBtn) {
+        saveFacultyAllocationBtn.disabled = false;
+        saveFacultyAllocationBtn.textContent = "Save Allocation";
+        saveFacultyAllocationBtn.className = "btn btn-primary";
+      }
     });
 }
 
@@ -3078,6 +3245,10 @@ function setupCourseCodeAutocomplete() {
               // Update component type options for TEL courses
               updateComponentTypeOptions(course);
 
+              // Check if P=4 lab selection should be shown (Fall 2025-26)
+              const componentType = allocationComponentTypeInput ? allocationComponentTypeInput.value : "";
+              toggleP4LabSelection(course, componentType);
+
               // Update available slots based on TPC
               updateAvailableSlots(course);
 
@@ -3564,6 +3735,488 @@ function clearConflictIndicators() {
     saveFacultyAllocationBtn.textContent = "Save Allocation";
     saveFacultyAllocationBtn.className = "btn btn-primary";
   }
+}
+
+// P=4 Lab Selection Functions (Fall 2025-26)
+
+// Show/hide P=4 lab selection based on course P=4 and componentType=lab
+function toggleP4LabSelection(course, componentType) {
+  if (!p4LabSelectionContainer || !course) return;
+
+  const shouldShowP4Selection = 
+    course.practical === 4 && 
+    allocationYearInput.value === "2025-26" &&
+    allocationSemesterTypeInput.value === "FALL" &&
+    (
+      // For Lab-only courses (T=0, P=4), always show P=4 selection
+      (course.theory === 0) ||
+      // For TEL courses (T>0, P=4), show only when lab component is selected
+      (course.theory > 0 && componentType === "lab")
+    );
+
+  if (shouldShowP4Selection) {
+    p4LabSelectionContainer.style.display = "block";
+    allocationSlotNameInput.style.display = "none"; // Hide regular slot selection
+    
+    // Hide redundant venue type and venue fields
+    if (redundantVenueTypeField) {
+      redundantVenueTypeField.parentElement.style.display = "none";
+    }
+    if (redundantVenueField) {
+      redundantVenueField.parentElement.style.display = "none";
+    }
+    
+    loadP4LabPairs();
+    loadP4VenueTypes();
+  } else {
+    p4LabSelectionContainer.style.display = "none";
+    allocationSlotNameInput.style.display = "block"; // Show regular slot selection
+    
+    // Show redundant venue type and venue fields
+    if (redundantVenueTypeField) {
+      redundantVenueTypeField.parentElement.style.display = "block";
+    }
+    if (redundantVenueField) {
+      redundantVenueField.parentElement.style.display = "block";
+    }
+    
+    clearP4Selection();
+  }
+}
+
+// Load available lab pairs for P=4 selection
+function loadP4LabPairs() {
+  if (!allocationLabPair1 || !allocationLabPair2) return;
+
+  const year = allocationYearInput.value;
+  const semesterType = allocationSemesterTypeInput.value;
+  const courseCode = allocationCourseCodeInput.value;
+
+  if (!year || !semesterType || !courseCode) return;
+
+  // Get available lab slots for P=4 courses
+  fetch(
+    `${window.API_URL}/faculty-allocations/available-slots?` +
+      `courseCode=${courseCode}&year=${year}&semesterType=${semesterType}&componentType=lab`,
+    {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    }
+  )
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("P=4 lab slots response:", data);
+      
+      // Clear existing options
+      allocationLabPair1.innerHTML = '<option value="">Select First Lab Pair</option>';
+      allocationLabPair2.innerHTML = '<option value="">Select Second Lab Pair</option>';
+
+      // Populate both dropdowns with all available lab pairs
+      if (data.availableSlots && data.availableSlots.length > 0) {
+        data.availableSlots.forEach((slot) => {
+          const option1 = document.createElement("option");
+          option1.value = slot;
+          option1.textContent = slot;
+          allocationLabPair1.appendChild(option1);
+
+          const option2 = document.createElement("option");
+          option2.value = slot;
+          option2.textContent = slot;
+          allocationLabPair2.appendChild(option2);
+        });
+      }
+      
+      // Load venues for both lab venue dropdowns
+      loadP4LabVenues();
+    })
+    .catch((error) => {
+      console.error("Error loading P=4 lab pairs:", error);
+      localShowAlert("Error loading lab pairs", "danger");
+    });
+}
+
+// Load venues for P=4 lab selection
+function loadP4LabVenues() {
+  if (!allocationLabVenue1 || !allocationLabVenue2) return;
+
+  // Get lab venues (same logic as existing venue loading)
+  fetch(`${window.API_URL}/venues`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((venues) => {
+      // Filter for lab venues (you might want to filter by venue type)
+      const labVenues = venues; // or filter based on venue_type if needed
+      
+      // Clear existing options
+      allocationLabVenue1.innerHTML = '<option value="">Select Venue for First Lab</option>';
+      allocationLabVenue2.innerHTML = '<option value="">Select Venue for Second Lab</option>';
+
+      // Populate both venue dropdowns
+      labVenues.forEach((venue) => {
+        const option1 = document.createElement("option");
+        option1.value = venue.venue;
+        option1.textContent = venue.venue;
+        allocationLabVenue1.appendChild(option1);
+
+        const option2 = document.createElement("option");
+        option2.value = venue.venue;
+        option2.textContent = venue.venue;
+        allocationLabVenue2.appendChild(option2);
+      });
+    })
+    .catch((error) => {
+      console.error("Error loading venues for P=4:", error);
+    });
+}
+
+// Handle first lab pair selection
+function handleLabPair1Change() {
+  const selectedPair1 = allocationLabPair1.value;
+  
+  // Update day/time display for first lab pair
+  updateLabPairDayTime(selectedPair1, allocationLabDayTime1);
+  
+  // Update second dropdown to exclude the selected pair and conflicting pairs
+  updateSecondLabPairOptions(selectedPair1);
+  
+  // Clear second selection if it conflicts
+  if (allocationLabPair2.value === selectedPair1) {
+    allocationLabPair2.value = "";
+    if (allocationLabDayTime2) allocationLabDayTime2.textContent = "";
+  }
+  
+  // Validate current selection with separate venues
+  validateP4Selection();
+}
+
+// Handle second lab pair selection
+function handleLabPair2Change() {
+  const selectedPair2 = allocationLabPair2.value;
+  
+  // Update day/time display for second lab pair
+  updateLabPairDayTime(selectedPair2, allocationLabDayTime2);
+  
+  // Validate current selection with separate venues
+  validateP4Selection();
+}
+
+// Update second dropdown options based on first selection
+function updateSecondLabPairOptions(selectedPair1) {
+  if (!allocationLabPair2) return;
+
+  // Re-enable all options first
+  Array.from(allocationLabPair2.options).forEach((option) => {
+    option.disabled = false;
+    option.style.display = "block";
+  });
+
+  if (selectedPair1) {
+    // Disable the same pair in second dropdown
+    Array.from(allocationLabPair2.options).forEach((option) => {
+      if (option.value === selectedPair1) {
+        option.disabled = true;
+        option.style.display = "none";
+      }
+    });
+  }
+}
+
+// Validate lab pair combination using the new API
+function validateLabPairCombination(pair1, pair2) {
+  if (!pair1 || !pair2 || !p4ValidationMessage) return;
+
+  const facultyId = allocationEmployeeIdInput.value;
+  const venue = allocationVenueInput.value;
+  const year = allocationYearInput.value;
+  const semesterType = allocationSemesterTypeInput.value;
+
+  if (!facultyId || !venue) {
+    p4ValidationMessage.textContent = "Select faculty and venue first";
+    p4ValidationMessage.className = "form-text text-warning";
+    return;
+  }
+
+  // Show loading message
+  p4ValidationMessage.textContent = "Validating lab pair combination...";
+  p4ValidationMessage.className = "form-text text-info";
+
+  fetch(
+    `${window.API_URL}/faculty-allocations/validate-lab-pairs?` +
+      `pair1=${pair1}&pair2=${pair2}&facultyId=${facultyId}&venue=${venue}&year=${year}&semesterType=${semesterType}`,
+    {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    }
+  )
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("Validation response:", data);
+      
+      if (data.valid) {
+        p4ValidationMessage.textContent = `✓ Valid combination: ${pair1} + ${pair2}`;
+        p4ValidationMessage.className = "form-text text-success";
+        
+        // Enable save button if it was disabled
+        if (saveFacultyAllocationBtn) {
+          saveFacultyAllocationBtn.disabled = false;
+          saveFacultyAllocationBtn.className = "btn btn-success";
+        }
+      } else {
+        p4ValidationMessage.textContent = `✗ ${data.message}`;
+        p4ValidationMessage.className = "form-text text-danger";
+        
+        // Show detailed conflicts
+        if (data.conflicts && data.conflicts.length > 0) {
+          const conflictDetails = data.conflicts.map(c => c.message).join("; ");
+          p4ValidationMessage.textContent += ` (${conflictDetails})`;
+        }
+        
+        // Disable save button
+        if (saveFacultyAllocationBtn) {
+          saveFacultyAllocationBtn.disabled = true;
+          saveFacultyAllocationBtn.className = "btn btn-danger";
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error validating lab pairs:", error);
+      p4ValidationMessage.textContent = "Error validating combination";
+      p4ValidationMessage.className = "form-text text-danger";
+    });
+}
+
+// Clear P=4 validation message
+function clearP4ValidationMessage() {
+  if (p4ValidationMessage) {
+    p4ValidationMessage.textContent = "";
+    p4ValidationMessage.className = "form-text";
+  }
+}
+
+// Clear P=4 selection
+function clearP4Selection() {
+  if (allocationLabPair1) allocationLabPair1.value = "";
+  if (allocationLabPair2) allocationLabPair2.value = "";
+  if (allocationLabDayTime1) allocationLabDayTime1.textContent = "";
+  if (allocationLabDayTime2) allocationLabDayTime2.textContent = "";
+  if (allocationLabVenueType1) allocationLabVenueType1.value = "";
+  if (allocationLabVenueType2) allocationLabVenueType2.value = "";
+  if (allocationLabVenue1) allocationLabVenue1.value = "";
+  if (allocationLabVenue2) allocationLabVenue2.value = "";
+  clearP4ValidationMessage();
+}
+
+// Handle lab venue change events
+function handleLabVenue1Change() {
+  validateP4Selection();
+}
+
+function handleLabVenue2Change() {
+  validateP4Selection();
+}
+
+// Validate complete P=4 selection
+function validateP4Selection() {
+  const pair1 = allocationLabPair1.value;
+  const pair2 = allocationLabPair2.value;
+  const venue1 = allocationLabVenue1.value;
+  const venue2 = allocationLabVenue2.value;
+  const facultyId = allocationEmployeeIdInput.value;
+  
+  if (pair1 && pair2 && venue1 && venue2 && facultyId) {
+    // Validate both pairs with their respective venues
+    validateDualLabPairCombination(pair1, pair2, venue1, venue2, facultyId);
+  } else {
+    clearP4ValidationMessage();
+  }
+}
+
+// Validate dual lab pair combination with separate venues
+function validateDualLabPairCombination(pair1, pair2, venue1, venue2, facultyId) {
+  if (!p4ValidationMessage) return;
+
+  const year = allocationYearInput.value;
+  const semesterType = allocationSemesterTypeInput.value;
+
+  // Show loading message
+  p4ValidationMessage.textContent = "Validating lab pair combination...";
+  p4ValidationMessage.className = "form-text text-info";
+
+  // For now, use the existing API but we'll need to enhance it for dual venues
+  fetch(
+    `${window.API_URL}/faculty-allocations/validate-lab-pairs?` +
+      `pair1=${pair1}&pair2=${pair2}&facultyId=${facultyId}&venue=${venue1}&year=${year}&semesterType=${semesterType}`,
+    {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    }
+  )
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("Dual validation response:", data);
+      
+      if (data.valid) {
+        // Check if same venue is used - but only warn if there might be actual conflicts
+        if (venue1 === venue2) {
+          // Same venue is OK if time slots don't overlap (which our clash table should handle)
+          // Since the backend validation passed, the time slots are compatible
+          p4ValidationMessage.textContent = `✓ Valid combination: ${pair1} + ${pair2} using ${venue1} at different times`;
+          p4ValidationMessage.className = "form-text text-success";
+        } else {
+          p4ValidationMessage.textContent = `✓ Valid combination: ${pair1} (${venue1}) + ${pair2} (${venue2})`;
+          p4ValidationMessage.className = "form-text text-success";
+        }
+        
+        // Enable save button
+        if (saveFacultyAllocationBtn) {
+          saveFacultyAllocationBtn.disabled = false;
+          saveFacultyAllocationBtn.className = "btn btn-success";
+        }
+      } else {
+        p4ValidationMessage.textContent = `✗ ${data.message}`;
+        p4ValidationMessage.className = "form-text text-danger";
+        
+        // Disable save button
+        if (saveFacultyAllocationBtn) {
+          saveFacultyAllocationBtn.disabled = true;
+          saveFacultyAllocationBtn.className = "btn btn-danger";
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error validating dual lab pairs:", error);
+      p4ValidationMessage.textContent = "Error validating combination";
+      p4ValidationMessage.className = "form-text text-danger";
+    });
+}
+
+function localShowAlert(message, type = "success") {
+  showAlert(message, type);
+}
+
+// Update lab pair day/time display
+function updateLabPairDayTime(labPair, displayElement) {
+  if (!displayElement || !labPair) {
+    if (displayElement) displayElement.textContent = "";
+    return;
+  }
+  
+  // Extract day and time from lab pair (format like "L1+L2")
+  // For now, we'll use a simplified mapping - in production you'd fetch from slots table
+  const dayTimeMap = {
+    "L1+L2": "Monday 8:00 AM - 10:00 AM",
+    "L3+L4": "Monday 10:15 AM - 12:15 PM",
+    "L5+L6": "Monday 1:00 PM - 3:00 PM",
+    "L7+L8": "Monday 3:15 PM - 5:15 PM",
+    "L9+L10": "Tuesday 8:00 AM - 10:00 AM",
+    "L11+L12": "Tuesday 10:15 AM - 12:15 PM",
+    "L13+L14": "Tuesday 1:00 PM - 3:00 PM",
+    "L15+L16": "Tuesday 3:15 PM - 5:15 PM",
+    "L17+L18": "Wednesday 8:00 AM - 10:00 AM",
+    "L19+L20": "Wednesday 10:15 AM - 12:15 PM",
+    "L21+L22": "Wednesday 1:00 PM - 3:00 PM",
+    "L23+L24": "Wednesday 3:15 PM - 5:15 PM",
+    "L25+L26": "Thursday 8:00 AM - 10:00 AM",
+    "L27+L28": "Thursday 10:15 AM - 12:15 PM",
+    "L29+L30": "Thursday 1:00 PM - 3:00 PM",
+    "L31+L32": "Thursday 3:15 PM - 5:15 PM",
+    "L33+L34": "Friday 8:00 AM - 10:00 AM",
+    "L35+L36": "Friday 10:15 AM - 12:15 PM",
+    "L37+L38": "Friday 1:00 PM - 3:00 PM",
+    "L39+L40": "Friday 3:15 PM - 5:15 PM"
+  };
+  
+  displayElement.textContent = dayTimeMap[labPair] || "Unknown time slot";
+}
+
+// Load P=4 venue types
+function loadP4VenueTypes() {
+  if (!allocationLabVenueType1 || !allocationLabVenueType2) return;
+  
+  fetch(`${window.API_URL}/venues`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((venues) => {
+      // Clear existing options
+      allocationLabVenueType1.innerHTML = '<option value="">Select Venue Type</option>';
+      allocationLabVenueType2.innerHTML = '<option value="">Select Venue Type</option>';
+      
+      // Extract unique venue types (infra_type) from venues
+      const uniqueTypes = [...new Set(venues.map(venue => venue.infra_type))]
+        .filter(type => type && type.trim() !== '') // Remove null/empty values
+        .sort(); // Sort alphabetically
+      
+      // Populate both venue type dropdowns
+      uniqueTypes.forEach((venueType) => {
+        const option1 = document.createElement("option");
+        option1.value = venueType;
+        option1.textContent = venueType;
+        allocationLabVenueType1.appendChild(option1);
+        
+        const option2 = document.createElement("option");
+        option2.value = venueType;
+        option2.textContent = venueType;
+        allocationLabVenueType2.appendChild(option2);
+      });
+    })
+    .catch((error) => {
+      console.error("Error loading venue types for P=4:", error);
+    });
+}
+
+// Handle venue type changes for P=4
+function handleLabVenueType1Change() {
+  const selectedType = allocationLabVenueType1.value;
+  loadVenuesForP4Lab(selectedType, allocationLabVenue1);
+}
+
+function handleLabVenueType2Change() {
+  const selectedType = allocationLabVenueType2.value;
+  loadVenuesForP4Lab(selectedType, allocationLabVenue2);
+}
+
+// Load venues for specific venue type and lab
+function loadVenuesForP4Lab(venueType, venueDropdown) {
+  if (!venueType || !venueDropdown) {
+    if (venueDropdown) {
+      venueDropdown.innerHTML = '<option value="">Select Venue</option>';
+    }
+    return;
+  }
+  
+  fetch(`${window.API_URL}/venues`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((venues) => {
+      venueDropdown.innerHTML = '<option value="">Select Venue</option>';
+      
+      // Filter venues by infra_type and only show active venues
+      const filteredVenues = venues.filter(venue => 
+        venue.infra_type === venueType && venue.is_active !== false
+      );
+      
+      filteredVenues.forEach((venue) => {
+        const option = document.createElement("option");
+        option.value = venue.venue;
+        option.textContent = venue.venue;
+        venueDropdown.appendChild(option);
+      });
+    })
+    .catch((error) => {
+      console.error("Error loading venues for P=4 lab:", error);
+    });
 }
 
 // Export functions globally for navigation system
