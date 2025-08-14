@@ -1557,6 +1557,14 @@ async function getBaseAvailableSlots(
   return { availableSlots, slotLinks };
 }
 
+// Helper to parse compound slots for P=4 courses
+function parseCompoundSlots(slotName) {
+  if (!slotName || typeof slotName !== 'string') return [slotName];
+  // "L1+L2, L3+L4" → ["L1+L2", "L3+L4"]
+  return slotName.includes(',') ? 
+    slotName.split(',').map(s => s.trim()) : [slotName];
+}
+
 // Helper function to get faculty allocations
 async function getFacultyAllocations(facultyId, year, semesterType) {
   const result = await db.query(
@@ -1564,6 +1572,7 @@ async function getFacultyAllocations(facultyId, year, semesterType) {
      WHERE employee_id = $1 AND slot_year = $2 AND semester_type = $3`,
     [facultyId, year, semesterType]
   );
+  
   return result.rows;
 }
 
@@ -1580,14 +1589,14 @@ async function filterSlotsForFaculty(
   const available = [];
   const disabled = [];
 
-  // Create maps for quick lookup
+  // Create maps for quick lookup - Enhanced for P=4 lab pair conflict detection
   const allocatedSlotMap = new Set();
   const allocatedTimeMap = new Map(); // day -> time -> slotName
 
   facultyAllocations.forEach((allocation) => {
+    // Store individual slot names (like L1+L2, L21+L22) for P=4 conflict checking
     allocatedSlotMap.add(allocation.slot_name);
 
-    const key = `${allocation.slot_day}-${allocation.slot_time}`;
     if (!allocatedTimeMap.has(allocation.slot_day)) {
       allocatedTimeMap.set(allocation.slot_day, new Map());
     }
@@ -1647,7 +1656,21 @@ async function checkSlotAvailability(
   allSlots,
   course
 ) {
-  // If slot is directly allocated
+  // For P=4 compound slots (like "L1+L2, L21+L22"), check if ANY component is already allocated
+  if (slotName.includes(',') && course.practical === 4) {
+    const slotComponents = parseCompoundSlots(slotName);
+    for (const component of slotComponents) {
+      if (allocatedSlotMap.has(component)) {
+        return {
+          available: false,
+          reason: "P=4 lab pair conflict",
+          details: `Lab pair ${component} is already allocated to this faculty`,
+        };
+      }
+    }
+  }
+
+  // If individual slot is directly allocated (for regular P=2 labs or individual checks)
   if (allocatedSlotMap.has(slotName)) {
     return {
       available: false,
@@ -2198,12 +2221,9 @@ exports.createFacultyAllocationP4 = async (req, res) => {
     const slot1 = slot1Details.rows[0];
     const slot2 = slot2Details.rows[0];
 
-    // Perform all validation checks (reuse validation logic from validateLabPairCombination)
-    // Note: Since we have separate venues, we'll do the validation inline
-    // TODO: Enhance validation to check both venues separately
-
-    // For now, do inline validation (same logic as validateLabPairCombination)
-    // Check conflicts between the two pairs
+    // Enhanced validation for P=4 courses with separate venues
+    
+    // 1. Check conflicts between the two pairs
     const pairConflictCheck = await db.query(
       `SELECT conflicting_slot_name 
        FROM slot_conflict 
@@ -2216,6 +2236,90 @@ exports.createFacultyAllocationP4 = async (req, res) => {
       return res.status(409).json({
         message: `Lab pairs ${lab_pair_1} and ${lab_pair_2} conflict with each other`,
         type: "lab_pair_conflict",
+      });
+    }
+
+    // 2. Check venue clashes for first lab pair
+    const venue1ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.venue = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5 AND fa.employee_id != $6`,
+      [slot_year, semester_type, venue_1, slot1.slot_day, slot1.slot_time, employee_id]
+    );
+
+    if (venue1ClashCheck.rows.length > 0) {
+      const clash = venue1ClashCheck.rows[0];
+      return res.status(409).json({
+        message: `Venue clash: ${venue_1} is already booked for ${lab_pair_1} on ${slot1.slot_day} at ${slot1.slot_time} by ${clash.faculty_name} for ${clash.course_name}`,
+        type: "venue_clash_pair1",
+        existingAllocation: clash,
+      });
+    }
+
+    // 3. Check venue clashes for second lab pair  
+    const venue2ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.venue = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5 AND fa.employee_id != $6`,
+      [slot_year, semester_type, venue_2, slot2.slot_day, slot2.slot_time, employee_id]
+    );
+
+    if (venue2ClashCheck.rows.length > 0) {
+      const clash = venue2ClashCheck.rows[0];
+      return res.status(409).json({
+        message: `Venue clash: ${venue_2} is already booked for ${lab_pair_2} on ${slot2.slot_day} at ${slot2.slot_time} by ${clash.faculty_name} for ${clash.course_name}`,
+        type: "venue_clash_pair2", 
+        existingAllocation: clash,
+      });
+    }
+
+    // 4. Check faculty conflicts for first lab pair
+    const faculty1ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, v.venue as venue_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN venue v ON fa.venue = v.venue
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.employee_id = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5 AND fa.course_code != $6`,
+      [slot_year, semester_type, employee_id, slot1.slot_day, slot1.slot_time, course_code]
+    );
+
+    if (faculty1ClashCheck.rows.length > 0) {
+      const clash = faculty1ClashCheck.rows[0];
+      return res.status(409).json({
+        message: `Faculty clash: Faculty is already assigned to ${clash.course_name} in ${clash.venue_name} during ${lab_pair_1} time slot`,
+        type: "faculty_clash_pair1",
+        existingAllocation: clash,
+      });
+    }
+
+    // 5. Check faculty conflicts for second lab pair
+    const faculty2ClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, v.venue as venue_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN venue v ON fa.venue = v.venue
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 
+       AND fa.employee_id = $3 AND fa.slot_day = $4 
+       AND fa.slot_time = $5 AND fa.course_code != $6`,
+      [slot_year, semester_type, employee_id, slot2.slot_day, slot2.slot_time, course_code]
+    );
+
+    if (faculty2ClashCheck.rows.length > 0) {
+      const clash = faculty2ClashCheck.rows[0];
+      return res.status(409).json({
+        message: `Faculty clash: Faculty is already assigned to ${clash.course_name} in ${clash.venue_name} during ${lab_pair_2} time slot`,
+        type: "faculty_clash_pair2",
+        existingAllocation: clash,
       });
     }
 
