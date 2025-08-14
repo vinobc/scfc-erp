@@ -1981,11 +1981,17 @@ function handleSaveP4FacultyAllocation() {
     },
     body: JSON.stringify(p4AllocationData),
   })
-    .then((response) => response.json())
-    .then((data) => {
+    .then((response) => {
+      console.log("P=4 allocation response status:", response.status);
+      return response.json().then(data => ({
+        status: response.status,
+        data: data
+      }));
+    })
+    .then(({status, data}) => {
       console.log("P=4 allocation response:", data);
       
-      if (data.allocations && data.allocations.length === 2) {
+      if (status >= 200 && status < 300 && data.allocations && data.allocations.length === 2) {
         localShowAlert(
           `P=4 lab allocation created successfully! Allocated ${data.labPairs.pair1} and ${data.labPairs.pair2}`,
           "success"
@@ -2000,7 +2006,12 @@ function handleSaveP4FacultyAllocation() {
         clearP4Selection();
         
       } else {
-        localShowAlert(data.message || "Error creating P=4 allocation", "danger");
+        // Handle error responses (4xx, 5xx) or incomplete data
+        const errorMessage = data.message || "Error creating P=4 allocation";
+        console.log("P=4 allocation failed:", errorMessage);
+        console.log("About to show alert with message:", errorMessage);
+        localShowAlert(errorMessage, "danger");
+        console.log("Alert call completed");
       }
     })
     .catch((error) => {
@@ -3429,6 +3440,12 @@ function setupFacultyNameAutocomplete() {
                   "Faculty selected via autocomplete, refreshing slots with enhanced API"
                 );
                 updateAvailableSlots(courseData);
+                
+                // Also refresh P=4 lab pairs if this is a P=4 course
+                if (courseData.practical === 4) {
+                  console.log("Refreshing P=4 lab pairs after faculty selection");
+                  loadP4LabPairs();
+                }
               } else {
                 // Fallback to original logic if course not selected yet
                 updateFacultyAvailableSlots();
@@ -3786,18 +3803,28 @@ function toggleP4LabSelection(course, componentType) {
 
 // Load available lab pairs for P=4 selection
 function loadP4LabPairs() {
-  if (!allocationLabPair1 || !allocationLabPair2) return;
+  console.log("loadP4LabPairs() called");
+  if (!allocationLabPair1 || !allocationLabPair2) {
+    console.log("P=4 dropdowns not found");
+    return;
+  }
 
   const year = allocationYearInput.value;
   const semesterType = allocationSemesterTypeInput.value;
   const courseCode = allocationCourseCodeInput.value;
+  const facultyId = allocationEmployeeIdInput.value;
 
-  if (!year || !semesterType || !courseCode) return;
+  if (!year || !semesterType || !courseCode || !facultyId) {
+    console.log("Missing required fields for P=4:", { year, semesterType, courseCode, facultyId });
+    return;
+  }
+  
+  console.log("Loading P=4 lab pairs with:", { year, semesterType, courseCode, facultyId });
 
-  // Get available lab slots for P=4 courses
+  // Use enhanced API that considers faculty conflicts for P=4 courses  
   fetch(
-    `${window.API_URL}/faculty-allocations/available-slots?` +
-      `courseCode=${courseCode}&year=${year}&semesterType=${semesterType}&componentType=lab`,
+    `${window.API_URL}/faculty-allocations/available-slots-for-faculty?` +
+      `facultyId=${facultyId}&courseCode=${courseCode}&year=${year}&semesterType=${semesterType}&componentType=lab`,
     {
       headers: {
         Authorization: localStorage.getItem("token"),
@@ -3807,12 +3834,14 @@ function loadP4LabPairs() {
     .then((response) => response.json())
     .then((data) => {
       console.log("P=4 lab slots response:", data);
+      console.log("Available slots:", data.availableSlots);
+      console.log("Disabled slots:", data.disabledSlots);
       
       // Clear existing options
       allocationLabPair1.innerHTML = '<option value="">Select First Lab Pair</option>';
       allocationLabPair2.innerHTML = '<option value="">Select Second Lab Pair</option>';
 
-      // Populate both dropdowns with all available lab pairs
+      // Populate both dropdowns with available lab pairs
       if (data.availableSlots && data.availableSlots.length > 0) {
         data.availableSlots.forEach((slot) => {
           const option1 = document.createElement("option");
@@ -3826,6 +3855,27 @@ function loadP4LabPairs() {
           allocationLabPair2.appendChild(option2);
         });
       }
+
+      // Add disabled slots (already allocated) as greyed out options
+      if (data.disabledSlots && data.disabledSlots.length > 0) {
+        data.disabledSlots.forEach((disabled) => {
+          const option1 = document.createElement("option");
+          option1.value = disabled.slotName;
+          option1.textContent = `❌ ${disabled.slotName} - ${disabled.reason}`;
+          option1.disabled = true;
+          option1.style.color = "#dc3545";
+          option1.style.fontStyle = "italic";
+          allocationLabPair1.appendChild(option1);
+
+          const option2 = document.createElement("option");
+          option2.value = disabled.slotName;
+          option2.textContent = `❌ ${disabled.slotName} - ${disabled.reason}`;
+          option2.disabled = true;
+          option2.style.color = "#dc3545";
+          option2.style.fontStyle = "italic";
+          allocationLabPair2.appendChild(option2);
+        });
+      }
       
       // Load venues for both lab venue dropdowns
       loadP4LabVenues();
@@ -3833,6 +3883,39 @@ function loadP4LabPairs() {
     .catch((error) => {
       console.error("Error loading P=4 lab pairs:", error);
       localShowAlert("Error loading lab pairs", "danger");
+      
+      // Fallback to basic API if enhanced API fails
+      console.log("Falling back to basic available-slots API...");
+      fetch(
+        `${window.API_URL}/faculty-allocations/available-slots?` +
+          `courseCode=${courseCode}&year=${year}&semesterType=${semesterType}&componentType=lab`,
+        {
+          headers: {
+            Authorization: localStorage.getItem("token"),
+          },
+        }
+      )
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Fallback API response:", data);
+        // Use the old logic for fallback
+        if (data.availableSlots && data.availableSlots.length > 0) {
+          data.availableSlots.forEach((slot) => {
+            const option1 = document.createElement("option");
+            option1.value = slot;
+            option1.textContent = slot;
+            allocationLabPair1.appendChild(option1);
+
+            const option2 = document.createElement("option");
+            option2.value = slot;
+            option2.textContent = slot;
+            allocationLabPair2.appendChild(option2);
+          });
+        }
+      })
+      .catch((fallbackError) => {
+        console.error("Fallback API also failed:", fallbackError);
+      });
     });
 }
 
@@ -4096,9 +4179,7 @@ function validateDualLabPairCombination(pair1, pair2, venue1, venue2, facultyId)
     });
 }
 
-function localShowAlert(message, type = "success") {
-  showAlert(message, type);
-}
+// Removed duplicate localShowAlert function - using the detailed implementation above
 
 // Update lab pair day/time display
 function updateLabPairDayTime(labPair, displayElement) {
