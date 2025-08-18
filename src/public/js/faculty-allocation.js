@@ -1748,12 +1748,20 @@ function handleSaveFacultyAllocation() {
 
       // For each individual slot that needs to be allocated
       for (const individualSlot of allIndividualSlots) {
-        // Find the slot details for this individual slot
+        // Parse slot name for T=4 combined slots (e.g., "B1+TB1" -> use "B1" for lookup)
+        let slotToSearch = individualSlot;
+        if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
+          // For T=4 theory slots like "B1+TB1", "A1+TA1", extract the primary slot for lookup
+          slotToSearch = individualSlot.split('+')[0];
+          console.log(`T=4 slot detected: ${individualSlot}, searching for: ${slotToSearch}`);
+        }
+        
+        // Find the slot details using the parsed slot name
         const matchingSlots = slots.filter(
-          (s) => s.slot_name === individualSlot
+          (s) => s.slot_name === slotToSearch
         );
 
-        console.log(`Matching slots for ${individualSlot}:`, matchingSlots);
+        console.log(`Matching slots for ${individualSlot} (searched: ${slotToSearch}):`, matchingSlots);
 
         if (matchingSlots.length === 0) {
           localShowAlert(`No slots found for ${individualSlot}`, "danger");
@@ -1772,6 +1780,9 @@ function handleSaveFacultyAllocation() {
             // For subsequent slots of a 4-hour lab, skip individual allocations
             // The backend will handle creating all related allocations
             return;
+          } else if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
+            // For T=4 theory slots like "B1+TB1", use the original combined name
+            slotNameToUse = individualSlot;
           } else {
             // For regular slots, use the individual slot name
             slotNameToUse = slot.slot_name;
@@ -2317,8 +2328,23 @@ function generateFacultyTimetable(faculty, allocations, year, semester) {
       // Create allocation map
       const allocationMap = {};
       allocations.forEach((allocation) => {
-        const key = `${allocation.slot_day}-${allocation.slot_name}`;
-        allocationMap[key] = allocation;
+        // For T=4 combined slots like "B1+TB1", create entries for both the combined name and individual components
+        if (allocation.slot_name.includes('+') && !allocation.slot_name.includes(',') && !allocation.slot_name.startsWith('L')) {
+          // T=4 theory slot - create entries for both combined and individual slot names
+          const key = `${allocation.slot_day}-${allocation.slot_name}`;
+          allocationMap[key] = allocation;
+          
+          // Also create entries using the component slot names for lookup
+          const components = allocation.slot_name.split('+');
+          components.forEach(component => {
+            const componentKey = `${allocation.slot_day}-${component}`;
+            allocationMap[componentKey] = allocation;
+          });
+        } else {
+          // Regular slot
+          const key = `${allocation.slot_day}-${allocation.slot_name}`;
+          allocationMap[key] = allocation;
+        }
       });
 
       // Use EXACT same logic as master timetable
