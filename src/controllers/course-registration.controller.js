@@ -454,68 +454,113 @@ exports.getCourseOfferings = async (req, res) => {
         });
       }
     } else if (courseType === "P") {
-      // For Practical-only courses, use semester_slot_config for proper grouping
-      const practicalConfigs = await db.query(
-        `SELECT slot_name, linked_slots
-         FROM semester_slot_config 
-         WHERE slot_year = $1 
-           AND semester_type = $2 
-           AND course_theory = 0 
-           AND course_practical = $3`,
-        [slot_year, semester_type, practical]
-      );
-
-      // Use Set to track normalized slot combinations and prevent duplicates
-      const seenSlotCombinations = new Set();
-
-      practicalConfigs.rows.forEach((config) => {
-        // Normalize slot order to prevent duplicates
-        const normalizedSlots = normalizeSlotOrder(
-          config.slot_name,
-          config.linked_slots
-        );
-
-        // Skip if we've already seen this combination
-        if (seenSlotCombinations.has(normalizedSlots)) {
-          return;
-        }
-        seenSlotCombinations.add(normalizedSlots);
-
-        // Find ALL allocations that match this configuration
-        const slotsInConfig = [
-          config.slot_name,
-          ...(config.linked_slots || []),
-        ];
-
-        // Get all matching allocations (not just first one)
-        const matchingAllocations = allocationsResult.rows.filter((alloc) =>
-          slotsInConfig.includes(alloc.slot_name)
-        );
-
-        // Group by unique venue+faculty combinations
-        const uniqueCombinations = new Map();
-
-        matchingAllocations.forEach((alloc) => {
-          const key = `${alloc.venue}-${alloc.faculty_name}`;
-          if (!uniqueCombinations.has(key)) {
-            uniqueCombinations.set(key, alloc);
+      // For Practical-only courses, handle P=4 differently from P=2
+      if (practical === 4) {
+        // For P=4 courses, group allocations by faculty+venue and combine slot names
+        console.log(`Processing P=4 course: ${courseData.course_code}`);
+        
+        const p4Groups = new Map();
+        
+        allocationsResult.rows.forEach((allocation) => {
+          const key = `${allocation.venue}-${allocation.faculty_name}`;
+          
+          if (!p4Groups.has(key)) {
+            p4Groups.set(key, {
+              venue: allocation.venue,
+              faculty_name: allocation.faculty_name,
+              available_seats: allocation.available_seats,
+              slot_names: []
+            });
           }
+          
+          p4Groups.get(key).slot_names.push(allocation.slot_name);
         });
-
-        // Create offerings for each unique venue+faculty combination
-        uniqueCombinations.forEach((allocation) => {
+        
+        // Create combined offerings for P=4 courses
+        p4Groups.forEach((group) => {
+          // Sort slot names for consistent display (morning slots first, then afternoon)
+          const sortedSlots = group.slot_names.sort((a, b) => {
+            // Extract first slot number for sorting (L1+L2 -> 1, L21+L22 -> 21)
+            const aNum = parseInt(a.match(/L(\d+)/)?.[1] || '0');
+            const bNum = parseInt(b.match(/L(\d+)/)?.[1] || '0');
+            return aNum - bNum;
+          });
+          
           offerings.push({
             course_code: courseData.course_code,
             course_title: courseData.course_name,
             course_type: "P",
-            slots_offered: normalizedSlots,
-            venue: allocation.venue,
-            faculty_name: allocation.faculty_name,
-            available_seats: allocation.available_seats,
+            slots_offered: sortedSlots.join(', '),
+            venue: group.venue,
+            faculty_name: group.faculty_name,
+            available_seats: group.available_seats,
             schedule: [],
           });
         });
-      });
+      } else {
+        // For P=2 courses, use the existing logic with semester_slot_config
+        const practicalConfigs = await db.query(
+          `SELECT slot_name, linked_slots
+           FROM semester_slot_config 
+           WHERE slot_year = $1 
+             AND semester_type = $2 
+             AND course_theory = 0 
+             AND course_practical = $3`,
+          [slot_year, semester_type, practical]
+        );
+
+        // Use Set to track normalized slot combinations and prevent duplicates
+        const seenSlotCombinations = new Set();
+
+        practicalConfigs.rows.forEach((config) => {
+          // Normalize slot order to prevent duplicates
+          const normalizedSlots = normalizeSlotOrder(
+            config.slot_name,
+            config.linked_slots
+          );
+
+          // Skip if we've already seen this combination
+          if (seenSlotCombinations.has(normalizedSlots)) {
+            return;
+          }
+          seenSlotCombinations.add(normalizedSlots);
+
+          // Find ALL allocations that match this configuration
+          const slotsInConfig = [
+            config.slot_name,
+            ...(config.linked_slots || []),
+          ];
+
+          // Get all matching allocations (not just first one)
+          const matchingAllocations = allocationsResult.rows.filter((alloc) =>
+            slotsInConfig.includes(alloc.slot_name)
+          );
+
+          // Group by unique venue+faculty combinations
+          const uniqueCombinations = new Map();
+
+          matchingAllocations.forEach((alloc) => {
+            const key = `${alloc.venue}-${alloc.faculty_name}`;
+            if (!uniqueCombinations.has(key)) {
+              uniqueCombinations.set(key, alloc);
+            }
+          });
+
+          // Create offerings for each unique venue+faculty combination
+          uniqueCombinations.forEach((allocation) => {
+            offerings.push({
+              course_code: courseData.course_code,
+              course_title: courseData.course_name,
+              course_type: "P",
+              slots_offered: normalizedSlots,
+              venue: allocation.venue,
+              faculty_name: allocation.faculty_name,
+              available_seats: allocation.available_seats,
+              schedule: [],
+            });
+          });
+        });
+      }
     }
 
     // Sort offerings: Theory first, then Practical
