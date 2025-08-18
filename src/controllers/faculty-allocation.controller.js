@@ -730,9 +730,47 @@ exports.getFacultyTimetable = async (req, res) => {
       [employeeId, year, semesterType]
     );
 
+    // For the summary, group T=0, P=4 course allocations by course+venue to combine slot pairs
+    // But keep individual allocations for the timetable grid display
+    const summaryAllocations = [];
+    const p4CourseGroups = new Map();
+
+    allocationsResult.rows.forEach((allocation) => {
+      const isP4LabCourse = allocation.theory === 0 && allocation.practical === 4;
+      
+      if (isP4LabCourse) {
+        // Group P=4 lab courses by course_code + venue for summary
+        const groupKey = `${allocation.course_code}-${allocation.venue}`;
+        
+        if (!p4CourseGroups.has(groupKey)) {
+          p4CourseGroups.set(groupKey, {
+            ...allocation,
+            slot_names: [],
+            combined_allocation: true
+          });
+        }
+        
+        // Add this slot name to the group
+        p4CourseGroups.get(groupKey).slot_names.push(allocation.slot_name);
+      } else {
+        // Keep non-P4 allocations as individual entries
+        summaryAllocations.push(allocation);
+      }
+    });
+
+    // Convert P=4 groups to final allocations with combined slot names for summary
+    p4CourseGroups.forEach((group) => {
+      // Sort and combine slot names
+      const sortedSlots = group.slot_names.sort();
+      group.slot_name = sortedSlots.join(', ');
+      delete group.slot_names;
+      summaryAllocations.push(group);
+    });
+
     res.status(200).json({
       faculty: faculty,
-      allocations: allocationsResult.rows,
+      allocations: allocationsResult.rows, // Use original allocations for timetable grid
+      summaryAllocations: summaryAllocations, // Use grouped allocations for summary
     });
   } catch (error) {
     console.error("Get faculty timetable error:", error);

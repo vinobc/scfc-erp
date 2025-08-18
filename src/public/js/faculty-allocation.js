@@ -2267,7 +2267,7 @@ function handleViewFacultyTimetable() {
   )
     .then((response) => response.json())
     .then((data) => {
-      generateFacultyTimetable(data.faculty, data.allocations, year, semester);
+      generateFacultyTimetable(data.faculty, data.allocations, year, semester, data.summaryAllocations);
     })
     .catch((error) => {
       console.error("Error fetching faculty timetable:", error);
@@ -2306,7 +2306,7 @@ function handleViewClassTimetable() {
 }
 
 // Generate faculty timetable
-function generateFacultyTimetable(faculty, allocations, year, semester) {
+function generateFacultyTimetable(faculty, allocations, year, semester, summaryAllocations) {
   // Show the container
   if (facultyTimetableContainer) {
     facultyTimetableContainer.style.display = "block";
@@ -2653,6 +2653,12 @@ function generateFacultyTimetable(faculty, allocations, year, semester) {
 
         // Fallback to alphabetical
         return slotA.localeCompare(slotB);
+      }
+
+      // Override with summaryAllocations if provided (for P=4 course grouping)
+      if (summaryAllocations && summaryAllocations.length > 0) {
+        uniqueAllocations.length = 0; // Clear the array
+        uniqueAllocations.push(...summaryAllocations);
       }
 
       // Sort unique allocations by slot name
