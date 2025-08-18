@@ -414,6 +414,74 @@ exports.createFacultyAllocation = async (req, res) => {
       );
     }
 
+    // Handle T=4 theory courses (Fall 2025-26) - create allocations for all component slots
+    let additionalAllocationsCreated = 0;
+    if (slot_name.includes('+') && !slot_name.includes(',') && !slot_name.startsWith('L')) {
+      // This is a T=4 theory slot like "B1+TB1"
+      console.log(`Processing T=4 theory allocation for slot: ${slot_name}`);
+      
+      // Parse the component slots
+      const slotComponents = slot_name.split('+'); // ["B1", "TB1"]
+      console.log(`T=4 components: ${slotComponents.join(', ')}`);
+      
+      // For each component slot, find all its occurrences and create allocations
+      for (const component of slotComponents) {
+        // Get all slots for this component across the week
+        const componentSlotsResult = await db.query(
+          `SELECT slot_day, slot_time FROM slot 
+           WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+          [slot_year, semester_type, component]
+        );
+        
+        console.log(`Found ${componentSlotsResult.rows.length} slots for component ${component}`);
+        
+        // Create allocation for each occurrence of this component slot
+        for (const componentSlot of componentSlotsResult.rows) {
+          // Skip if this allocation already exists (like the primary one we just created)
+          const existingCheck = await db.query(
+            `SELECT * FROM faculty_allocation
+             WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
+             AND employee_id = $4 AND venue = $5 AND slot_day = $6 
+             AND slot_name = $7 AND slot_time = $8`,
+            [
+              slot_year,
+              semester_type,
+              course_code,
+              employee_id,
+              venue,
+              componentSlot.slot_day,
+              slot_name, // Keep the combined name
+              componentSlot.slot_time,
+            ]
+          );
+          
+          if (existingCheck.rows.length === 0) {
+            try {
+              await db.query(
+                `INSERT INTO faculty_allocation 
+                 (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [
+                  slot_year,
+                  semester_type,
+                  course_code,
+                  employee_id,
+                  venue,
+                  componentSlot.slot_day,
+                  slot_name, // Keep the combined name
+                  componentSlot.slot_time,
+                ]
+              );
+              additionalAllocationsCreated++;
+              console.log(`✓ Created T=4 allocation for ${component} on ${componentSlot.slot_day} at ${componentSlot.slot_time}`);
+            } catch (error) {
+              console.error(`Error creating T=4 allocation for ${component}:`, error);
+            }
+          }
+        }
+      }
+    }
+
     // Handle linked slot for SUMMER lab
     let linkedAllocationExists = false;
     if (semester_type === "SUMMER" && linkedSlotName && linkedSlotDetails) {
@@ -594,14 +662,20 @@ exports.createFacultyAllocation = async (req, res) => {
     // Determine appropriate status code and message
     const statusCode =
       primaryAllocationExists && linkedAllocationExists ? 200 : 201;
-    const message = primaryAllocationExists
+    let message = primaryAllocationExists
       ? "Faculty allocation already exists"
       : "Faculty allocation created successfully";
+    
+    // Add info about T=4 allocations
+    if (additionalAllocationsCreated > 0) {
+      message += ` (${additionalAllocationsCreated + 1} total slots allocated for T=4 course)`;
+    }
 
     res.status(statusCode).json({
       message,
       allocation: result.rows[0],
       primaryAllocationExists,
+      additionalAllocationsCreated,
       linkedAllocation: linkedSlotName
         ? {
             slot_name: linkedSlotName,
