@@ -806,7 +806,7 @@ function populateVenueTypes() {
     .then((response) => response.json())
     .then((venues) => {
       const venueTypes = new Set();
-      venues.forEach((venue) => venueTypes.add(venue.infra_type));
+      venues.filter(v => v.is_active === true).forEach((venue) => venueTypes.add(venue.infra_type));
 
       if (allocationVenueTypeInput) {
         allocationVenueTypeInput.innerHTML =
@@ -1581,7 +1581,7 @@ function handleVenueTypeChange(event) {
   })
     .then((response) => response.json())
     .then((venues) => {
-      const filteredVenues = venues.filter((v) => v.infra_type === venueType);
+      const filteredVenues = venues.filter((v) => v.infra_type === venueType && v.is_active === true);
 
       allocationVenueInput.innerHTML = '<option value="">Select Venue</option>';
       filteredVenues.forEach((venue) => {
@@ -3153,7 +3153,7 @@ function populateViewDropdowns() {
       if (viewClassVenueSelect) {
         viewClassVenueSelect.innerHTML =
           '<option value="">Select Venue</option>';
-        venues.forEach((v) => {
+        venues.filter(v => v.is_active === true).forEach((v) => {
           const option = document.createElement("option");
           option.value = v.venue;
           option.textContent = `${v.venue} (${v.infra_type})`;
@@ -3963,8 +3963,8 @@ function loadP4LabVenues() {
   })
     .then((response) => response.json())
     .then((venues) => {
-      // Filter for lab venues (you might want to filter by venue type)
-      const labVenues = venues; // or filter based on venue_type if needed
+      // Filter for active lab venues only
+      const labVenues = venues.filter((v) => v.is_active === true);
       
       // Clear existing options
       allocationLabVenue1.innerHTML = '<option value="">Select Venue for First Lab</option>';
@@ -4299,8 +4299,8 @@ function loadP4VenueTypes() {
       allocationLabVenueType1.innerHTML = '<option value="">Select Venue Type</option>';
       allocationLabVenueType2.innerHTML = '<option value="">Select Venue Type</option>';
       
-      // Extract unique venue types (infra_type) from venues
-      const uniqueTypes = [...new Set(venues.map(venue => venue.infra_type))]
+      // Extract unique venue types (infra_type) from active venues only
+      const uniqueTypes = [...new Set(venues.filter(v => v.is_active === true).map(venue => venue.infra_type))]
         .filter(type => type && type.trim() !== '') // Remove null/empty values
         .sort(); // Sort alphabetically
       
@@ -4353,7 +4353,7 @@ function loadVenuesForP4Lab(venueType, venueDropdown) {
       
       // Filter venues by infra_type and only show active venues
       const filteredVenues = venues.filter(venue => 
-        venue.infra_type === venueType && venue.is_active !== false
+        venue.infra_type === venueType && venue.is_active === true
       );
       
       filteredVenues.forEach((venue) => {
