@@ -730,20 +730,24 @@ exports.getFacultyTimetable = async (req, res) => {
       [employeeId, year, semesterType]
     );
 
-    // For the summary, group T=0, P=4 course allocations by course+venue to combine slot pairs
+    // For the summary, group course allocations by course+venue to combine slot pairs
+    // - P=4 lab courses (T=0, P=4): Group by course+venue
+    // - Theory courses (T>0): Group by course+venue to prevent duplicates
+    // - Other courses: Keep as individual entries
     // But keep individual allocations for the timetable grid display
     const summaryAllocations = [];
-    const p4CourseGroups = new Map();
+    const courseGroups = new Map();
 
     allocationsResult.rows.forEach((allocation) => {
       const isP4LabCourse = allocation.theory === 0 && allocation.practical === 4;
+      const isTheoryCourse = allocation.theory > 0;
       
-      if (isP4LabCourse) {
-        // Group P=4 lab courses by course_code + venue for summary
+      if (isP4LabCourse || isTheoryCourse) {
+        // Group P=4 lab courses and theory courses by course_code + venue for summary
         const groupKey = `${allocation.course_code}-${allocation.venue}`;
         
-        if (!p4CourseGroups.has(groupKey)) {
-          p4CourseGroups.set(groupKey, {
+        if (!courseGroups.has(groupKey)) {
+          courseGroups.set(groupKey, {
             ...allocation,
             slot_names: [],
             combined_allocation: true
@@ -751,17 +755,18 @@ exports.getFacultyTimetable = async (req, res) => {
         }
         
         // Add this slot name to the group
-        p4CourseGroups.get(groupKey).slot_names.push(allocation.slot_name);
+        courseGroups.get(groupKey).slot_names.push(allocation.slot_name);
       } else {
-        // Keep non-P4 allocations as individual entries
+        // Keep other allocations as individual entries (e.g., P=2 lab courses)
         summaryAllocations.push(allocation);
       }
     });
 
-    // Convert P=4 groups to final allocations with combined slot names for summary
-    p4CourseGroups.forEach((group) => {
-      // Sort and combine slot names
-      const sortedSlots = group.slot_names.sort();
+    // Convert grouped courses to final allocations with combined slot names for summary
+    courseGroups.forEach((group) => {
+      // Remove duplicates and sort slot names
+      const uniqueSlots = [...new Set(group.slot_names)];
+      const sortedSlots = uniqueSlots.sort();
       group.slot_name = sortedSlots.join(', ');
       delete group.slot_names;
       summaryAllocations.push(group);
