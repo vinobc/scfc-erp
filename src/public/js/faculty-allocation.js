@@ -3993,7 +3993,9 @@ function handleLabPair1Change() {
   const selectedPair1 = allocationLabPair1.value;
   
   // Update day/time display for first lab pair
-  updateLabPairDayTime(selectedPair1, allocationLabDayTime1);
+  const year = allocationYearInput ? allocationYearInput.value : "";
+  const semester = allocationSemesterTypeInput ? allocationSemesterTypeInput.value : "";
+  updateLabPairDayTime(selectedPair1, allocationLabDayTime1, year, semester);
   
   // Update second dropdown to exclude the selected pair and conflicting pairs
   updateSecondLabPairOptions(selectedPair1);
@@ -4013,7 +4015,9 @@ function handleLabPair2Change() {
   const selectedPair2 = allocationLabPair2.value;
   
   // Update day/time display for second lab pair
-  updateLabPairDayTime(selectedPair2, allocationLabDayTime2);
+  const year = allocationYearInput ? allocationYearInput.value : "";
+  const semester = allocationSemesterTypeInput ? allocationSemesterTypeInput.value : "";
+  updateLabPairDayTime(selectedPair2, allocationLabDayTime2, year, semester);
   
   // Validate current selection with separate venues
   validateP4Selection();
@@ -4214,15 +4218,42 @@ function validateDualLabPairCombination(pair1, pair2, venue1, venue2, facultyId)
 // Removed duplicate localShowAlert function - using the detailed implementation above
 
 // Update lab pair day/time display
-function updateLabPairDayTime(labPair, displayElement) {
+function updateLabPairDayTime(labPair, displayElement, year = null, semester = null) {
   if (!displayElement || !labPair) {
     if (displayElement) displayElement.textContent = "";
     return;
   }
   
-  // Extract day and time from lab pair (format like "L1+L2")
-  // For now, we'll use a simplified mapping - in production you'd fetch from slots table
-  const dayTimeMap = {
+  // Get year and semester from form inputs if not provided
+  const currentYear = year || (allocationYearInput ? allocationYearInput.value : "");
+  const currentSemester = semester || (allocationSemesterTypeInput ? allocationSemesterTypeInput.value : "");
+  
+  // Fall 2025-26 lab slot timings (based on master timetable)
+  const fall2025DayTimeMap = {
+    "L1+L2": "Monday 9:00 - 10:45",
+    "L3+L4": "Monday 10:50 - 12:35",
+    "L5+L6": "Tuesday 9:00 - 10:45",
+    "L7+L8": "Tuesday 10:50 - 12:35",
+    "L9+L10": "Wednesday 9:00 - 10:45",
+    "L11+L12": "Wednesday 10:50 - 12:35",
+    "L13+L14": "Thursday 9:00 - 10:45",
+    "L15+L16": "Thursday 10:50 - 12:35",
+    "L17+L18": "Friday 9:00 - 10:45",
+    "L19+L20": "Friday 10:50 - 12:35",
+    "L21+L22": "Monday 1:15 - 3:00",
+    "L23+L24": "Monday 3:05 - 4:50",
+    "L25+L26": "Tuesday 1:15 - 3:00",
+    "L27+L28": "Tuesday 3:05 - 4:50",
+    "L29+L30": "Wednesday 1:15 - 3:00",
+    "L31+L32": "Wednesday 3:05 - 4:50",
+    "L33+L34": "Thursday 1:15 - 3:00",
+    "L35+L36": "Thursday 3:05 - 4:50",
+    "L37+L38": "Friday 1:15 - 3:00",
+    "L39+L40": "Friday 3:05 - 4:50"
+  };
+  
+  // Default/legacy lab slot timings for other semesters
+  const defaultDayTimeMap = {
     "L1+L2": "Monday 8:00 AM - 10:00 AM",
     "L3+L4": "Monday 10:15 AM - 12:15 PM",
     "L5+L6": "Monday 1:00 PM - 3:00 PM",
@@ -4244,6 +4275,11 @@ function updateLabPairDayTime(labPair, displayElement) {
     "L37+L38": "Friday 1:00 PM - 3:00 PM",
     "L39+L40": "Friday 3:15 PM - 5:15 PM"
   };
+  
+  // Use Fall 2025-26 timings if year is 2025-26 and semester is FALL
+  const dayTimeMap = (currentYear === "2025-26" && currentSemester === "FALL") 
+    ? fall2025DayTimeMap 
+    : defaultDayTimeMap;
   
   displayElement.textContent = dayTimeMap[labPair] || "Unknown time slot";
 }
