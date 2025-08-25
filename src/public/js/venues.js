@@ -578,8 +578,8 @@ function handleSaveVenue() {
   }
 
   // Validate field lengths
-  if (venueName.length > 10) {
-    showAlert("Venue name must not exceed 10 characters.", "danger");
+  if (venueName.length > 50) {
+    showAlert("Venue name must not exceed 50 characters.", "danger");
     return;
   }
 
