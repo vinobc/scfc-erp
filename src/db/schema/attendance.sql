@@ -9,7 +9,7 @@ CREATE TABLE attendance (
     semester_type VARCHAR(10) NOT NULL,
     course_code VARCHAR(10) NOT NULL,
     employee_id INTEGER NOT NULL,
-    venue VARCHAR(10) NOT NULL,
+    venue VARCHAR(50) NOT NULL,
     slot_day VARCHAR(10) NOT NULL,
     slot_name VARCHAR(15) NOT NULL,
     slot_time VARCHAR(75) NOT NULL,
