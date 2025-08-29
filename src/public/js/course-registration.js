@@ -1138,36 +1138,19 @@ function displayCreditSummary(summary) {
     courseSearchDiv.parentNode.insertBefore(creditContainer, courseSearchDiv);
   }
 
-  const progressColor =
-    credit_summary.percentage_used > 90
-      ? "#dc3545"
-      : credit_summary.percentage_used > 75
-      ? "#ffc107"
-      : "#28a745";
 
   creditContainer.innerHTML = `
-    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 0 20px 20px 0; border-left: 5px solid ${progressColor};">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 0 20px 20px 0; border-left: 5px solid #007bff;">
       <h5 style="color: #007bff; margin-bottom: 15px;">📊 Registration Summary - ${
         semester_info.slot_year
       } ${semester_info.semester_type}</h5>
       
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <div style="margin-bottom: 15px;">
         <div>
-          <strong style="font-size: 16px;">Credits: ${
+          <strong style="font-size: 16px;">Total Credits: ${
             credit_summary.total_credits
-          } / 27</strong>
-          <span style="color: #666; margin-left: 10px;">(${
-            credit_summary.remaining_credits
-          } remaining)</span>
+          }</strong>
         </div>
-        <div style="background: #e9ecef; border-radius: 10px; width: 200px; height: 20px; overflow: hidden;">
-          <div style="background: ${progressColor}; height: 100%; width: ${
-    credit_summary.percentage_used
-  }%; transition: width 0.3s ease;"></div>
-        </div>
-        <div style="font-weight: bold; color: ${progressColor};">${
-    credit_summary.percentage_used
-  }%</div>
       </div>
 
       ${
@@ -1201,26 +1184,6 @@ function displayCreditSummary(summary) {
           : ""
       }
 
-      ${
-        credit_summary.remaining_credits <= 3 &&
-        credit_summary.remaining_credits > 0
-          ? `
-        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin-top: 10px; color: #856404;">
-          ⚠️ <strong>Warning:</strong> Only ${credit_summary.remaining_credits} credits remaining!
-        </div>
-      `
-          : ""
-      }
-
-      ${
-        credit_summary.remaining_credits <= 0
-          ? `
-        <div style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-top: 10px; color: #721c24;">
-          🚫 <strong>Limit Reached:</strong> You have reached the 27-credit limit for this semester.
-        </div>
-      `
-          : ""
-      }
 
       ${
         registered_courses.length > 0

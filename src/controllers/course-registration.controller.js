@@ -990,21 +990,22 @@ exports.registerCourseOffering = async (req, res) => {
       });
     }
 
-    // Check credit limits (only for new course registrations, not components)
-    if (componentType === "SINGLE" || componentType === "T") {
-      const creditCheck = await checkCreditLimits(
-        student.enrollment_number,
-        slot_year,
-        semester_type,
-        course.credits
-      );
+    // Credit limit check removed - students can register for unlimited courses
+    // TODO: Re-implement proper credit limit logic for TEL courses if needed later
+    // if (componentType === "SINGLE" || componentType === "T") {
+    //   const creditCheck = await checkCreditLimits(
+    //     student.enrollment_number,
+    //     slot_year,
+    //     semester_type,
+    //     course.credits
+    //   );
 
-      if (creditCheck.exceedsLimit) {
-        return res.status(400).json({
-          message: `Registration would exceed 27 credit limit. Current: ${creditCheck.currentCredits}, After registration: ${creditCheck.totalAfterRegistration}`,
-        });
-      }
-    }
+    //   if (creditCheck.exceedsLimit) {
+    //     return res.status(400).json({
+    //       message: `Registration would exceed 27 credit limit. Current: ${creditCheck.currentCredits}, After registration: ${creditCheck.totalAfterRegistration}`,
+    //     });
+    //   }
+    // }
 
     // Enhanced slot conflict checking
     console.log(
@@ -1288,14 +1289,6 @@ exports.registerCourseOffering = async (req, res) => {
       `✅ Registration successful: ${course_code} - ${slot_name} for ${student.enrollment_number}`
     );
 
-    // Calculate new total credits for response
-    const creditCheck = await checkCreditLimits(
-      student.enrollment_number,
-      slot_year,
-      semester_type,
-      0
-    );
-
     res.status(201).json({
       message: "Registration successful",
       registration: {
@@ -1304,7 +1297,6 @@ exports.registerCourseOffering = async (req, res) => {
         slot_name,
         component_type: registrations[0].component_type,
         credits: course.credits,
-        new_total_credits: creditCheck.currentCredits,
       },
     });
   } catch (error) {
@@ -1674,19 +1666,20 @@ exports.validateTELRegistration = async (req, res) => {
       });
     }
 
-    // Check credit limits
-    const creditCheck = await checkCreditLimits(
-      student.enrollment_number,
-      slot_year,
-      semester_type,
-      course.credits
-    );
+    // Credit limit check removed - students can register for unlimited courses
+    // TODO: Re-implement proper credit limit logic for TEL courses if needed later
+    // const creditCheck = await checkCreditLimits(
+    //   student.enrollment_number,
+    //   slot_year,
+    //   semester_type,
+    //   course.credits
+    // );
 
-    if (creditCheck.exceedsLimit) {
-      return res.status(400).json({
-        message: `Registration would exceed 27 credit limit. Current: ${creditCheck.currentCredits}, After registration: ${creditCheck.totalAfterRegistration}`,
-      });
-    }
+    // if (creditCheck.exceedsLimit) {
+    //   return res.status(400).json({
+    //     message: `Registration would exceed 27 credit limit. Current: ${creditCheck.currentCredits}, After registration: ${creditCheck.totalAfterRegistration}`,
+    //   });
+    // }
 
     // Check conflicts for theory slot
     console.log(`🔍 Checking theory slot conflicts: ${theory_slot}`);
@@ -1788,7 +1781,6 @@ exports.validateTELRegistration = async (req, res) => {
         theory_slot,
         practical_slot,
         credits: course.credits,
-        total_credits_after: creditCheck.totalAfterRegistration,
       },
     });
   } catch (error) {
