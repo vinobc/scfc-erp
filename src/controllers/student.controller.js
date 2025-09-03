@@ -56,7 +56,6 @@ exports.createStudent = async (req, res) => {
   try {
     const {
       enrollment_no,
-      user_id,
       student_name,
       program_name,
       school_name,
@@ -67,7 +66,6 @@ exports.createStudent = async (req, res) => {
     // Validate required fields
     if (
       !enrollment_no ||
-      !user_id ||
       !student_name ||
       !program_name ||
       !school_name ||
@@ -116,27 +114,15 @@ exports.createStudent = async (req, res) => {
       });
     }
 
-    // Check if user_id already exists
-    const userIdCheck = await db.query(
-      "SELECT COUNT(*) FROM student WHERE user_id = $1",
-      [user_id]
-    );
+    // Skip user_id validation - will be set when user account is created
 
-    if (parseInt(userIdCheck.rows[0].count) > 0) {
-      return res.status(409).json({
-        message: "A student with this user ID already exists",
-      });
-    }
-
-    // Insert new student
-    const result = await db.query(
+    // Insert new student without user_id (will be set when user account is created)
+    await db.query(
       `INSERT INTO student 
-       (enrollment_no, user_id, student_name, program_id, school_id, program_name, school_name, year_admitted, email_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
-       RETURNING *`,
+       (enrollment_no, student_name, program_id, school_id, program_name, school_name, year_admitted, email_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         enrollment_no,
-        user_id,
         student_name,
         program_id,
         school_id,
@@ -172,7 +158,6 @@ exports.updateStudent = async (req, res) => {
   try {
     const enrollmentNo = req.params.enrollment_no;
     const {
-      user_id,
       student_name,
       program_name,
       school_name,
@@ -182,7 +167,6 @@ exports.updateStudent = async (req, res) => {
 
     // Validate required fields
     if (
-      !user_id ||
       !student_name ||
       !program_name ||
       !school_name ||
@@ -229,34 +213,21 @@ exports.updateStudent = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // Check if user_id already exists for a different student
-    const userIdCheck = await db.query(
-      "SELECT COUNT(*) FROM student WHERE user_id = $1 AND enrollment_no != $2",
-      [user_id, enrollmentNo]
-    );
+    // Skip user_id validation - will be preserved or set when user account is created
 
-    if (parseInt(userIdCheck.rows[0].count) > 0) {
-      return res.status(409).json({
-        message: "Another student with this user ID already exists",
-      });
-    }
-
-    // Update student
-    const result = await db.query(
+    // Update student (preserve existing user_id)
+    await db.query(
       `UPDATE student 
-       SET user_id = $1, 
-           student_name = $2, 
-           program_id = $3, 
-           school_id = $4, 
-           program_name = $5, 
-           school_name = $6, 
-           year_admitted = $7, 
-           email_id = $8,
+       SET student_name = $1, 
+           program_id = $2, 
+           school_id = $3, 
+           program_name = $4, 
+           school_name = $5, 
+           year_admitted = $6, 
+           email_id = $7,
            updated_at = CURRENT_TIMESTAMP
-       WHERE enrollment_no = $9
-       RETURNING *`,
+       WHERE enrollment_no = $8`,
       [
-        user_id,
         student_name,
         program_id,
         school_id,
@@ -336,10 +307,9 @@ exports.importStudents = async (req, res) => {
       return res.status(400).json({ message: "Excel file has no data" });
     }
 
-    // Validate Excel data structure
+    // Validate Excel data structure (user_id removed - will be set when user account is created)
     const requiredFields = [
       "enrollment_no",
-      "user_id",
       "student_name",
       "program_name",
       "school_name",
@@ -411,26 +381,15 @@ exports.importStudents = async (req, res) => {
           );
         }
 
-        // Check if user_id already exists
-        const userIdCheck = await db.query(
-          "SELECT COUNT(*) FROM student WHERE user_id = $1",
-          [row.user_id]
-        );
+        // Skip user_id validation - will be set when user account is created
 
-        if (parseInt(userIdCheck.rows[0].count) > 0) {
-          throw new Error(
-            `A student with user ID '${row.user_id}' already exists`
-          );
-        }
-
-        // Insert the student
+        // Insert the student without user_id (will be set when user account is created)
         await db.query(
           `INSERT INTO student 
-           (enrollment_no, user_id, student_name, program_id, school_id, program_name, school_name, year_admitted, email_id) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+           (enrollment_no, student_name, program_id, school_id, program_name, school_name, year_admitted, email_id) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
           [
             row.enrollment_no,
-            row.user_id,
             row.student_name,
             programId,
             schoolId,

@@ -12,7 +12,7 @@ let studentYearFilter;
 // Student form elements
 let studentForm;
 let studentEnrollmentInput;
-let studentUserIdInput;
+// studentUserIdInput removed - user_id will be set automatically when user account is created
 let studentNameInput;
 let studentProgramInput;
 let studentSchoolInput;
@@ -60,7 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize form elements
   studentForm = document.getElementById("student-form");
   studentEnrollmentInput = document.getElementById("student-enrollment-field");
-  studentUserIdInput = document.getElementById("student-userid-field");
+  // studentUserIdInput removed - user_id field no longer exists in form
   studentNameInput = document.getElementById("student-name-field");
   studentProgramInput = document.getElementById("student-program-field");
   studentSchoolInput = document.getElementById("student-school-field");
@@ -378,7 +378,7 @@ function renderStudents(students) {
         student.student_name.toLowerCase().includes(searchTerm) ||
         (student.email_id &&
           student.email_id.toLowerCase().includes(searchTerm)) ||
-        student.user_id.toString().includes(searchTerm)
+        false // user_id search removed
       );
     }
 
@@ -406,7 +406,7 @@ function renderStudents(students) {
 
     row.innerHTML = `
       <td>${student.enrollment_no}</td>
-      <td>${student.user_id}</td>
+      <!-- User ID column removed -->
       <td>${student.student_name}</td>
       <td>${student.program_name}</td>
       <td>${student.school_name}</td>
@@ -550,7 +550,7 @@ function openEditStudentModal(enrollmentNo) {
         studentEnrollmentInput.value = student.enrollment_no;
         studentEnrollmentInput.disabled = true; // Disable enrollment for editing
       }
-      if (studentUserIdInput) studentUserIdInput.value = student.user_id;
+      // studentUserIdInput no longer exists - user_id will be set when user account is created
       if (studentNameInput) studentNameInput.value = student.student_name;
       if (studentProgramInput) studentProgramInput.value = student.program_name;
       if (studentSchoolInput) studentSchoolInput.value = student.school_name;
@@ -593,17 +593,16 @@ function handleSaveStudent() {
   const enrollmentNo = studentEnrollmentInput
     ? studentEnrollmentInput.value.trim()
     : "";
-  const userId = studentUserIdInput ? studentUserIdInput.value.trim() : "";
+  // userId removed - will be set automatically when user account is created
   const studentName = studentNameInput ? studentNameInput.value.trim() : "";
   const programName = studentProgramInput ? studentProgramInput.value : "";
   const schoolName = studentSchoolInput ? studentSchoolInput.value : "";
   const yearAdmitted = studentYearInput ? studentYearInput.value : "";
   const emailId = studentEmailInput ? studentEmailInput.value.trim() : "";
 
-  // Validate required fields
+  // Validate required fields (userId validation removed)
   if (
     !enrollmentNo ||
-    !userId ||
     !studentName ||
     !programName ||
     !schoolName ||
@@ -613,10 +612,9 @@ function handleSaveStudent() {
     return;
   }
 
-  // Prepare data
+  // Prepare data (user_id removed)
   const studentData = {
     enrollment_no: enrollmentNo,
-    user_id: parseInt(userId),
     student_name: studentName,
     program_name: programName,
     school_name: schoolName,
