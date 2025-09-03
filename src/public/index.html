@@ -824,7 +824,6 @@
                   <thead>
                     <tr>
                       <th>Enrollment No.</th>
-                      <th>User ID</th>
                       <th>Student Name</th>
                       <th>Program</th>
                       <th>School</th>
@@ -836,7 +835,7 @@
                   </thead>
                   <tbody id="students-table">
                     <tr>
-                      <td colspan="9" class="text-center">
+                      <td colspan="8" class="text-center">
                         Loading students...
                       </td>
                     </tr>
@@ -3546,18 +3545,7 @@
                   Unique enrollment/registration number (e.g., BTCS2301)
                 </div>
               </div>
-              <div class="mb-3">
-                <label for="student-userid-field" class="form-label"
-                  >User ID *</label
-                >
-                <input
-                  type="number"
-                  class="form-control"
-                  id="student-userid-field"
-                  required
-                />
-                <div class="form-text">Unique integer ID for the student</div>
-              </div>
+              <!-- User ID field removed - will be set automatically when user account is created -->
               <div class="mb-3">
                 <label for="student-name-field" class="form-label"
                   >Student Name *</label
@@ -3664,13 +3652,15 @@
             </p>
             <ul>
               <li>enrollment_no (required)</li>
-              <li>user_id (required)</li>
               <li>student_name (required)</li>
               <li>program_name (required)</li>
               <li>school_name (required)</li>
               <li>year_admitted (required)</li>
               <li>email_id (optional)</li>
             </ul>
+            <div class="alert alert-info">
+              <strong>Note:</strong> Do NOT include user_id column in your Excel file. User IDs will be set automatically when user accounts are created.
+            </div>
             <div class="mb-3">
               <label for="student-file-input" class="form-label"
                 >Select Excel File</label
