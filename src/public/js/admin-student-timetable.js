@@ -364,6 +364,7 @@ function displayAdminTimetableResults(data, year, semester) {
         }
       });
 
+
       // Build timetable structure
       const days = ["MON", "TUE", "WED", "THU", "FRI"];
       const timeSlots = [
@@ -692,7 +693,8 @@ function generateAdminSummaryTable(allRegistrations) {
     courseMap.get(key).components.push({
       slot_name: reg.slot_name,
       venue: reg.venue,
-      component_type: reg.component_type
+      component_type: reg.component_type,
+      faculty_name: reg.faculty_name
     });
   });
 
@@ -739,7 +741,7 @@ function generateAdminSummaryTable(allRegistrations) {
           <td>${index === 0 ? course.course_type : ''}</td>
           <td>${comp.slot_name}</td>
           <td>${comp.venue}</td>
-          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.faculty_name || ''}</td>
           <td>${comp.component_type}</td>
           <td>${index === 0 ? '<span class="badge bg-success">Registered</span>' : ''}</td>
         </tr>
@@ -759,7 +761,7 @@ function generateAdminSummaryTable(allRegistrations) {
           <td>${index === 0 ? course.course_type : ''}</td>
           <td>${comp.slot_name}</td>
           <td>${comp.venue}</td>
-          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.faculty_name || ''}</td>
           <td>${comp.component_type}</td>
           <td>${index === 0 ? '<span class="badge bg-danger">Withdrawn</span>' : ''}</td>
         </tr>
