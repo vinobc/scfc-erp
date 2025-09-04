@@ -1510,12 +1510,14 @@ exports.getStudentSlotTimetable = async (req, res) => {
         );
 
         for (const slotGroup of slotGroups) {
-          // Check if this slot group also contains "+" (like "L9+L10")
-          if (slotGroup.includes("+")) {
-            // Further split by "+" for individual slots
+          // Check if this slot group contains "+" and is a theory slot (not a lab slot)
+          // Lab slots like "L9+L10" should NOT be split as they represent single 2-hour sessions
+          // Only split theory slots like "A1+TA1" for 4-credit courses
+          if (slotGroup.includes("+") && !slotGroup.match(/^L\d+\+L\d+$/)) {
+            // This is a theory compound slot like "A1+TA1" - split it
             const individualSlots = slotGroup.split("+").map((s) => s.trim());
             console.log(
-              `🔍 Processing plus-separated slots in group: ${slotGroup} -> ${individualSlots.join(", ")}`
+              `🔍 Processing plus-separated theory slots: ${slotGroup} -> ${individualSlots.join(", ")}`
             );
 
             for (const individualSlot of individualSlots) {
@@ -1539,7 +1541,7 @@ exports.getStudentSlotTimetable = async (req, res) => {
               }
             }
           } else {
-            // Single slot in this group
+            // Single slot or lab compound slot (like "L9+L10") - keep as is
             const slotDetails = await db.query(
               `SELECT slot_day, slot_time FROM slot 
                WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
@@ -1560,13 +1562,14 @@ exports.getStudentSlotTimetable = async (req, res) => {
             }
           }
         }
-      } else if (registration.slot_name.includes("+")) {
+      } else if (registration.slot_name.includes("+") && !registration.slot_name.match(/^L\d+\+L\d+$/)) {
         // Handle plus-separated compound slots like "A1+TA1" (4-credit theory courses)
+        // Do NOT split lab compound slots like "L9+L10" as they are single 2-hour sessions
         const individualSlots = registration.slot_name
           .split("+")
           .map((s) => s.trim());
         console.log(
-          `🔍 Processing plus-separated compound slot: ${
+          `🔍 Processing plus-separated theory compound slot: ${
             registration.slot_name
           } -> ${individualSlots.join(", ")}`
         );
@@ -1990,9 +1993,10 @@ exports.getAdminStudentTimetable = async (req, res) => {
         const slotGroups = reg.slot_name.split(',');
         for (const slotGroup of slotGroups) {
           const trimmedGroup = slotGroup.trim();
-          // Check if this slot group also contains "+" (like "L9+L10")
-          if (trimmedGroup.includes('+')) {
-            // Further split by "+" for individual slots
+          // Check if this slot group contains "+" and is a theory slot (not a lab slot)
+          // Lab slots like "L9+L10" should NOT be split as they represent single 2-hour sessions
+          if (trimmedGroup.includes('+') && !trimmedGroup.match(/^L\d+\+L\d+$/)) {
+            // Further split by "+" for individual theory slots only
             const individualSlots = trimmedGroup.split('+').map((s) => s.trim());
             for (const individualSlot of individualSlots) {
               const slotDetails = await db.query(
@@ -2044,8 +2048,9 @@ exports.getAdminStudentTimetable = async (req, res) => {
             }
           }
         }
-      } else if (reg.slot_name && reg.slot_name.includes('+')) {
+      } else if (reg.slot_name && reg.slot_name.includes('+') && !reg.slot_name.match(/^L\d+\+L\d+$/)) {
         // Handle plus-separated compound slots like "A1+TA1" (4-credit theory courses)
+        // Do NOT split lab compound slots like "L9+L10" as they are single 2-hour sessions
         const individualSlots = reg.slot_name.split('+').map((s) => s.trim());
         for (const individualSlot of individualSlots) {
           const slotDetails = await db.query(
@@ -2106,9 +2111,10 @@ exports.getAdminStudentTimetable = async (req, res) => {
         const slotGroups = reg.slot_name.split(',');
         for (const slotGroup of slotGroups) {
           const trimmedGroup = slotGroup.trim();
-          // Check if this slot group also contains "+" (like "L9+L10")
-          if (trimmedGroup.includes('+')) {
-            // Further split by "+" for individual slots
+          // Check if this slot group contains "+" and is a theory slot (not a lab slot)
+          // Lab slots like "L9+L10" should NOT be split as they represent single 2-hour sessions
+          if (trimmedGroup.includes('+') && !trimmedGroup.match(/^L\d+\+L\d+$/)) {
+            // Further split by "+" for individual theory slots only
             const individualSlots = trimmedGroup.split('+').map((s) => s.trim());
             for (const individualSlot of individualSlots) {
               const slotDetails = await db.query(
@@ -2162,8 +2168,9 @@ exports.getAdminStudentTimetable = async (req, res) => {
             }
           }
         }
-      } else if (reg.slot_name && reg.slot_name.includes('+')) {
+      } else if (reg.slot_name && reg.slot_name.includes('+') && !reg.slot_name.match(/^L\d+\+L\d+$/)) {
         // Handle plus-separated compound slots like "A1+TA1" (4-credit theory courses)
+        // Do NOT split lab compound slots like "L9+L10" as they are single 2-hour sessions
         const individualSlots = reg.slot_name.split('+').map((s) => s.trim());
         for (const individualSlot of individualSlots) {
           const slotDetails = await db.query(

@@ -1594,7 +1594,8 @@ function generateEnhancedSummaryTable(allRegistrations) {
     courseMap.get(key).components.push({
       slot_name: reg.slot_name,
       venue: reg.venue,
-      component_type: reg.component_type
+      component_type: reg.component_type,
+      faculty_name: reg.faculty_name
     });
   });
 
@@ -1641,7 +1642,7 @@ function generateEnhancedSummaryTable(allRegistrations) {
           <td>${index === 0 ? course.course_type : ''}</td>
           <td>${comp.slot_name}</td>
           <td>${comp.venue}</td>
-          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.faculty_name || ''}</td>
           <td>${comp.component_type}</td>
           <td>${index === 0 ? '<span class="badge bg-success">Registered</span>' : ''}</td>
         </tr>
@@ -1661,7 +1662,7 @@ function generateEnhancedSummaryTable(allRegistrations) {
           <td>${index === 0 ? course.course_type : ''}</td>
           <td>${comp.slot_name}</td>
           <td>${comp.venue}</td>
-          <td>${index === 0 ? course.faculty_name : ''}</td>
+          <td>${comp.faculty_name || ''}</td>
           <td>${comp.component_type}</td>
           <td>${index === 0 ? '<span class="badge bg-danger">Withdrawn</span>' : ''}</td>
         </tr>
