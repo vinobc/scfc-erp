@@ -818,6 +818,11 @@ exports.getClassTimetable = async (req, res) => {
        ORDER BY fa.slot_day, fa.slot_time`,
       [venue, year, semesterType]
     );
+    
+    console.log(`🔍 Class timetable for ${venue}: Found ${allocationsResult.rows.length} allocations`);
+    if (allocationsResult.rows.length > 0) {
+      console.log('🔍 Sample allocation slot names:', allocationsResult.rows.slice(0, 3).map(a => a.slot_name));
+    }
 
     res.status(200).json({
       venue: venueDetails,

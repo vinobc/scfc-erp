@@ -2745,8 +2745,24 @@ function generateClassTimetable(venue, allocations, year, semester) {
       // Create allocation map
       const allocationMap = {};
       allocations.forEach((allocation) => {
-        const key = `${allocation.slot_day}-${allocation.slot_name}`;
-        allocationMap[key] = allocation;
+        // For T=4 combined slots like "A1+TA1", create entries for both the combined name and individual components
+        if (allocation.slot_name.includes('+') && !allocation.slot_name.includes(',') && !allocation.slot_name.startsWith('L')) {
+          // T=4 theory slot - create entries for both combined and individual slot names
+          const key = `${allocation.slot_day}-${allocation.slot_name}`;
+          allocationMap[key] = allocation;
+          
+          // Also create entries using the component slot names for lookup
+          const components = allocation.slot_name.split('+');
+          components.forEach(component => {
+            const componentKey = `${allocation.slot_day}-${component}`;
+            allocationMap[componentKey] = allocation;
+          });
+          console.log(`🔍 Created T=4 entries for ${allocation.slot_name} on ${allocation.slot_day}: component keys for ${components.join(', ')}`);
+        } else {
+          // Regular slot
+          const key = `${allocation.slot_day}-${allocation.slot_name}`;
+          allocationMap[key] = allocation;
+        }
       });
 
       // Use EXACT same logic as master timetable
