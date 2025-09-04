@@ -1497,13 +1497,76 @@ exports.getStudentSlotTimetable = async (req, res) => {
     const processedRegistrations = [];
 
     for (const registration of rawRegistrations.rows) {
+      // Check if slot contains comma (lab compound slots like "L9+L10,L29+L30")
       if (registration.slot_name.includes(",")) {
-        // Handle compound slots like "L9+L10,L29+L30"
-        const individualSlots = registration.slot_name
+        // Handle comma-separated compound slots like "L9+L10,L29+L30"
+        const slotGroups = registration.slot_name
           .split(",")
           .map((s) => s.trim());
         console.log(
-          `🔍 Processing compound slot: ${
+          `🔍 Processing comma-separated compound slot: ${
+            registration.slot_name
+          } -> ${slotGroups.join(", ")}`
+        );
+
+        for (const slotGroup of slotGroups) {
+          // Check if this slot group also contains "+" (like "L9+L10")
+          if (slotGroup.includes("+")) {
+            // Further split by "+" for individual slots
+            const individualSlots = slotGroup.split("+").map((s) => s.trim());
+            console.log(
+              `🔍 Processing plus-separated slots in group: ${slotGroup} -> ${individualSlots.join(", ")}`
+            );
+
+            for (const individualSlot of individualSlots) {
+              const slotDetails = await db.query(
+                `SELECT slot_day, slot_time FROM slot 
+                 WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+                [individualSlot, slot_year, semester_type]
+              );
+
+              if (slotDetails.rows.length > 0) {
+                slotDetails.rows.forEach((slotDetail) => {
+                  processedRegistrations.push({
+                    ...registration,
+                    slot_name: individualSlot,
+                    slot_day: slotDetail.slot_day,
+                    slot_time: slotDetail.slot_time,
+                  });
+                });
+              } else {
+                console.log(`⚠️ No slot details found for: ${individualSlot}`);
+              }
+            }
+          } else {
+            // Single slot in this group
+            const slotDetails = await db.query(
+              `SELECT slot_day, slot_time FROM slot 
+               WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+              [slotGroup, slot_year, semester_type]
+            );
+
+            if (slotDetails.rows.length > 0) {
+              slotDetails.rows.forEach((slotDetail) => {
+                processedRegistrations.push({
+                  ...registration,
+                  slot_name: slotGroup,
+                  slot_day: slotDetail.slot_day,
+                  slot_time: slotDetail.slot_time,
+                });
+              });
+            } else {
+              console.log(`⚠️ No slot details found for: ${slotGroup}`);
+            }
+          }
+        }
+      } else if (registration.slot_name.includes("+")) {
+        // Handle plus-separated compound slots like "A1+TA1" (4-credit theory courses)
+        const individualSlots = registration.slot_name
+          .split("+")
+          .map((s) => s.trim());
+        console.log(
+          `🔍 Processing plus-separated compound slot: ${
             registration.slot_name
           } -> ${individualSlots.join(", ")}`
         );
@@ -1921,28 +1984,88 @@ exports.getAdminStudentTimetable = async (req, res) => {
     const processedRegistrations = [];
     
     for (const reg of rawRegistrations.rows) {
+      // Check if slot contains comma (lab compound slots like "L9+L10,L29+L30")
       if (reg.slot_name && reg.slot_name.includes(',')) {
-        // Handle compound slots like "L9+L10,L29+L30"
+        // Handle comma-separated compound slots like "L9+L10,L29+L30"
         const slotGroups = reg.slot_name.split(',');
         for (const slotGroup of slotGroups) {
+          const trimmedGroup = slotGroup.trim();
+          // Check if this slot group also contains "+" (like "L9+L10")
+          if (trimmedGroup.includes('+')) {
+            // Further split by "+" for individual slots
+            const individualSlots = trimmedGroup.split('+').map((s) => s.trim());
+            for (const individualSlot of individualSlots) {
+              const slotDetails = await db.query(
+                `SELECT slot_day, slot_time FROM slot 
+                 WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+                [individualSlot, slot_year, semester_type]
+              );
+              
+              if (slotDetails.rows.length > 0) {
+                processedRegistrations.push({
+                  ...reg,
+                  slot_name: individualSlot,
+                  slot_day: slotDetails.rows[0].slot_day,
+                  slot_time: slotDetails.rows[0].slot_time
+                });
+              } else {
+                console.warn(`⚠️ No slot details found for: ${individualSlot}`);
+                processedRegistrations.push({
+                  ...reg,
+                  slot_name: individualSlot,
+                  slot_day: null,
+                  slot_time: null
+                });
+              }
+            }
+          } else {
+            // Single slot in this group
+            const slotDetails = await db.query(
+              `SELECT slot_day, slot_time FROM slot 
+               WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+              [trimmedGroup, slot_year, semester_type]
+            );
+            
+            if (slotDetails.rows.length > 0) {
+              processedRegistrations.push({
+                ...reg,
+                slot_name: trimmedGroup,
+                slot_day: slotDetails.rows[0].slot_day,
+                slot_time: slotDetails.rows[0].slot_time
+              });
+            } else {
+              console.warn(`⚠️ No slot details found for: ${trimmedGroup}`);
+              processedRegistrations.push({
+                ...reg,
+                slot_name: trimmedGroup,
+                slot_day: null,
+                slot_time: null
+              });
+            }
+          }
+        }
+      } else if (reg.slot_name && reg.slot_name.includes('+')) {
+        // Handle plus-separated compound slots like "A1+TA1" (4-credit theory courses)
+        const individualSlots = reg.slot_name.split('+').map((s) => s.trim());
+        for (const individualSlot of individualSlots) {
           const slotDetails = await db.query(
             `SELECT slot_day, slot_time FROM slot 
              WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
-            [slotGroup.trim(), slot_year, semester_type]
+            [individualSlot, slot_year, semester_type]
           );
           
           if (slotDetails.rows.length > 0) {
             processedRegistrations.push({
               ...reg,
-              slot_name: slotGroup.trim(),
+              slot_name: individualSlot,
               slot_day: slotDetails.rows[0].slot_day,
               slot_time: slotDetails.rows[0].slot_time
             });
           } else {
-            console.warn(`⚠️ No slot details found for: ${slotGroup.trim()}`);
+            console.warn(`⚠️ No slot details found for: ${individualSlot}`);
             processedRegistrations.push({
               ...reg,
-              slot_name: slotGroup.trim(),
+              slot_name: individualSlot,
               slot_day: null,
               slot_time: null
             });
@@ -1977,19 +2100,82 @@ exports.getAdminStudentTimetable = async (req, res) => {
     const processedAllRegistrations = [];
     
     for (const reg of allRegistrations.rows) {
+      // Check if slot contains comma (lab compound slots like "L9+L10,L29+L30")
       if (reg.slot_name && reg.slot_name.includes(',')) {
+        // Handle comma-separated compound slots like "L9+L10,L29+L30"
         const slotGroups = reg.slot_name.split(',');
         for (const slotGroup of slotGroups) {
+          const trimmedGroup = slotGroup.trim();
+          // Check if this slot group also contains "+" (like "L9+L10")
+          if (trimmedGroup.includes('+')) {
+            // Further split by "+" for individual slots
+            const individualSlots = trimmedGroup.split('+').map((s) => s.trim());
+            for (const individualSlot of individualSlots) {
+              const slotDetails = await db.query(
+                `SELECT slot_day, slot_time FROM slot 
+                 WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+                [individualSlot, slot_year, semester_type]
+              );
+              
+              if (slotDetails.rows.length > 0) {
+                processedAllRegistrations.push({
+                  ...reg,
+                  slot_name: individualSlot,
+                  slot_day: slotDetails.rows[0].slot_day,
+                  slot_time: slotDetails.rows[0].slot_time,
+                  status: reg.withdrawn ? 'withdrawn' : 'registered'
+                });
+              } else {
+                processedAllRegistrations.push({
+                  ...reg,
+                  slot_name: individualSlot,
+                  slot_day: null,
+                  slot_time: null,
+                  status: reg.withdrawn ? 'withdrawn' : 'registered'
+                });
+              }
+            }
+          } else {
+            // Single slot in this group
+            const slotDetails = await db.query(
+              `SELECT slot_day, slot_time FROM slot 
+               WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
+              [trimmedGroup, slot_year, semester_type]
+            );
+            
+            if (slotDetails.rows.length > 0) {
+              processedAllRegistrations.push({
+                ...reg,
+                slot_name: trimmedGroup,
+                slot_day: slotDetails.rows[0].slot_day,
+                slot_time: slotDetails.rows[0].slot_time,
+                status: reg.withdrawn ? 'withdrawn' : 'registered'
+              });
+            } else {
+              processedAllRegistrations.push({
+                ...reg,
+                slot_name: trimmedGroup,
+                slot_day: null,
+                slot_time: null,
+                status: reg.withdrawn ? 'withdrawn' : 'registered'
+              });
+            }
+          }
+        }
+      } else if (reg.slot_name && reg.slot_name.includes('+')) {
+        // Handle plus-separated compound slots like "A1+TA1" (4-credit theory courses)
+        const individualSlots = reg.slot_name.split('+').map((s) => s.trim());
+        for (const individualSlot of individualSlots) {
           const slotDetails = await db.query(
             `SELECT slot_day, slot_time FROM slot 
              WHERE slot_name = $1 AND slot_year = $2 AND semester_type = $3`,
-            [slotGroup.trim(), slot_year, semester_type]
+            [individualSlot, slot_year, semester_type]
           );
           
           if (slotDetails.rows.length > 0) {
             processedAllRegistrations.push({
               ...reg,
-              slot_name: slotGroup.trim(),
+              slot_name: individualSlot,
               slot_day: slotDetails.rows[0].slot_day,
               slot_time: slotDetails.rows[0].slot_time,
               status: reg.withdrawn ? 'withdrawn' : 'registered'
@@ -1997,7 +2183,7 @@ exports.getAdminStudentTimetable = async (req, res) => {
           } else {
             processedAllRegistrations.push({
               ...reg,
-              slot_name: slotGroup.trim(),
+              slot_name: individualSlot,
               slot_day: null,
               slot_time: null,
               status: reg.withdrawn ? 'withdrawn' : 'registered'
