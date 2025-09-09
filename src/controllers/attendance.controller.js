@@ -121,7 +121,7 @@ exports.getEnrolledStudents = async (req, res) => {
        AND sr.venue = $5 
        AND (sr.slot_name = $7 OR sr.slot_name LIKE '%' || $7 || '%')
        AND sr.withdrawn = false
-       ORDER BY sr.student_name`,
+       ORDER BY sr.enrollment_number`,
       [slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time, targetDate]
     );
 
@@ -193,7 +193,7 @@ exports.getAttendanceRecords = async (req, res) => {
        ${slot_day ? 'AND a.slot_day = $6' : ''}
        ${slot_name ? 'AND a.slot_name = $7' : ''}
        ${slot_time ? 'AND a.slot_time = $8' : ''}
-       ORDER BY a.attendance_date DESC, sr.student_name`,
+       ORDER BY a.attendance_date DESC, sr.enrollment_number`,
       [slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time].filter(p => p !== undefined)
     );
 
@@ -254,7 +254,7 @@ exports.getAttendanceReport = async (req, res) => {
            ELSE false 
          END as below_minimum
        FROM student_attendance
-       ORDER BY student_name`,
+       ORDER BY enrollment_number`,
       [slot_year, semester_type, course_code, employee_id, course.theory]
     );
 
@@ -318,7 +318,7 @@ exports.getAttendanceByDateRange = async (req, res) => {
          AND a.slot_year = sr.slot_year 
          AND a.semester_type = sr.semester_type
        ${whereClause}
-       ORDER BY a.attendance_date DESC, sr.student_name, a.slot_time`,
+       ORDER BY a.attendance_date DESC, sr.enrollment_number, a.slot_time`,
       params
     );
 
@@ -385,7 +385,7 @@ exports.getLowAttendanceStudents = async (req, res) => {
        SELECT *
        FROM student_attendance
        WHERE attendance_percentage < 75
-       ORDER BY attendance_percentage ASC, student_name`,
+       ORDER BY attendance_percentage ASC, enrollment_number`,
       [slot_year, semester_type, course_code, employee_id]
     );
 
