@@ -268,6 +268,8 @@ function setupNavigation() {
         targetPage = "create-faculty-allocation-page";
       } else if (targetId === "view-faculty-slot-link") {
         targetPage = "view-faculty-timetable-page";
+      } else if (targetId === "project-allocation-link") {
+        targetPage = "project-allocation-page";
       } else {
         targetPage = targetId.replace("-link", "-page");
       }
@@ -311,6 +313,14 @@ function setupNavigation() {
             showCreateFacultyAllocationPage();
           } else {
             console.error("❌ showCreateFacultyAllocationPage is not a function");
+          }
+        } else if (targetPage === "project-allocation-page") {
+          console.log("🎯 Navigating to project-allocation-page");
+          if (typeof initializeProjectAllocation === "function") {
+            console.log("✅ Calling initializeProjectAllocation");
+            initializeProjectAllocation();
+          } else {
+            console.error("❌ initializeProjectAllocation is not a function");
           }
         } else if (targetPage === "view-faculty-timetable-page") {
           console.log("🎯 Navigating to view-faculty-timetable-page");

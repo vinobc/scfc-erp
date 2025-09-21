@@ -403,7 +403,9 @@ function displayCourseOfferings(data) {
     return;
   }
 
-  const { course_info, offerings } = data;
+  // Handle both response formats (course vs course_info)
+  const { course, course_info: courseInfoFromData, offerings, courseType } = data;
+  const course_info = course || courseInfoFromData || data.course_info;
 
   // Find existing course details table and preserve it
   const existingTable = detailsContent.querySelector("table");
@@ -418,14 +420,75 @@ function displayCourseOfferings(data) {
     }
   }
 
-  // Check if this is a TEL course
+  // Check course type
   const isTELCourse =
     course_info.course_type === "TEL" ||
     (course_info.theory > 0 && course_info.practical > 0);
+  const isProjectCourse = courseType === "PRJ" || course_info.course_type === "PRJ";
 
   let offeringsTable = "";
 
-  if (isTELCourse) {
+  if (isProjectCourse) {
+    // Project Course: Show faculty coordinators without time slots
+    offeringsTable = `
+      <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-top: 20px;">
+        <h5 style="color: #007bff; margin-bottom: 15px;">📋 Step 4: Select Faculty Coordinator</h5>
+        
+        <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+          <h6 style="color: #155724; margin: 0 0 10px 0;">📚 Project Course Registration:</h6>
+          <ul style="margin: 0; color: #155724;">
+            <li>This is a project-based course with ${course_info.credits} credits</li>
+            <li>No fixed time slots or venue required</li>
+            <li>Multiple faculty may offer this project - choose your preferred coordinator</li>
+            <li>You can register with only one faculty coordinator per project course</li>
+          </ul>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #f8f9fa;">
+                <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Faculty Coordinator</th>
+                <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Available Seats</th>
+                <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${offerings
+                .map(
+                  (offering) => `
+                <tr>
+                  <td style="padding: 12px; border: 1px solid #ddd;">
+                    <strong>${offering.faculty_name}</strong><br>
+                    <small style="color: #666;">${offering.faculty_email || ''}</small>
+                  </td>
+                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
+                    ${offering.available_seats} / ${offering.max_students}
+                  </td>
+                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
+                    ${
+                      offering.available_seats > 0
+                        ? `<button onclick="registerForProjectCourse('${course_info.course_code}', ${offering.allocation_id || offering.employee_id}, '${offering.faculty_name}')" 
+                                 style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;">
+                            <i class="fas fa-plus"></i> Register
+                          </button>
+                          <button onclick="withdrawProjectCourse('${course_info.course_code}', ${offering.allocation_id || offering.employee_id}, '${offering.faculty_name}')" 
+                                 style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            <i class="fas fa-trash"></i> Delete
+                          </button>`
+                        : `<span style="color: #dc3545;">Full</span>`
+                    }
+                  </td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } else if (isTELCourse) {
     // TEL Course: Show theory and practical sections separately
     const theoryOfferings = offerings.filter((o) => o.course_type === "T");
     const practicalOfferings = offerings.filter((o) => o.course_type === "P");
@@ -922,6 +985,66 @@ function updateTELSelection() {
 }
 
 // Fixed Register TEL Course (both components) with pre-validation
+// Register for project course
+async function registerForProjectCourse(courseCode, allocationId, facultyName) {
+  try {
+    // Get semester info
+    const semesterSelect = document.getElementById("working-semester-select");
+    if (!semesterSelect || !semesterSelect.value) {
+      showAlert("Please select a semester first", "warning");
+      return;
+    }
+
+    const [year, type] = semesterSelect.value.split("|");
+
+    // Show confirmation
+    const confirmMessage = `Register for ${courseCode} under ${facultyName}?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // Send registration request
+    const response = await fetch(
+      `${window.API_URL}/course-registration/register`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          course_code: courseCode,
+          slot_year: year,
+          semester_type: type,
+          allocation_id: allocationId,
+          faculty_name: facultyName,
+          venue: "N/A", // Project courses don't have venues
+          slot_name: "PROJECT" // Special identifier for project courses
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (response.ok) {
+      showAlert(
+        `✅ Successfully registered for ${courseCode} under ${facultyName}`,
+        "success"
+      );
+      
+      // Reload the page to show updated registrations
+      setTimeout(() => {
+        loadWorkingSemesterData(semesterSelect.value);
+      }, 1500);
+    } else {
+      showAlert(result.message || "Registration failed", "danger");
+    }
+  } catch (error) {
+    console.error("Project registration error:", error);
+    showAlert("Error during project registration", "danger");
+  }
+}
+
 async function registerTELCourse(courseCode) {
   const theorySelection = document.querySelector(
     'input[name="theory-selection"]:checked'
@@ -1271,7 +1394,17 @@ async function loadStudentTimetable() {
     }
 
     const data = await response.json();
-    generateStudentTimetable(data.student, data.registrations, data.allRegistrations || data.registrations, year, type);
+    console.log("📥 Raw API response:", data);
+    console.log("📥 Project registrations from API:", data.projectRegistrations);
+    
+    generateStudentTimetable(
+      data.student, 
+      data.registrations, 
+      data.allRegistrations || data.registrations, 
+      year, 
+      type,
+      data.projectRegistrations || []
+    );
   } catch (error) {
     console.error("Error loading student timetable:", error);
     showAlert(`Error loading timetable: ${error.message}`, "danger");
@@ -1279,7 +1412,7 @@ async function loadStudentTimetable() {
 }
 
 // Generate student timetable (based on faculty timetable logic)
-function generateStudentTimetable(student, registrations, allRegistrations, year, semester) {
+function generateStudentTimetable(student, registrations, allRegistrations, year, semester, projectRegistrations = []) {
   const contentDiv = document.getElementById("student-timetable-content");
   if (!contentDiv) {
     console.error("Timetable content div not found");
@@ -1531,8 +1664,8 @@ function generateStudentTimetable(student, registrations, allRegistrations, year
 
       tableHtml += "</tbody></table>";
 
-      // Generate enhanced summary table with all course types
-      let summaryTable = generateEnhancedSummaryTable(allRegistrations);
+      // Generate enhanced summary table with all course types including projects
+      let summaryTable = generateEnhancedSummaryTable(allRegistrations, projectRegistrations);
 
       // Update content
       contentDiv.innerHTML = `
@@ -1551,8 +1684,16 @@ function generateStudentTimetable(student, registrations, allRegistrations, year
 }
 
 // Generate enhanced summary table with all course types
-function generateEnhancedSummaryTable(allRegistrations) {
-  if (!allRegistrations || allRegistrations.length === 0) {
+function generateEnhancedSummaryTable(allRegistrations, projectRegistrations = []) {
+  // Combine all registrations and project registrations
+  const combinedRegistrations = [...(allRegistrations || []), ...(projectRegistrations || [])];
+  
+  console.log("📊 Summary table debug:");
+  console.log("allRegistrations:", allRegistrations);
+  console.log("projectRegistrations:", projectRegistrations);
+  console.log("combinedRegistrations:", combinedRegistrations);
+  
+  if (combinedRegistrations.length === 0) {
     return `
       <div class="mt-4">
         <h6 style="color: #007bff; margin-bottom: 15px;">📋 Course Registration Summary</h6>
@@ -1566,7 +1707,7 @@ function generateEnhancedSummaryTable(allRegistrations) {
   let totalRegisteredCredits = 0;
   let totalWithdrawnCredits = 0;
 
-  allRegistrations.forEach((reg) => {
+  combinedRegistrations.forEach((reg) => {
     const key = reg.course_code;
     
     if (!courseMap.has(key)) {
@@ -1698,6 +1839,62 @@ function generateEnhancedSummaryTable(allRegistrations) {
   return tableHtml;
 }
 
+// Withdraw from project course
+async function withdrawProjectCourse(courseCode, allocationId, facultyName) {
+  try {
+    // Get semester info
+    const semesterSelect = document.getElementById("working-semester-select");
+    if (!semesterSelect || !semesterSelect.value) {
+      showAlert("Please select a semester first", "warning");
+      return;
+    }
+
+    const [year, type] = semesterSelect.value.split("|");
+
+    // Show confirmation
+    const confirmMessage = `Are you sure you want to delete your registration for ${courseCode} under ${facultyName}?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // Send deletion request (not withdrawal) for project courses
+    const response = await fetch(
+      `${window.API_URL}/course-registration/delete`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          course_code: courseCode,
+          slot_year: year,
+          semester_type: type,
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (response.ok) {
+      showAlert(
+        `✅ Successfully deregistered from ${courseCode}`,
+        "success"
+      );
+      
+      // Reload the page to show updated registrations
+      setTimeout(() => {
+        loadWorkingSemesterData(semesterSelect.value);
+      }, 1500);
+    } else {
+      showAlert(result.message || "Failed to deregister from course", "danger");
+    }
+  } catch (error) {
+    console.error("Error deregistering from project:", error);
+    showAlert("Error during deregistration", "danger");
+  }
+}
+
 // Make functions available globally
 window.initializeCourseRegistration = initializeCourseRegistration;
 window.selectCourse = selectCourse;
@@ -1710,3 +1907,5 @@ window.loadCreditSummary = loadCreditSummary;
 window.toggleStudentTimetable = toggleStudentTimetable;
 window.loadStudentTimetable = loadStudentTimetable;
 window.refreshTimetableIfVisible = refreshTimetableIfVisible;
+window.registerForProjectCourse = registerForProjectCourse;
+window.withdrawProjectCourse = withdrawProjectCourse;
