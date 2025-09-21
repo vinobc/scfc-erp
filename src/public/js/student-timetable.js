@@ -1,10 +1,19 @@
 // Standalone Student Timetable Module
+console.log("📚 Loading student-timetable.js module...");
 let availableSemesters = [];
 
 // Initialize standalone timetable functionality
 function initializeStandaloneTimetable() {
   console.log("🚀 Initializing standalone student timetable...");
-
+  
+  // Check if container exists
+  const container = document.getElementById("standalone-timetable-container");
+  if (!container) {
+    console.error("❌ standalone-timetable-container not found!");
+    return;
+  }
+  
+  console.log("✅ Container found, loading semesters...");
   loadAvailableSemesters();
 }
 
@@ -16,7 +25,10 @@ async function loadAvailableSemesters() {
     const response = await fetch(
       `${window.API_URL}/course-registration/my-semesters`,
       {
-        headers: { "x-access-token": localStorage.getItem("token") },
+        headers: { 
+          "Authorization": `Bearer ${localStorage.getItem("token")}`,
+          "x-access-token": localStorage.getItem("token")
+        },
       }
     );
 
@@ -33,7 +45,23 @@ async function loadAvailableSemesters() {
     displaySemesterSelection();
   } catch (error) {
     console.error("Error loading semesters:", error);
-    showTimetableError(`Error loading semesters: ${error.message}`);
+    // Show error in the UI
+    const container = document.getElementById("standalone-timetable-container");
+    if (container) {
+      container.innerHTML = `
+        <div class="alert alert-danger" style="margin: 20px;">
+          <h5>❌ Error Loading Timetable</h5>
+          <p>${error.message}</p>
+          <details>
+            <summary>Technical Details</summary>
+            <pre>${error.stack || error}</pre>
+          </details>
+          <button class="btn btn-primary mt-3" onclick="initializeStandaloneTimetable()">
+            🔄 Try Again
+          </button>
+        </div>
+      `;
+    }
   }
 }
 
@@ -138,7 +166,10 @@ async function loadSelectedTimetable() {
         year
       )}&semester_type=${encodeURIComponent(type)}`,
       {
-        headers: { "x-access-token": localStorage.getItem("token") },
+        headers: { 
+          "Authorization": `Bearer ${localStorage.getItem("token")}`,
+          "x-access-token": localStorage.getItem("token")
+        },
       }
     );
 
@@ -147,9 +178,28 @@ async function loadSelectedTimetable() {
     }
 
     const data = await response.json();
+    
+    console.log("📥 Full API response:", data);
+    console.log("📥 Project registrations from API:", data.projectRegistrations);
+    console.log("📥 All registrations from API:", data.allRegistrations);
 
-    if (data.registrations && data.registrations.length > 0) {
-      generateStandaloneTimetable(data.student, data.registrations, data.allRegistrations || data.registrations, year, type);
+    // Check for both regular and project registrations
+    const hasRegularCourses = data.registrations && data.registrations.length > 0;
+    const hasProjectCourses = data.projectRegistrations && data.projectRegistrations.length > 0;
+
+    if (hasRegularCourses || hasProjectCourses) {
+      console.log("🚀 Calling generateStandaloneTimetable with:", {
+        projectRegistrations: data.projectRegistrations || [],
+        allRegistrations: data.allRegistrations || []
+      });
+      generateStandaloneTimetable(
+        data.student, 
+        data.registrations || [], 
+        data.allRegistrations || data.registrations || [], 
+        year, 
+        type,
+        data.projectRegistrations || []
+      );
     } else {
       showNoRegistrationsMessage(year, type);
     }
@@ -181,12 +231,16 @@ function showNoRegistrationsMessage(year, semester) {
 }
 
 // Generate standalone timetable (extracted from course-registration.js)
-function generateStandaloneTimetable(student, registrations, allRegistrations, year, semester) {
+function generateStandaloneTimetable(student, registrations, allRegistrations, year, semester, projectRegistrations = []) {
   const displayArea = document.getElementById("standalone-timetable-display");
   if (!displayArea) {
     console.error("Timetable display area not found");
     return;
   }
+
+  // Store projectRegistrations so it's accessible in the promise chain
+  const projectRegs = projectRegistrations || [];
+  console.log("📦 Project registrations received in generateStandaloneTimetable:", projectRegs);
 
   // Show loading while building timetable
   displayArea.innerHTML = `
@@ -265,7 +319,8 @@ function generateStandaloneTimetable(student, registrations, allRegistrations, y
         slotMap,
         allocationMap
       );
-      let summaryTable = generateEnhancedSummaryTable(allRegistrations);
+      console.log("📊 Passing project registrations to summary table:", projectRegs);
+      let summaryTable = generateEnhancedSummaryTable(allRegistrations, projectRegs);
 
       // Update display area
       displayArea.innerHTML = `
@@ -445,8 +500,16 @@ function generateTimetableHTML(days, timeSlots, slotMap, allocationMap) {
 }
 
 // Generate enhanced summary table with all course types
-function generateEnhancedSummaryTable(allRegistrations) {
-  if (!allRegistrations || allRegistrations.length === 0) {
+function generateEnhancedSummaryTable(allRegistrations, projectRegistrations = []) {
+  console.log("📊 Summary table debug:");
+  console.log("allRegistrations:", allRegistrations);
+  console.log("projectRegistrations:", projectRegistrations);
+  
+  // Combine all registrations and project registrations into one array
+  const combinedRegistrations = [...(allRegistrations || []), ...(projectRegistrations || [])];
+  console.log("combinedRegistrations:", combinedRegistrations);
+  
+  if (combinedRegistrations.length === 0) {
     return `
       <div class="mt-4">
         <h6 style="color: #007bff; margin-bottom: 15px;">📋 Course Registration Summary</h6>
@@ -460,7 +523,7 @@ function generateEnhancedSummaryTable(allRegistrations) {
   let totalRegisteredCredits = 0;
   let totalWithdrawnCredits = 0;
 
-  allRegistrations.forEach((reg) => {
+  combinedRegistrations.forEach((reg) => {
     const key = reg.course_code;
     
     if (!courseMap.has(key)) {
@@ -496,6 +559,10 @@ function generateEnhancedSummaryTable(allRegistrations) {
   const courses = Array.from(courseMap.values());
   const registeredCourses = courses.filter(course => !course.withdrawn);
   const withdrawnCourses = courses.filter(course => course.withdrawn);
+  
+  // Separate project courses from regular courses
+  const projectCourses = registeredCourses.filter(course => course.course_type === 'PRJ');
+  const regularCourses = registeredCourses.filter(course => course.course_type !== 'PRJ');
 
   let tableHtml = `
     <div class="mt-4">
@@ -521,8 +588,8 @@ function generateEnhancedSummaryTable(allRegistrations) {
 
   let slNo = 1;
 
-  // Display registered courses
-  registeredCourses.forEach((course) => {
+  // Display regular courses
+  regularCourses.forEach((course) => {
     const isBackendCourse = course.theory === 0 && course.practical === 0;
     const rowClass = isBackendCourse ? 'table-info' : 'table-success';
     
@@ -542,6 +609,24 @@ function generateEnhancedSummaryTable(allRegistrations) {
         </tr>
       `;
     });
+  });
+
+  // Display project courses
+  projectCourses.forEach((course) => {
+    tableHtml += `
+      <tr class="table-warning">
+        <td>${slNo++}</td>
+        <td>${course.course_code}</td>
+        <td>${course.course_name}</td>
+        <td>${course.credits}</td>
+        <td>${course.course_type}</td>
+        <td>PROJECT</td>
+        <td>N/A</td>
+        <td>${course.faculty_name || 'TBA'}</td>
+        <td>PROJECT</td>
+        <td><span class="badge bg-success">Registered</span></td>
+      </tr>
+    `;
   });
 
   // Display withdrawn courses
@@ -564,26 +649,31 @@ function generateEnhancedSummaryTable(allRegistrations) {
     });
   });
 
-  // Add summary row
   tableHtml += `
           </tbody>
-          <tfoot class="table-dark">
-            <tr>
-              <th colspan="3">Credits Registered before Withdrawal:</th>
-              <th>${totalRegisteredCredits + totalWithdrawnCredits}</th>
-              <th colspan="6"></th>
+        </table>
+      </div>
+    `;
+  
+  // Add summary section with credit totals
+  tableHtml += `
+      <div class="mt-4">
+        <h6 style="color: #007bff; margin-bottom: 15px;">📊 Credit Summary</h6>
+        <table class="table table-bordered">
+          <tbody>
+            <tr class="table-secondary">
+              <th>Credits Registered before Withdrawal:</th>
+              <td><strong>${totalRegisteredCredits + totalWithdrawnCredits}</strong></td>
             </tr>
-            <tr>
-              <th colspan="3">Credits Withdrawn:</th>
-              <th>${totalWithdrawnCredits.toString().padStart(2, '0')}</th>
-              <th colspan="6"></th>
+            <tr class="table-warning">
+              <th>Credits Withdrawn:</th>
+              <td><strong>${totalWithdrawnCredits}</strong></td>
             </tr>
-            <tr>
-              <th colspan="3">Credits Registered after Withdrawal:</th>
-              <th>${totalRegisteredCredits}</th>
-              <th colspan="6"></th>
+            <tr class="table-success">
+              <th>Credits Registered after Withdrawal:</th>
+              <td><strong>${totalRegisteredCredits}</strong></td>
             </tr>
-          </tfoot>
+          </tbody>
         </table>
       </div>
     </div>
@@ -685,3 +775,6 @@ function showTimetableAlert(message, type = "info") {
 // Make functions available globally
 window.initializeStandaloneTimetable = initializeStandaloneTimetable;
 window.loadSelectedTimetable = loadSelectedTimetable;
+
+console.log("✅ student-timetable.js loaded successfully");
+console.log("✅ initializeStandaloneTimetable is now available on window:", typeof window.initializeStandaloneTimetable);

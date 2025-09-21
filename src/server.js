@@ -23,6 +23,7 @@ const userRoutes = require("./routes/user.routes");
 const studentAuthRoutes = require("./routes/student-auth.routes");
 const systemConfigRoutes = require("./routes/system-config.routes");
 const attendanceRoutes = require("./routes/attendance.routes");
+const projectAllocationRoutes = require("./routes/project-allocation.routes");
 
 // Initialize express app
 const app = express();
@@ -97,6 +98,8 @@ app.use(
 app.use("/api/system-config", systemConfigRoutes);
 console.log("Registering attendance routes at /api/attendance");
 app.use("/api/attendance", attendanceRoutes);
+console.log("Registering project allocation routes at /api/project-allocations");
+app.use("/api/project-allocations", projectAllocationRoutes);
 
 // Root route
 app.get("/", (req, res) => {

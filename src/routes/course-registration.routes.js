@@ -90,11 +90,10 @@ router.get(
   courseRegistrationController.getStudentRegistrationSummary
 );
 
-// Get student slot timetable
+// Get student slot timetable (for viewing, should always be available)
 router.get(
   "/student-timetable",
   verifyToken,
-  checkRegistrationEnabled,
   courseRegistrationController.getStudentSlotTimetable
 );
 

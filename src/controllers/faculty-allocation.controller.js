@@ -62,7 +62,23 @@ exports.createFacultyAllocation = async (req, res) => {
       slot_time,
     } = req.body;
 
-    // Validate required fields
+    // Check if this is a project course
+    const courseCheck = await db.query(
+      `SELECT course_type FROM course WHERE course_code = $1`,
+      [course_code]
+    );
+
+    if (courseCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    if (courseCheck.rows[0].course_type === 'PRJ') {
+      return res.status(400).json({ 
+        message: "This is a project course. Please use the project allocation interface instead." 
+      });
+    }
+
+    // Validate required fields for regular courses
     if (
       !slot_year ||
       !semester_type ||

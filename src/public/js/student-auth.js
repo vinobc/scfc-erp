@@ -406,8 +406,28 @@ function showStudentPage(pageType) {
       }
 
       // Initialize standalone timetable functionality
+      console.log("🔍 Checking for initializeStandaloneTimetable function...");
+      console.log("Type of initializeStandaloneTimetable:", typeof initializeStandaloneTimetable);
+      console.log("Window.initializeStandaloneTimetable:", typeof window.initializeStandaloneTimetable);
+      
       if (typeof initializeStandaloneTimetable === "function") {
+        console.log("✅ Function found, calling it...");
         initializeStandaloneTimetable();
+      } else if (typeof window.initializeStandaloneTimetable === "function") {
+        console.log("✅ Function found on window, calling it...");
+        window.initializeStandaloneTimetable();
+      } else {
+        console.error("❌ initializeStandaloneTimetable function not found!");
+        // Try again after a short delay in case scripts are still loading
+        setTimeout(() => {
+          console.log("🔄 Retrying after delay...");
+          if (typeof window.initializeStandaloneTimetable === "function") {
+            console.log("✅ Function found after delay, calling it...");
+            window.initializeStandaloneTimetable();
+          } else {
+            console.error("❌ Function still not available after delay!");
+          }
+        }, 1000);
       }
       break;
 

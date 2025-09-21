@@ -205,6 +205,12 @@
                     </ul>
                   </li>
                   <li class="nav-item">
+                    <a class="nav-link" href="#" id="project-allocation-link">
+                      <i class="fas fa-project-diagram me-2"></i>
+                      Project Allocation
+                    </a>
+                  </li>
+                  <li class="nav-item">
                     <a class="nav-link" href="#" id="view-class-slot-link">
                       <i class="fas fa-building me-2"></i>
                       Class Slot Timetable
@@ -1068,6 +1074,54 @@
                     <tr>
                       <td colspan="10" class="text-center">
                         Loading faculty allocations...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Project Allocation Page -->
+            <div id="project-allocation-page" class="content-page">
+              <div class="d-flex justify-content-between mb-4">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  id="add-project-allocation-btn"
+                >
+                  <i class="fas fa-plus"></i> Add Project Allocation
+                </button>
+                <div class="d-flex">
+                  <select class="form-select me-2" id="project-allocation-filter-year">
+                    <option value="">All Years</option>
+                  </select>
+                  <select class="form-select me-2" id="project-allocation-filter-semester">
+                    <option value="">All Semesters</option>
+                    <option value="FALL">Fall</option>
+                    <option value="WINTER">Winter</option>
+                    <option value="SUMMER">Summer</option>
+                  </select>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-striped" id="project-allocation-table">
+                  <thead>
+                    <tr>
+                      <th>Course Code</th>
+                      <th>Course Name</th>
+                      <th>Credits</th>
+                      <th>Faculty</th>
+                      <th>Max Students</th>
+                      <th>Current Students</th>
+                      <th>Year</th>
+                      <th>Semester</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="project-allocation-table-body">
+                    <tr>
+                      <td colspan="9" class="text-center">
+                        Loading project allocations...
                       </td>
                     </tr>
                   </tbody>
@@ -4336,6 +4390,132 @@
       </div>
     </div>
 
+    <!-- Project Allocation Modal -->
+    <div
+      class="modal fade"
+      id="projectAllocationModal"
+      tabindex="-1"
+      aria-labelledby="projectAllocationModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="projectAllocationModalLabel">
+              Add Project Allocation
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="project-allocation-form">
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="project-allocation-year" class="form-label">
+                    Academic Year *
+                  </label>
+                  <select
+                    class="form-select"
+                    id="project-allocation-year"
+                    required
+                  >
+                    <option value="">Select Year</option>
+                  </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label for="project-allocation-semester" class="form-label">
+                    Semester Type *
+                  </label>
+                  <select
+                    class="form-select"
+                    id="project-allocation-semester"
+                    required
+                  >
+                    <option value="">Select Semester</option>
+                    <option value="FALL">Fall</option>
+                    <option value="WINTER">Winter</option>
+                    <option value="SUMMER">Summer</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="project-allocation-course" class="form-label">
+                    Project Course *
+                  </label>
+                  <select
+                    class="form-select"
+                    id="project-allocation-course"
+                    required
+                  >
+                    <option value="">Select Project Course</option>
+                  </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Course Details</label>
+                  <div id="project-course-details" class="form-control-plaintext">
+                    <span class="text-muted">Select a course to view details</span>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="project-allocation-faculty" class="form-label">
+                    Faculty Coordinator *
+                  </label>
+                  <select
+                    class="form-select"
+                    id="project-allocation-faculty"
+                    required
+                  >
+                    <option value="">Select Faculty</option>
+                  </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label for="project-allocation-max-students" class="form-label">
+                    Max Students *
+                  </label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="project-allocation-max-students"
+                    min="1"
+                    max="100"
+                    value="30"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>Note:</strong> Project courses do not require venue or time slot allocation. Students will work independently under faculty supervision.
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="save-project-allocation-btn"
+            >
+              Save Allocation
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Change Password Modal -->
     <div
       class="modal fade"
@@ -4595,7 +4775,6 @@
     </script>
     <script src="js/main.js"></script>
     <script src="js/auth.js"></script>
-    <script src="js/student-auth.js"></script>
     <script src="js/schools.js"></script>
     <script src="js/semesters.js"></script>
     <script src="js/programs.js"></script>
@@ -4605,6 +4784,7 @@
     <script src="js/students.js"></script>
     <script src="js/slots.js"></script>
     <script src="js/faculty-allocation.js"></script>
+    <script src="js/project-allocation.js"></script>
     <script src="js/timetable-coordinator.js"></script>
     <script src="js/users.js"></script>
     <script src="js/password-change.js"></script>

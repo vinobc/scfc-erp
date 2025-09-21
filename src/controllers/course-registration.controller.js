@@ -36,12 +36,25 @@ exports.getCoursesForSemester = async (req, res) => {
       });
     }
 
+    // Get both regular and project courses
     const result = await db.query(
-      `SELECT DISTINCT fa.course_code, c.course_name
-       FROM faculty_allocation fa
-       JOIN course c ON fa.course_code = c.course_code
-       WHERE fa.slot_year = $1 AND fa.semester_type = $2
-       ORDER BY fa.course_code`,
+      `SELECT DISTINCT course_code, course_name, course_type
+       FROM (
+         -- Regular courses from faculty_allocation
+         SELECT DISTINCT fa.course_code, c.course_name, c.course_type
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2
+         
+         UNION
+         
+         -- Project courses from project_allocation
+         SELECT DISTINCT pa.course_code, c.course_name, c.course_type
+         FROM project_allocation pa
+         JOIN course c ON pa.course_code = c.course_code
+         WHERE pa.slot_year = $1 AND pa.semester_type = $2 AND pa.is_active = true
+       ) AS all_courses
+       ORDER BY course_code`,
       [slot_year, semester_type]
     );
 
@@ -64,7 +77,7 @@ exports.getCourseDetails = async (req, res) => {
     }
 
     const result = await db.query(
-      `SELECT course_code, course_name, theory, practical, credits
+      `SELECT course_code, course_name, theory, practical, credits, course_type
        FROM course 
        WHERE course_code = $1`,
       [course_code]
@@ -144,9 +157,9 @@ exports.getCourseOfferings = async (req, res) => {
       });
     }
 
-    // First, get course details to determine T, P, C values
+    // First, get course details to determine T, P, C values and course type
     const courseResult = await db.query(
-      `SELECT course_code, course_name, theory, practical, credits
+      `SELECT course_code, course_name, theory, practical, credits, course_type
        FROM course 
        WHERE course_code = $1`,
       [course_code]
@@ -157,7 +170,7 @@ exports.getCourseOfferings = async (req, res) => {
     }
 
     const courseData = courseResult.rows[0];
-    const { theory, practical } = courseData;
+    const { theory, practical, course_type: dbCourseType } = courseData;
 
     // Determine course type
     const getCourseType = (t, p) => {
@@ -168,6 +181,46 @@ exports.getCourseOfferings = async (req, res) => {
     };
 
     const courseType = getCourseType(theory, practical);
+
+    // Handle project courses differently
+    if (dbCourseType === 'PRJ') {
+      const projectResult = await db.query(
+        `SELECT 
+          pa.id,
+          pa.employee_id,
+          f.name as faculty_name,
+          f.email as faculty_email,
+          pa.max_students,
+          pa.current_students,
+          (pa.max_students - pa.current_students) as available_seats
+         FROM project_allocation pa
+         JOIN faculty f ON pa.employee_id = f.employee_id
+         WHERE pa.course_code = $1
+           AND pa.slot_year = $2
+           AND pa.semester_type = $3
+           AND pa.is_active = true
+         ORDER BY f.name`,
+        [course_code, slot_year, semester_type]
+      );
+
+      return res.status(200).json({
+        course: {
+          ...courseData,
+          course_type: 'PRJ'  // Ensure course_type is included
+        },
+        courseType: 'PRJ',
+        offerings: projectResult.rows.map(row => ({
+          type: 'project',
+          faculty_name: row.faculty_name,
+          faculty_email: row.faculty_email,
+          employee_id: row.employee_id,
+          max_students: row.max_students,
+          current_students: row.current_students,
+          available_seats: row.available_seats,
+          allocation_id: row.id
+        }))
+      });
+    }
 
     // Get all faculty allocations for this course with actual seat availability
     const allocationsResult = await db.query(
@@ -915,26 +968,49 @@ exports.registerCourseOffering = async (req, res) => {
       semester_type,
       venue,
       faculty_name,
+      allocation_id,  // For project courses
+      employee_id,    // For project courses
     } = req.body;
     const userId = req.userId; // FIXED: Use req.userId instead of req.user.id
 
     console.log(
-      `🎯 Registration request: ${course_code} - ${slot_name} by user ${userId}`
+      `🎯 Registration request: ${course_code} - ${slot_name || 'PROJECT'} by user ${userId}`
     );
 
-    // Validate required fields
-    if (
-      !course_code ||
-      !slot_name ||
-      !slot_year ||
-      !semester_type ||
-      !venue ||
-      !faculty_name
-    ) {
-      return res.status(400).json({
-        message:
-          "Missing required fields: course_code, slot_name, slot_year, semester_type, venue, faculty_name",
-      });
+    // Get course details first to check if it's a project course
+    const courseCheckResult = await db.query(
+      `SELECT course_type FROM course WHERE course_code = $1`,
+      [course_code]
+    );
+
+    if (courseCheckResult.rows.length === 0) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const isProjectCourse = courseCheckResult.rows[0].course_type === 'PRJ';
+
+    // Different validation for project courses
+    if (isProjectCourse) {
+      if (!course_code || !slot_year || !semester_type || (!allocation_id && !employee_id)) {
+        return res.status(400).json({
+          message: "Missing required fields for project course: course_code, slot_year, semester_type, and either allocation_id or employee_id",
+        });
+      }
+    } else {
+      // Regular course validation
+      if (
+        !course_code ||
+        !slot_name ||
+        !slot_year ||
+        !semester_type ||
+        !venue ||
+        !faculty_name
+      ) {
+        return res.status(400).json({
+          message:
+            "Missing required fields: course_code, slot_name, slot_year, semester_type, venue, faculty_name",
+        });
+      }
     }
 
     // Get student details
@@ -954,7 +1030,124 @@ exports.registerCourseOffering = async (req, res) => {
 
     const course = courseResult.rows[0];
 
-    // Extract theory and practical values
+    // Handle project course registration separately
+    if (isProjectCourse) {
+      // Check if already registered for this project
+      const existingReg = await db.query(
+        `SELECT COUNT(*) as count 
+         FROM student_registrations 
+         WHERE enrollment_number = $1 
+           AND slot_year = $2 
+           AND semester_type = $3 
+           AND course_code = $4`,
+        [student.enrollment_number, slot_year, semester_type, course_code]
+      );
+
+      if (parseInt(existingReg.rows[0].count) > 0) {
+        return res.status(400).json({
+          message: `You are already registered for project ${course_code}`,
+        });
+      }
+
+      // Get faculty details from project allocation
+      let facultyInfo;
+      if (allocation_id) {
+        const allocResult = await db.query(
+          `SELECT pa.*, f.name as faculty_name 
+           FROM project_allocation pa
+           JOIN faculty f ON pa.employee_id = f.employee_id
+           WHERE pa.id = $1 AND pa.is_active = true`,
+          [allocation_id]
+        );
+        if (allocResult.rows.length === 0) {
+          return res.status(404).json({ message: "Project allocation not found" });
+        }
+        facultyInfo = allocResult.rows[0];
+      } else {
+        // Get faculty by employee_id
+        const facultyResult = await db.query(
+          `SELECT f.name as faculty_name, pa.* 
+           FROM project_allocation pa
+           JOIN faculty f ON pa.employee_id = f.employee_id
+           WHERE pa.employee_id = $1 
+             AND pa.course_code = $2
+             AND pa.slot_year = $3
+             AND pa.semester_type = $4
+             AND pa.is_active = true`,
+          [employee_id, course_code, slot_year, semester_type]
+        );
+        if (facultyResult.rows.length === 0) {
+          return res.status(404).json({ message: "Project allocation not found for this faculty" });
+        }
+        facultyInfo = facultyResult.rows[0];
+      }
+
+      // Check if faculty has capacity
+      if (facultyInfo.current_students >= facultyInfo.max_students) {
+        return res.status(400).json({
+          message: `Faculty ${facultyInfo.faculty_name} has reached maximum capacity for this project`,
+        });
+      }
+
+      // Begin transaction
+      await db.query('BEGIN');
+
+      try {
+        // Register the student for the project
+        await db.query(
+          `INSERT INTO student_registrations 
+           (enrollment_number, student_name, program_code, year_admitted,
+            slot_year, semester_type, course_code, course_name, 
+            theory, practical, credits, course_type,
+            slot_name, venue, faculty_name, component_type)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          [
+            student.enrollment_number,
+            student.student_name,
+            student.program_code,
+            student.year_admitted,
+            slot_year,
+            semester_type,
+            course_code,
+            course.course_name,
+            0, // theory
+            0, // practical
+            course.credits,
+            'PRJ',
+            'PROJECT', // slot_name for projects
+            'N/A', // venue for projects
+            facultyInfo.faculty_name,
+            'SINGLE'
+          ]
+        );
+
+        // Update current_students count in project_allocation
+        await db.query(
+          `UPDATE project_allocation 
+           SET current_students = current_students + 1,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [facultyInfo.id || allocation_id]
+        );
+
+        await db.query('COMMIT');
+
+        return res.status(201).json({
+          message: `Successfully registered for project ${course_code} under ${facultyInfo.faculty_name}`,
+          registration: {
+            course_code,
+            course_name: course.course_name,
+            faculty_name: facultyInfo.faculty_name,
+            credits: course.credits,
+          }
+        });
+      } catch (error) {
+        await db.query('ROLLBACK');
+        throw error;
+      }
+    }
+
+    // Extract theory and practical values for regular courses
     const { theory, practical } = course;
 
     // Determine component type first
@@ -1343,6 +1536,10 @@ exports.deleteCourseOffering = async (req, res) => {
       });
     }
 
+    // Check if this is a project course
+    const firstRegistration = existingRegistrations.rows[0];
+    const isProjectCourse = firstRegistration.course_type === 'PRJ';
+    
     // For TEL courses, delete all components (both T and P)
     // For single courses, delete the single registration
     const deleteResult = await db.query(
@@ -1354,6 +1551,23 @@ exports.deleteCourseOffering = async (req, res) => {
        RETURNING *`,
       [student.enrollment_number, slot_year, semester_type, course_code]
     );
+
+    // If it's a project course, decrement the counter in project_allocation
+    if (isProjectCourse && deleteResult.rows.length > 0) {
+      const facultyName = deleteResult.rows[0].faculty_name;
+      console.log(`📉 Decrementing project allocation counter for ${course_code} - ${facultyName}`);
+      
+      await db.query(
+        `UPDATE project_allocation 
+         SET current_students = GREATEST(0, current_students - 1)
+         WHERE course_code = $1 
+           AND slot_year = $2 
+           AND semester_type = $3
+           AND employee_id = (SELECT employee_id FROM faculty WHERE name = $4 LIMIT 1)
+           AND is_active = true`,
+        [course_code, slot_year, semester_type, facultyName]
+      );
+    }
 
     console.log(
       `✅ Deletion successful: ${course_code} for ${student.enrollment_number} (${deleteResult.rows.length} registrations removed)`
@@ -1390,7 +1604,7 @@ exports.getStudentRegistrationSummary = async (req, res) => {
 
     // Get all registrations for this semester
     const registrations = await db.query(
-      `SELECT course_code, course_name, credits, component_type, slot_name, venue, faculty_name
+      `SELECT course_code, course_name, credits, component_type, slot_name, venue, faculty_name, course_type
        FROM student_registrations 
        WHERE enrollment_number = $1 
          AND slot_year = $2 
@@ -1472,16 +1686,36 @@ exports.getStudentSlotTimetable = async (req, res) => {
       `🔍 Looking for registrations for student: ${student.enrollment_number}`
     );
 
-    // Get raw student registrations first (exclude withdrawn courses)
+    // Get raw student registrations first (exclude withdrawn courses and project courses)
     const rawRegistrations = await db.query(
       `SELECT * FROM student_registrations 
        WHERE enrollment_number = $1 AND slot_year = $2 AND semester_type = $3
          AND (withdrawn = false OR withdrawn IS NULL)
+         AND course_type != 'PRJ'
        ORDER BY course_code, component_type`,
       [student.enrollment_number, slot_year, semester_type]
     );
 
     console.log(`🔍 Raw student registrations:`, rawRegistrations.rows);
+
+    // Get project course registrations separately
+    console.log(`🔍 Querying project registrations for:`, {
+      enrollment_number: student.enrollment_number,
+      slot_year,
+      semester_type
+    });
+    
+    const projectRegistrations = await db.query(
+      `SELECT * FROM student_registrations 
+       WHERE enrollment_number = $1 AND slot_year = $2 AND semester_type = $3
+         AND (withdrawn = false OR withdrawn IS NULL)
+         AND course_type = 'PRJ'
+       ORDER BY course_code`,
+      [student.enrollment_number, slot_year, semester_type]
+    );
+
+    console.log(`🔍 Project registrations found:`, projectRegistrations.rows.length);
+    console.log(`🔍 Project registrations:`, projectRegistrations.rows);
 
     // Get ALL registrations for summary display (including withdrawn and backend courses)
     const allRegistrations = await db.query(
@@ -1626,7 +1860,8 @@ exports.getStudentSlotTimetable = async (req, res) => {
       processedRegistrations.filter((r) => r.slot_name.startsWith("L"))
     );
 
-    if (processedRegistrations.length === 0) {
+    // Check if there are any registrations (regular or project)
+    if (processedRegistrations.length === 0 && projectRegistrations.rows.length === 0) {
       return res.status(404).json({
         message: "No course registrations found for this semester",
       });
@@ -1644,6 +1879,7 @@ exports.getStudentSlotTimetable = async (req, res) => {
         semester_type,
       },
       registrations: processedRegistrations,
+      projectRegistrations: projectRegistrations.rows, // Separate project courses
       allRegistrations: allRegistrations.rows, // Include all registrations for summary display
     });
   } catch (error) {
