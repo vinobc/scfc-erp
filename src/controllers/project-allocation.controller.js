@@ -9,12 +9,9 @@ exports.getAllProjectAllocations = async (req, res) => {
       SELECT 
         pa.*,
         c.course_name,
-        c.credits,
-        f.name as faculty_name,
-        f.email as faculty_email
+        c.credits
       FROM project_allocation pa
       JOIN course c ON pa.course_code = c.course_code
-      JOIN faculty f ON pa.employee_id = f.employee_id
       WHERE pa.is_active = true
     `;
     const params = [];
@@ -29,10 +26,6 @@ exports.getAllProjectAllocations = async (req, res) => {
       query += ` AND pa.semester_type = $${params.length}`;
     }
 
-    if (employeeId) {
-      params.push(employeeId);
-      query += ` AND pa.employee_id = $${params.length}`;
-    }
 
     if (courseCode) {
       params.push(courseCode);
@@ -57,15 +50,13 @@ exports.createProjectAllocation = async (req, res) => {
     const {
       slot_year,
       semester_type,
-      course_code,
-      employee_id,
-      max_students = 50
+      course_code
     } = req.body;
 
     // Validate required fields
-    if (!slot_year || !semester_type || !course_code || !employee_id) {
+    if (!slot_year || !semester_type || !course_code) {
       return res.status(400).json({ 
-        message: "slot_year, semester_type, course_code, and employee_id are required" 
+        message: "slot_year, semester_type, and course_code are required" 
       });
     }
 
@@ -83,34 +74,30 @@ exports.createProjectAllocation = async (req, res) => {
       });
     }
 
-    // Check if THIS FACULTY already has an allocation for this course
+    // Check if this project course is already activated for this semester
     const existingCheck = await db.query(
-      `SELECT pa.*, f.name as faculty_name
-       FROM project_allocation pa
-       JOIN faculty f ON pa.employee_id = f.employee_id
-       WHERE pa.slot_year = $1 
-         AND pa.semester_type = $2 
-         AND pa.course_code = $3
-         AND pa.employee_id = $4
-         AND pa.is_active = true`,
-      [slot_year, semester_type, course_code, employee_id]
+      `SELECT * FROM project_allocation
+       WHERE slot_year = $1 
+         AND semester_type = $2 
+         AND course_code = $3
+         AND is_active = true`,
+      [slot_year, semester_type, course_code]
     );
 
     if (existingCheck.rows.length > 0) {
-      const existing = existingCheck.rows[0];
       return res.status(409).json({
-        message: `${existing.faculty_name} is already allocated to this project course`,
-        existingAllocation: existing
+        message: `This project course is already activated for ${slot_year} ${semester_type}`,
+        existingAllocation: existingCheck.rows[0]
       });
     }
 
-    // Create the allocation
+    // Create the allocation (without faculty or max_students)
     const result = await db.query(
       `INSERT INTO project_allocation 
-       (slot_year, semester_type, course_code, employee_id, max_students)
-       VALUES ($1, $2, $3, $4, $5)
+       (slot_year, semester_type, course_code)
+       VALUES ($1, $2, $3)
        RETURNING *`,
-      [slot_year, semester_type, course_code, employee_id, max_students]
+      [slot_year, semester_type, course_code]
     );
 
     res.status(201).json({

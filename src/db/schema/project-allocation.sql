@@ -2,6 +2,8 @@
 DROP TABLE IF EXISTS project_allocation CASCADE;
 
 -- Create project_allocation table for PRJ type courses
+-- Note: Faculty and max_students are no longer required as project courses 
+-- are simply activated for a semester without specific faculty assignment
 CREATE TABLE project_allocation (
     id SERIAL PRIMARY KEY,
     
@@ -9,12 +11,12 @@ CREATE TABLE project_allocation (
     slot_year VARCHAR(20) NOT NULL,
     semester_type VARCHAR(10) NOT NULL,
     
-    -- Course and Faculty
+    -- Course (no faculty needed)
     course_code VARCHAR(10) NOT NULL,
-    employee_id INTEGER NOT NULL,
+    employee_id INTEGER, -- Optional, kept for backward compatibility
     
-    -- Student Management
-    max_students INTEGER DEFAULT 50,
+    -- Student Management (optional)
+    max_students INTEGER, -- Optional, no limit by default
     current_students INTEGER DEFAULT 0,
     
     -- Status
@@ -24,8 +26,8 @@ CREATE TABLE project_allocation (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Unique constraint to prevent duplicate allocations
-    UNIQUE(slot_year, semester_type, course_code, employee_id),
+    -- Unique constraint - only one activation per course per semester
+    UNIQUE(slot_year, semester_type, course_code),
     
     -- Foreign key constraints
     FOREIGN KEY (course_code) REFERENCES course(course_code) ON DELETE RESTRICT,
@@ -34,10 +36,8 @@ CREATE TABLE project_allocation (
     -- Check constraints
     CONSTRAINT chk_project_allocation_semester_type 
         CHECK (semester_type IN ('FALL', 'WINTER', 'SUMMER')),
-    CONSTRAINT chk_max_students 
-        CHECK (max_students > 0),
     CONSTRAINT chk_current_students 
-        CHECK (current_students >= 0 AND current_students <= max_students)
+        CHECK (current_students >= 0)
 );
 
 -- Add indexes for faster lookups

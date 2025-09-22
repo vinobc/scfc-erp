@@ -429,62 +429,34 @@ function displayCourseOfferings(data) {
   let offeringsTable = "";
 
   if (isProjectCourse) {
-    // Project Course: Show faculty coordinators without time slots
+    // Project Course: Direct registration without faculty selection
     offeringsTable = `
       <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-top: 20px;">
-        <h5 style="color: #007bff; margin-bottom: 15px;">📋 Step 4: Select Faculty Coordinator</h5>
+        <h5 style="color: #007bff; margin-bottom: 15px;">📋 Step 4: Register for Project Course</h5>
         
         <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
           <h6 style="color: #155724; margin: 0 0 10px 0;">📚 Project Course Registration:</h6>
           <ul style="margin: 0; color: #155724;">
             <li>This is a project-based course with ${course_info.credits} credits</li>
             <li>No fixed time slots or venue required</li>
-            <li>Multiple faculty may offer this project - choose your preferred coordinator</li>
-            <li>You can register with only one faculty coordinator per project course</li>
+            <li>Students work independently on their projects</li>
           </ul>
         </div>
 
-        <div style="overflow-x: auto;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <thead>
-              <tr style="background: #f8f9fa;">
-                <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Faculty Coordinator</th>
-                <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Available Seats</th>
-                <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${offerings
-                .map(
-                  (offering) => `
-                <tr>
-                  <td style="padding: 12px; border: 1px solid #ddd;">
-                    <strong>${offering.faculty_name}</strong><br>
-                    <small style="color: #666;">${offering.faculty_email || ''}</small>
-                  </td>
-                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
-                    ${offering.available_seats} / ${offering.max_students}
-                  </td>
-                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
-                    ${
-                      offering.available_seats > 0
-                        ? `<button onclick="registerForProjectCourse('${course_info.course_code}', ${offering.allocation_id || offering.employee_id}, '${offering.faculty_name}')" 
-                                 style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;">
-                            <i class="fas fa-plus"></i> Register
-                          </button>
-                          <button onclick="withdrawProjectCourse('${course_info.course_code}', ${offering.allocation_id || offering.employee_id}, '${offering.faculty_name}')" 
-                                 style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            <i class="fas fa-trash"></i> Delete
-                          </button>`
-                        : `<span style="color: #dc3545;">Full</span>`
-                    }
-                  </td>
-                </tr>
-              `
-                )
-                .join("")}
-            </tbody>
-          </table>
+        <div style="text-align: center; padding: 20px;">
+          <div style="display: flex; justify-content: center; gap: 15px;">
+            <button onclick="registerForProjectCourse('${course_info.course_code}')" 
+                    style="padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+              <i class="fas fa-plus"></i> Register
+            </button>
+            <button onclick="deleteProjectCourse('${course_info.course_code}')" 
+                    style="padding: 10px 25px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+              <i class="fas fa-trash"></i> Delete
+            </button>
+          </div>
+          <p style="margin-top: 15px; color: #666;">
+            Register for this project course or delete existing registration.
+          </p>
         </div>
       </div>
     `;
@@ -1843,7 +1815,115 @@ function generateEnhancedSummaryTable(allRegistrations, projectRegistrations = [
   return tableHtml;
 }
 
-// Withdraw from project course
+// Register for project course (simplified - no faculty selection)
+async function registerForProjectCourse(courseCode) {
+  try {
+    // Get semester info
+    const semesterSelect = document.getElementById("working-semester-select");
+    if (!semesterSelect || !semesterSelect.value) {
+      showAlert("Please select a semester first", "warning");
+      return;
+    }
+    const [year, type] = semesterSelect.value.split("|");
+    
+    // Show confirmation
+    const confirmMessage = `Register for ${courseCode}?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+    
+    // Send registration request for project course
+    const response = await fetch(
+      `${window.API_URL}/course-registration/register`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          course_code: courseCode,
+          slot_year: year,
+          semester_type: type,
+          slot_name: "PROJECT",  // Fixed slot name for project courses
+          venue: "N/A",          // No venue for project courses
+          faculty_name: "TBA",   // Faculty to be assigned later
+          course_type: "PRJ"
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (response.ok) {
+      showAlert(`✅ Successfully registered for ${courseCode}`, "success");
+      
+      // Reload the page to show updated registrations
+      setTimeout(() => {
+        loadWorkingSemesterData(semesterSelect.value);
+      }, 1500);
+    } else {
+      showAlert(result.message || "Failed to register for project course", "danger");
+    }
+  } catch (error) {
+    console.error("Error registering for project:", error);
+    showAlert("Error during registration", "danger");
+  }
+}
+
+// Delete project course registration (simplified - no faculty needed)
+async function deleteProjectCourse(courseCode) {
+  try {
+    // Get semester info
+    const semesterSelect = document.getElementById("working-semester-select");
+    if (!semesterSelect || !semesterSelect.value) {
+      showAlert("Please select a semester first", "warning");
+      return;
+    }
+    const [year, type] = semesterSelect.value.split("|");
+    
+    // Show confirmation
+    const confirmMessage = `Are you sure you want to delete your registration for ${courseCode}?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+    
+    // Send deletion request
+    const response = await fetch(
+      `${window.API_URL}/course-registration/delete`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          course_code: courseCode,
+          slot_year: year,
+          semester_type: type,
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (response.ok) {
+      showAlert(`✅ Successfully deleted registration for ${courseCode}`, "success");
+      
+      // Reload the page to show updated registrations
+      setTimeout(() => {
+        loadWorkingSemesterData(semesterSelect.value);
+      }, 1500);
+    } else {
+      showAlert(result.message || "Failed to delete registration", "danger");
+    }
+  } catch (error) {
+    console.error("Error deleting project registration:", error);
+    showAlert("Error during deletion", "danger");
+  }
+}
+
+// Withdraw from project course (legacy function - kept for compatibility)
 async function withdrawProjectCourse(courseCode, allocationId, facultyName) {
   try {
     // Get semester info
@@ -1912,4 +1992,5 @@ window.toggleStudentTimetable = toggleStudentTimetable;
 window.loadStudentTimetable = loadStudentTimetable;
 window.refreshTimetableIfVisible = refreshTimetableIfVisible;
 window.registerForProjectCourse = registerForProjectCourse;
+window.deleteProjectCourse = deleteProjectCourse;
 window.withdrawProjectCourse = withdrawProjectCourse;

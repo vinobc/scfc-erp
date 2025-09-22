@@ -103,6 +103,7 @@ function updateNavigationByRole(userRole) {
     students: document.getElementById("students-link"),
     timetable: document.getElementById("timetable-link"),
     timetableCoordinator: document.getElementById("timetable-coordinator-link"),
+    projectAllocation: document.getElementById("project-allocation-link"),
     attendance: document.getElementById("attendance-link"),
     systemConfig: document.getElementById("system-config-link"),
     logout: document.getElementById("logout-link"),
@@ -127,8 +128,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "timetable_coordinator":
-      // Coordinator sees: Dashboard, Courses (view only), TimeTable (view only), Attendance, Logout
-      [navItems.dashboard, navItems.courses, navItems.timetable, navItems.attendance, navItems.logout].forEach(
+      // Coordinator sees: Dashboard, Courses (view only), TimeTable, Project Allocation, Attendance, Logout
+      [navItems.dashboard, navItems.courses, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.logout].forEach(
         (item) => {
           if (item && item.parentElement) {
             item.parentElement.style.display = "block";
@@ -136,7 +137,7 @@ function updateNavigationByRole(userRole) {
         }
       );
 
-      // Show timetable but customize submenu for coordinators (view only)
+      // Show timetable but customize submenu for coordinators
       if (navItems.timetable && navItems.timetable.parentElement) {
         navItems.timetable.parentElement.style.display = "block";
         customizeTimetableMenuForCoordinator();

@@ -1110,17 +1110,15 @@
                       <th>Course Code</th>
                       <th>Course Name</th>
                       <th>Credits</th>
-                      <th>Faculty</th>
-                      <th>Max Students</th>
-                      <th>Current Students</th>
                       <th>Year</th>
                       <th>Semester</th>
+                      <th>Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody id="project-allocation-table-body">
                     <tr>
-                      <td colspan="9" class="text-center">
+                      <td colspan="7" class="text-center">
                         Loading project allocations...
                       </td>
                     </tr>
@@ -4462,37 +4460,9 @@
                   </div>
                 </div>
               </div>
-              <div class="row">
-                <div class="col-md-6 mb-3">
-                  <label for="project-allocation-faculty" class="form-label">
-                    Faculty Coordinator *
-                  </label>
-                  <select
-                    class="form-select"
-                    id="project-allocation-faculty"
-                    required
-                  >
-                    <option value="">Select Faculty</option>
-                  </select>
-                </div>
-                <div class="col-md-6 mb-3">
-                  <label for="project-allocation-max-students" class="form-label">
-                    Max Students *
-                  </label>
-                  <input
-                    type="number"
-                    class="form-control"
-                    id="project-allocation-max-students"
-                    min="1"
-                    max="100"
-                    value="30"
-                    required
-                  />
-                </div>
-              </div>
               <div class="alert alert-info">
                 <i class="fas fa-info-circle"></i>
-                <strong>Note:</strong> Project courses do not require venue or time slot allocation. Students will work independently under faculty supervision.
+                <strong>Note:</strong> Project courses do not require venue, time slot, or faculty allocation. Students will register independently and work on their projects.
               </div>
             </form>
           </div>
