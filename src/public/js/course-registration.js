@@ -1288,7 +1288,11 @@ function displayCreditSummary(summary) {
               <span style="display: inline-block; background: #007bff; color: white; padding: 4px 8px; border-radius: 4px; margin: 2px 4px 2px 0; font-size: 12px;">
                 ${course.course_code} (${course.credits}c)
                 ${(() => {
+                  // Check if it's a project course
+                  if (course.course_type === "PRJ") return " - PRJ";
+                  // Check for TEL courses (both T and P components)
                   if (course.components.length > 1) return " - T+P";
+                  // Check component type
                   const comp = course.components[0];
                   if (comp.component_type === "T") return " - T";
                   if (comp.component_type === "P") return " - P";
