@@ -991,9 +991,9 @@ exports.registerCourseOffering = async (req, res) => {
 
     // Different validation for project courses
     if (isProjectCourse) {
-      if (!course_code || !slot_year || !semester_type || (!allocation_id && !employee_id)) {
+      if (!course_code || !slot_year || !semester_type) {
         return res.status(400).json({
-          message: "Missing required fields for project course: course_code, slot_year, semester_type, and either allocation_id or employee_id",
+          message: "Missing required fields for project course: course_code, slot_year, semester_type",
         });
       }
     } else {
@@ -1049,51 +1049,27 @@ exports.registerCourseOffering = async (req, res) => {
         });
       }
 
-      // Get faculty details from project allocation
-      let facultyInfo;
-      if (allocation_id) {
-        const allocResult = await db.query(
-          `SELECT pa.*, f.name as faculty_name 
-           FROM project_allocation pa
-           JOIN faculty f ON pa.employee_id = f.employee_id
-           WHERE pa.id = $1 AND pa.is_active = true`,
-          [allocation_id]
-        );
-        if (allocResult.rows.length === 0) {
-          return res.status(404).json({ message: "Project allocation not found" });
-        }
-        facultyInfo = allocResult.rows[0];
-      } else {
-        // Get faculty by employee_id
-        const facultyResult = await db.query(
-          `SELECT f.name as faculty_name, pa.* 
-           FROM project_allocation pa
-           JOIN faculty f ON pa.employee_id = f.employee_id
-           WHERE pa.employee_id = $1 
-             AND pa.course_code = $2
-             AND pa.slot_year = $3
-             AND pa.semester_type = $4
-             AND pa.is_active = true`,
-          [employee_id, course_code, slot_year, semester_type]
-        );
-        if (facultyResult.rows.length === 0) {
-          return res.status(404).json({ message: "Project allocation not found for this faculty" });
-        }
-        facultyInfo = facultyResult.rows[0];
-      }
+      // Check if project course is activated for this semester
+      const projectActivation = await db.query(
+        `SELECT * FROM project_allocation
+         WHERE course_code = $1 
+           AND slot_year = $2 
+           AND semester_type = $3 
+           AND is_active = true`,
+        [course_code, slot_year, semester_type]
+      );
 
-      // Check if faculty has capacity
-      if (facultyInfo.current_students >= facultyInfo.max_students) {
-        return res.status(400).json({
-          message: `Faculty ${facultyInfo.faculty_name} has reached maximum capacity for this project`,
+      if (projectActivation.rows.length === 0) {
+        return res.status(404).json({ 
+          message: "This project course is not activated for the selected semester" 
         });
       }
 
-      // Begin transaction
+      // Begin transaction for project registration
       await db.query('BEGIN');
 
       try {
-        // Register the student for the project
+        // Register the student for the project (without specific faculty)
         await db.query(
           `INSERT INTO student_registrations 
            (enrollment_number, student_name, program_code, year_admitted,
@@ -1116,7 +1092,7 @@ exports.registerCourseOffering = async (req, res) => {
             'PRJ',
             'PROJECT', // slot_name for projects
             'N/A', // venue for projects
-            facultyInfo.faculty_name,
+            'TBA', // faculty to be assigned later
             'SINGLE'
           ]
         );
@@ -1126,18 +1102,20 @@ exports.registerCourseOffering = async (req, res) => {
           `UPDATE project_allocation 
            SET current_students = current_students + 1,
                updated_at = CURRENT_TIMESTAMP
-           WHERE id = $1`,
-          [facultyInfo.id || allocation_id]
+           WHERE course_code = $1
+             AND slot_year = $2
+             AND semester_type = $3
+             AND is_active = true`,
+          [course_code, slot_year, semester_type]
         );
 
         await db.query('COMMIT');
 
         return res.status(201).json({
-          message: `Successfully registered for project ${course_code} under ${facultyInfo.faculty_name}`,
+          message: `Successfully registered for project ${course_code}`,
           registration: {
             course_code,
             course_name: course.course_name,
-            faculty_name: facultyInfo.faculty_name,
             credits: course.credits,
           }
         });

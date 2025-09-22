@@ -49,7 +49,7 @@ function initializeProjectAllocation() {
   
   // Load initial data
   loadAcademicYears();
-  loadFacultyList();
+  // No need to load faculty list anymore
   loadProjectAllocations();
 }
 
@@ -230,9 +230,7 @@ async function saveProjectAllocation() {
   const data = {
     slot_year: document.getElementById('project-allocation-year').value,
     semester_type: document.getElementById('project-allocation-semester').value,
-    course_code: document.getElementById('project-allocation-course').value,
-    employee_id: parseInt(document.getElementById('project-allocation-faculty').value),
-    max_students: parseInt(document.getElementById('project-allocation-max-students').value)
+    course_code: document.getElementById('project-allocation-course').value
   };
   
   try {
@@ -293,7 +291,7 @@ function displayProjectAllocations() {
   if (!tbody) return;
   
   if (projectAllocations.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center">No project allocations found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No project allocations found</td></tr>';
     return;
   }
   
@@ -302,46 +300,19 @@ function displayProjectAllocations() {
       <td>${allocation.course_code}</td>
       <td>${allocation.course_name}</td>
       <td>${allocation.credits}</td>
-      <td>${allocation.faculty_name}</td>
-      <td>${allocation.max_students}</td>
-      <td>${allocation.current_students}</td>
       <td>${allocation.slot_year}</td>
       <td>${allocation.semester_type}</td>
+      <td><span class="badge bg-success">Active</span></td>
       <td>
-        <button class="btn btn-sm btn-primary" onclick="editProjectAllocation(${allocation.id})">
-          <i class="fas fa-edit"></i>
-        </button>
         <button class="btn btn-sm btn-danger" onclick="deleteProjectAllocation(${allocation.id})">
-          <i class="fas fa-trash"></i>
+          <i class="fas fa-trash"></i> Remove
         </button>
       </td>
     </tr>
   `).join('');
 }
 
-// Edit project allocation
-function editProjectAllocation(id) {
-  const allocation = projectAllocations.find(a => a.id === id);
-  if (!allocation) return;
-  
-  // Populate form with existing data
-  document.getElementById('project-allocation-year').value = allocation.slot_year;
-  document.getElementById('project-allocation-semester').value = allocation.semester_type;
-  
-  // Load courses first, then set the value
-  loadProjectCourses().then(() => {
-    document.getElementById('project-allocation-course').value = allocation.course_code;
-    handleProjectCourseChange();
-  });
-  
-  document.getElementById('project-allocation-faculty').value = allocation.employee_id;
-  document.getElementById('project-allocation-max-students').value = allocation.max_students;
-  
-  // Change modal title and show
-  document.getElementById('projectAllocationModalLabel').textContent = 'Edit Project Allocation';
-  const modal = new bootstrap.Modal(document.getElementById('projectAllocationModal'));
-  modal.show();
-}
+// Edit functionality removed - project allocations can only be added or deleted
 
 // Delete project allocation
 async function deleteProjectAllocation(id) {
