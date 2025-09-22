@@ -1621,6 +1621,7 @@ exports.getStudentRegistrationSummary = async (req, res) => {
           course_code: reg.course_code,
           course_name: reg.course_name,
           credits: reg.credits,
+          course_type: reg.course_type,
           components: [],
         });
       }

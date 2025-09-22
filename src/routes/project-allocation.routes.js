@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const projectAllocationController = require("../controllers/project-allocation.controller");
-const { verifyToken, isAdmin, isStaffOrAdmin } = require("../middleware/auth.middleware");
+const { verifyToken, isAdmin, isStaffOrAdmin, canManageFacultyAllocations } = require("../middleware/auth.middleware");
 
 // Get all project allocations - accessible by all authenticated users
 router.get(
@@ -14,7 +14,7 @@ router.get(
 router.get(
   "/available-courses",
   verifyToken,
-  isStaffOrAdmin,
+  canManageFacultyAllocations,
   projectAllocationController.getAvailableProjectCourses
 );
 
@@ -29,7 +29,7 @@ router.get(
 router.post(
   "/",
   verifyToken,
-  isStaffOrAdmin,
+  canManageFacultyAllocations,
   projectAllocationController.createProjectAllocation
 );
 
@@ -37,7 +37,7 @@ router.post(
 router.put(
   "/:id",
   verifyToken,
-  isStaffOrAdmin,
+  canManageFacultyAllocations,
   projectAllocationController.updateProjectAllocation
 );
 
@@ -45,7 +45,7 @@ router.put(
 router.delete(
   "/:id",
   verifyToken,
-  isStaffOrAdmin,
+  canManageFacultyAllocations,
   projectAllocationController.deleteProjectAllocation
 );
 
