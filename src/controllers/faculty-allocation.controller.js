@@ -167,6 +167,27 @@ exports.createFacultyAllocation = async (req, res) => {
           existingAllocation: conflict,
         });
       }
+
+      // Check for venue-day slot conflicts (different faculty with conflicting slot on same venue+day)
+      const venueDaySlotConflictCheck = await db.query(
+        `SELECT fa.*, c.course_name, f.name as faculty_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2
+         AND fa.venue = $3 AND fa.slot_day = $4
+         AND fa.slot_name = ANY($5)`,
+        [slot_year, semester_type, venue, slot_day, conflictingSlotNames]
+      );
+
+      if (venueDaySlotConflictCheck.rows.length > 0) {
+        const conflict = venueDaySlotConflictCheck.rows[0];
+        return res.status(409).json({
+          message: `Venue-day slot conflict: ${venue} on ${slot_day} already has ${conflict.slot_name} allocated to ${conflict.faculty_name} for ${conflict.course_name}, which conflicts with ${slot_name}`,
+          type: "venue_day_slot_conflict",
+          existingAllocation: conflict,
+        });
+      }
     }
 
     // Enhanced logic for summer lab slot linking (both 2-hour and 4-hour)
@@ -1397,6 +1418,36 @@ exports.checkConflicts = async (req, res) => {
               conflictingVenue: conflict.venue_name,
             },
           });
+        }
+
+        // Check for venue-day slot conflicts (different faculty with conflicting slot on same venue+day)
+        if (venue && slotDetails) {
+          const venueDaySlotConflictCheck = await db.query(
+            `SELECT fa.*, c.course_name, f.name as faculty_name
+             FROM faculty_allocation fa
+             JOIN course c ON fa.course_code = c.course_code
+             JOIN faculty f ON fa.employee_id = f.employee_id
+             WHERE fa.slot_year = $1 AND fa.semester_type = $2
+             AND fa.venue = $3 AND fa.slot_day = $4
+             AND fa.slot_name = ANY($5)`,
+            [year, semesterType, venue, slotDetails.slot_day, conflictingSlotNames]
+          );
+
+          if (venueDaySlotConflictCheck.rows.length > 0) {
+            const conflict = venueDaySlotConflictCheck.rows[0];
+            conflicts.push({
+              type: "venue_day_slot_conflict",
+              severity: "error",
+              message: `Venue ${venue} on ${slotDetails.slot_day} already has ${conflict.slot_name} allocated to ${conflict.faculty_name} for ${conflict.course_name}, which conflicts with ${slotName}`,
+              details: {
+                conflictingSlot: conflict.slot_name,
+                conflictingFaculty: conflict.faculty_name,
+                conflictingCourse: conflict.course_name,
+                venue: venue,
+                day: slotDetails.slot_day,
+              },
+            });
+          }
         }
       }
     }
