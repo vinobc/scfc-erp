@@ -24,7 +24,7 @@ router.post(
   facultyAllocationController.createFacultyAllocation
 );
 router.put(
-  "/:id",
+  "/",
   canManageFacultyAllocations,
   facultyAllocationController.updateFacultyAllocation
 );
