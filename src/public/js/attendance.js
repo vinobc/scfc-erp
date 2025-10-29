@@ -396,9 +396,6 @@ function renderAttendanceInterface() {
               <button class="btn btn-sm btn-warning me-2" onclick="bulkMarkAttendance('absent')">
                 <i class="fas fa-times me-1"></i>Mark All Absent
               </button>
-              <button class="btn btn-sm btn-info me-2" onclick="bulkMarkAttendance('OD')">
-                <i class="fas fa-briefcase me-1"></i>Mark All OD
-              </button>
             </div>
           </div>
         </div>
@@ -429,9 +426,6 @@ function renderAttendanceInterface() {
 
             <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent">
             <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
-
-            <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="od_${student.student_id}" value="OD">
-            <label class="btn btn-outline-info" for="od_${student.student_id}">OD</label>
           </div>
         </td>
       </tr>
@@ -450,9 +444,6 @@ function renderAttendanceInterface() {
             </button>
           </div>
           <div class="col-md-6 text-end">
-            <button class="btn btn-outline-info me-2" onclick="viewAttendanceReport()">
-              <i class="fas fa-chart-bar me-2"></i>View Reports
-            </button>
             <button class="btn btn-outline-warning" onclick="downloadLowAttendance()">
               <i class="fas fa-download me-2"></i>Download Low Attendance
             </button>
@@ -523,112 +514,6 @@ async function saveAttendance() {
   }
 }
 
-// View attendance report
-async function viewAttendanceReport() {
-  try {
-    const params = new URLSearchParams({
-      slot_year: selectedAllocation.slot_year,
-      semester_type: selectedAllocation.semester_type,
-      course_code: selectedAllocation.course_code,
-      employee_id: selectedAllocation.employee_id
-    });
-
-    const response = await fetch(`${window.API_URL}/attendance/report?${params}`, {
-      headers: { "x-access-token": localStorage.getItem("token") }
-    });
-
-    if (!response.ok) throw new Error("Failed to load attendance report");
-    
-    const reportData = await response.json();
-    showAttendanceReport(reportData);
-
-  } catch (error) {
-    console.error("Error loading attendance report:", error);
-    showAttendanceAlert("Error loading attendance report", "error");
-  }
-}
-
-// Show attendance report modal
-function showAttendanceReport(reportData) {
-  // Create modal HTML
-  const modalHtml = `
-    <div class="modal fade" id="attendanceReportModal" tabindex="-1" aria-labelledby="attendanceReportModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="attendanceReportModalLabel">
-              <i class="fas fa-chart-bar me-2"></i>Attendance Report - ${selectedAllocation.course_code}
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="table-responsive">
-              <table class="table table-bordered table-hover">
-                <thead>
-                  <tr>
-                    <th>Enrollment Number</th>
-                    <th>Student Name</th>
-                    <th>Classes Attended</th>
-                    <th>Total Classes</th>
-                    <th>Attendance %</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-  `;
-
-  let bodyHtml = "";
-  reportData.attendance_report.forEach(record => {
-    const statusClass = record.below_minimum ? 'text-danger' : 'text-success';
-    const statusIcon = record.below_minimum ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
-    const statusText = record.below_minimum ? 'Below 75%' : 'Satisfactory';
-
-    bodyHtml += `
-      <tr class="${record.below_minimum ? 'table-warning' : ''}">
-        <td>${record.enrollment_number}</td>
-        <td>${record.student_name}</td>
-        <td>${record.present_count}</td>
-        <td>${record.total_classes}</td>
-        <td><strong>${record.attendance_percentage}%</strong></td>
-        <td class="${statusClass}">
-          <i class="${statusIcon} me-1"></i>${statusText}
-        </td>
-      </tr>
-    `;
-  });
-
-  const fullModalHtml = modalHtml + bodyHtml + `
-                </tbody>
-              </table>
-            </div>
-            ${reportData.minimum_required ? 
-              `<div class="alert alert-info mt-3">
-                <strong>Note:</strong> Minimum ${reportData.minimum_required}% attendance required for theory courses.
-              </div>` : 
-              `<div class="alert alert-success mt-3">
-                <strong>Note:</strong> This is a lab course. No minimum attendance requirement.
-              </div>`
-            }
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Remove existing modal if any
-  const existingModal = document.getElementById('attendanceReportModal');
-  if (existingModal) existingModal.remove();
-
-  // Add modal to body
-  document.body.insertAdjacentHTML('beforeend', fullModalHtml);
-
-  // Show modal
-  const modal = new bootstrap.Modal(document.getElementById('attendanceReportModal'));
-  modal.show();
-}
 
 // Download low attendance students
 async function downloadLowAttendance() {
