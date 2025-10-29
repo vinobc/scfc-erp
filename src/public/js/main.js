@@ -1463,9 +1463,6 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
                     <button class="btn btn-sm btn-warning me-2" onclick="bulkMarkAttendance('absent')">
                       <i class="fas fa-times me-1"></i>Mark All Absent
                     </button>
-                    <button class="btn btn-sm btn-info me-2" onclick="bulkMarkAttendance('OD')">
-                      <i class="fas fa-briefcase me-1"></i>Mark All OD
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1500,9 +1497,6 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
 
             <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}>
             <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
-
-            <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="od_${student.student_id}" value="OD" ${currentStatus === 'OD' ? 'checked' : ''}>
-            <label class="btn btn-outline-info" for="od_${student.student_id}">OD</label>
           </div>
         </td>
       </tr>
@@ -1518,14 +1512,6 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
                 <div class="col-md-6">
                   <button class="btn btn-primary btn-lg" onclick="saveAttendanceData('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')">
                     <i class="fas fa-save me-2"></i>Save Attendance
-                  </button>
-                </div>
-                <div class="col-md-6 text-end">
-                  <button class="btn btn-outline-info me-2" onclick="viewAttendanceReports('${courseCode}', '${employeeId}', '${slotYear}', '${semesterType}')">
-                    <i class="fas fa-chart-bar me-2"></i>View Reports
-                  </button>
-                  <button class="btn btn-outline-warning me-2" onclick="viewAbsentRecords('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')">
-                    <i class="fas fa-user-times me-2"></i>View Absent Records
                   </button>
                 </div>
               </div>
@@ -1553,9 +1539,7 @@ function bulkMarkAttendance(status) {
   });
 
   studentIds.forEach(studentId => {
-    // Handle the OD case - radio button ID is lowercase "od" but value is uppercase "OD"
-    const radioId = status === 'OD' ? 'od' : status;
-    const radio = document.getElementById(`${radioId}_${studentId}`);
+    const radio = document.getElementById(`${status}_${studentId}`);
     if (radio) radio.checked = true;
   });
   
@@ -1661,291 +1645,6 @@ async function saveAttendanceData(courseCode, employeeId, venue, slotDay, slotNa
     console.error("Error saving attendance:", error);
     showAlert("Error saving attendance. Please try again.", "error");
   }
-}
-
-// View attendance reports
-async function viewAttendanceReports(courseCode, employeeId, slotYear, semesterType) {
-  console.log("📊 View Reports button clicked");
-  console.log("📋 Report params:", { courseCode, employeeId, slotYear, semesterType });
-  
-  try {
-    console.log("🔄 Making API request for attendance report...");
-    const params = new URLSearchParams({
-      slot_year: slotYear,
-      semester_type: semesterType,
-      course_code: courseCode,
-      employee_id: employeeId
-    });
-
-    console.log("📤 Request URL:", `${window.API_URL}/attendance/report?${params}`);
-    const response = await fetch(`${window.API_URL}/attendance/report?${params}`, {
-      headers: { "x-access-token": localStorage.getItem("token") }
-    });
-
-    console.log("📥 Response status:", response.status);
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log("❌ Response error:", errorText);
-      throw new Error(`Failed to load attendance report: ${response.status}`);
-    }
-    
-    const reportData = await response.json();
-    console.log("📊 Report data received:", reportData);
-    showAttendanceReportModal(reportData, courseCode, slotYear, semesterType);
-
-  } catch (error) {
-    console.error("Error loading attendance report:", error);
-    showAlert(`Error loading attendance report: ${error.message}`, "error");
-  }
-}
-
-// Show attendance report modal
-function showAttendanceReportModal(reportData, courseCode, slotYear, semesterType) {
-  console.log("📊 Showing attendance report modal");
-  
-  const { course_details, attendance_report, minimum_required } = reportData;
-  
-  // Count students below minimum if applicable
-  let belowMinimumCount = 0;
-  if (minimum_required) {
-    belowMinimumCount = attendance_report.filter(student => student.below_minimum).length;
-  }
-  
-  const content = document.getElementById("attendance-content");
-  if (content) {
-    content.innerHTML = `
-      <div class="container-fluid">
-        <div class="row">
-          <div class="col-12">
-            <div class="card">
-              <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 text-white">📊 Attendance Report - ${courseCode}</h5>
-                <button class="btn btn-outline-light btn-sm" onclick="selectCourseForAttendance('${courseCode}', '${slotYear}', '${semesterType}')">
-                  <i class="fas fa-arrow-left me-1"></i>Back to Course
-                </button>
-              </div>
-              <div class="card-body">
-                <div class="row mb-3">
-                  <div class="col-md-6">
-                    <h6>Course Details</h6>
-                    <p><strong>Code:</strong> ${courseCode}<br>
-                       <strong>Name:</strong> ${course_details?.course_name || 'N/A'}<br>
-                       <strong>Type:</strong> ${course_details?.course_type || 'N/A'}</p>
-                  </div>
-                  <div class="col-md-6">
-                    <h6>Statistics</h6>
-                    <p><strong>Total Students:</strong> ${attendance_report.length}<br>
-                       <strong>Minimum Required:</strong> ${minimum_required ? minimum_required + '%' : 'Not applicable'}<br>
-                       ${minimum_required ? `<strong>Below Minimum:</strong> ${belowMinimumCount}` : ''}</p>
-                  </div>
-                </div>
-                
-                <div class="table-responsive">
-                  <table class="table table-striped table-sm">
-                    <thead class="table-dark">
-                      <tr>
-                        <th>Student Name</th>
-                        <th>Enrollment No.</th>
-                        <th>Present Classes</th>
-                        <th>Total Classes</th>
-                        <th>Attendance %</th>
-                        ${minimum_required ? '<th>Status</th>' : ''}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${attendance_report.map(student => `
-                        <tr ${student.below_minimum ? 'class="table-warning"' : ''}>
-                          <td>${student.student_name}</td>
-                          <td>${student.enrollment_number}</td>
-                          <td>${student.present_count}</td>
-                          <td>${student.total_classes}</td>
-                          <td><strong>${student.attendance_percentage}%</strong></td>
-                          ${minimum_required ? `<td>${student.below_minimum ? '<span class="badge bg-warning text-dark">Below Minimum</span>' : '<span class="badge bg-success">OK</span>'}</td>` : ''}
-                        </tr>
-                      `).join('')}
-                    </tbody>
-                  </table>
-                </div>
-                
-                ${belowMinimumCount > 0 ? `
-                  <div class="alert alert-warning mt-3">
-                    <strong>⚠️ Warning:</strong> ${belowMinimumCount} student(s) have attendance below ${minimum_required}%
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  } else {
-    showAlert(`Course: ${course_details?.course_name || courseCode}\nTotal students: ${attendance_report.length}\nReport generated successfully!`, "success");
-  }
-}
-
-// View absent records with date range filter
-async function viewAbsentRecords(courseCode, employeeId, venue, slotDay, slotName, slotTime, slotYear, semesterType) {
-  console.log("❌ View Absent Records button clicked");
-  console.log("📋 Selected params:", { courseCode, employeeId, venue, slotDay, slotName, slotTime, slotYear, semesterType });
-  
-  const content = document.getElementById("attendance-content");
-  if (content) {
-    content.innerHTML = `
-      <div class="container-fluid">
-        <div class="row">
-          <div class="col-12">
-            <div class="card">
-              <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
-                <div>
-                  <h5 class="mb-0 text-white">❌ Absent Records: ${courseCode}</h5>
-                  <small>${slotDay} ${slotName} | ${slotTime} | ${venue}</small>
-                </div>
-                <button class="btn btn-outline-dark btn-sm" onclick="selectCourseForAttendance('${courseCode}', '${slotYear}', '${semesterType}')">
-                  <i class="fas fa-arrow-left me-1"></i>Back to Course
-                </button>
-              </div>
-              <div class="card-body">
-                <div class="row mb-3">
-                  <div class="col-md-3">
-                    <label for="start-date" class="form-label">From Date</label>
-                    <input type="date" id="start-date" class="form-control">
-                  </div>
-                  <div class="col-md-3">
-                    <label for="end-date" class="form-label">To Date</label>
-                    <input type="date" id="end-date" class="form-control" value="${new Date().toISOString().split('T')[0]}">
-                  </div>
-                  <div class="col-md-3">
-                    <label for="status-filter" class="form-label">Status Filter</label>
-                    <select id="status-filter" class="form-select">
-                      <option value="">All Records</option>
-                      <option value="absent" selected>Absent Only</option>
-                      <option value="present">Present Only</option>
-                      <option value="OD">OD Only</option>
-                    </select>
-                  </div>
-                  <div class="col-md-3 d-flex align-items-end">
-                    <button class="btn btn-primary" onclick="loadAbsentRecords('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')">
-                      <i class="fas fa-search me-1"></i>Search
-                    </button>
-                  </div>
-                </div>
-                
-                <div id="absent-records-results">
-                  <div class="text-center text-muted">
-                    <i class="fas fa-search fa-2x mb-2"></i>
-                    <p>Select date range and click Search to view attendance records</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-}
-
-// Load absent records based on filters
-async function loadAbsentRecords(courseCode, employeeId, venue, slotDay, slotName, slotTime, slotYear, semesterType) {
-  console.log("🔍 Loading absent records...");
-  
-  const startDate = document.getElementById('start-date').value;
-  const endDate = document.getElementById('end-date').value;
-  const statusFilter = document.getElementById('status-filter').value;
-  const resultsDiv = document.getElementById('absent-records-results');
-  
-  if (!startDate && !endDate) {
-    showAlert("Please select at least one date to filter records", "warning");
-    return;
-  }
-  
-  try {
-    resultsDiv.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Loading...</p></div>';
-    
-    const params = new URLSearchParams({
-      slot_year: slotYear,
-      semester_type: semesterType,
-      course_code: courseCode,
-      employee_id: employeeId,
-      venue: venue,
-      slot_day: slotDay,
-      slot_name: slotName,
-      slot_time: slotTime,
-      ...(startDate && { start_date: startDate }),
-      ...(endDate && { end_date: endDate }),
-      ...(statusFilter && { status_filter: statusFilter })
-    });
-
-    const response = await fetch(`${window.API_URL}/attendance/date-range?${params}`, {
-      headers: { "x-access-token": localStorage.getItem("token") }
-    });
-
-    if (!response.ok) throw new Error("Failed to load attendance records");
-    
-    const records = await response.json();
-    console.log("📊 Absent records loaded:", records.length);
-    showAbsentRecordsTable(records, statusFilter);
-
-  } catch (error) {
-    console.error("Error loading absent records:", error);
-    resultsDiv.innerHTML = '<div class="alert alert-danger">Error loading attendance records. Please try again.</div>';
-  }
-}
-
-// Show absent records in table format
-function showAbsentRecordsTable(records, statusFilter) {
-  const resultsDiv = document.getElementById('absent-records-results');
-  
-  if (records.length === 0) {
-    resultsDiv.innerHTML = `
-      <div class="alert alert-info text-center">
-        <i class="fas fa-info-circle me-2"></i>
-        No ${statusFilter || 'attendance'} records found for the selected date range.
-      </div>
-    `;
-    return;
-  }
-  
-  const statusBadge = (status) => {
-    switch(status) {
-      case 'present': return '<span class="badge bg-success">Present</span>';
-      case 'absent': return '<span class="badge bg-danger">Absent</span>';
-      case 'OD': return '<span class="badge bg-info">OD</span>';
-      default: return `<span class="badge bg-secondary">${status}</span>`;
-    }
-  };
-  
-  resultsDiv.innerHTML = `
-    <div class="table-responsive">
-      <table class="table table-striped table-sm">
-        <thead class="table-dark">
-          <tr>
-            <th>Date</th>
-            <th>Student Name</th>
-            <th>Enrollment No.</th>
-            <th>Time Slot</th>
-            <th>Venue</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${records.map(record => `
-            <tr>
-              <td>${new Date(record.attendance_date).toLocaleDateString()}</td>
-              <td>${record.student_name}</td>
-              <td>${record.enrollment_no}</td>
-              <td>${record.slot_day} - ${record.slot_name}<br><small class="text-muted">${record.slot_time}</small></td>
-              <td>${record.venue}</td>
-              <td>${statusBadge(record.status)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-    <div class="mt-3 text-muted">
-      <small>Total records: ${records.length}</small>
-    </div>
-  `;
 }
 
 // Reload attendance for a different date
@@ -2063,9 +1762,6 @@ window.selectCourseForAttendance = selectCourseForAttendance;
 window.loadAttendanceMarkingInterface = loadAttendanceMarkingInterface;
 window.bulkMarkAttendance = bulkMarkAttendance;
 window.saveAttendanceData = saveAttendanceData;
-window.viewAttendanceReports = viewAttendanceReports;
-window.viewAbsentRecords = viewAbsentRecords;
-window.loadAbsentRecords = loadAbsentRecords;
 window.reloadAttendanceForDate = reloadAttendanceForDate;
 
 // ===== STUDENT ATTENDANCE VIEWING FUNCTIONS =====
