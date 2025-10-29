@@ -903,11 +903,55 @@ exports.deleteFacultyAllocation = async (req, res) => {
       });
     }
 
+    // Check if students are registered for this allocation
+    // First, get the faculty name by joining with faculty table
+    const allocationCheck = await db.query(
+      `SELECT f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2 AND fa.course_code = $3
+       AND fa.employee_id = $4 AND fa.venue = $5 AND fa.slot_day = $6
+       AND fa.slot_name = $7 AND fa.slot_time = $8`,
+      [
+        slot_year,
+        semester_type,
+        course_code,
+        employee_id,
+        venue,
+        slot_day,
+        slot_name,
+        slot_time,
+      ]
+    );
+
+    if (allocationCheck.rowCount === 0) {
+      return res.status(404).json({ message: "Faculty allocation not found" });
+    }
+
+    const faculty_name = allocationCheck.rows[0].faculty_name;
+
+    // Check for student registrations
+    const studentCheck = await db.query(
+      `SELECT COUNT(*) as student_count
+       FROM student_registrations
+       WHERE course_code = $1 AND slot_year = $2 AND semester_type = $3
+       AND slot_name = $4 AND venue = $5 AND faculty_name = $6`,
+      [course_code, slot_year, semester_type, slot_name, venue, faculty_name]
+    );
+
+    const studentCount = parseInt(studentCheck.rows[0].student_count);
+
+    if (studentCount > 0) {
+      return res.status(400).json({
+        message: `Cannot delete this faculty allocation. ${studentCount} student(s) are already registered for this course allocation. Please remove student registrations first.`,
+      });
+    }
+
     // Delete the primary allocation
     const result = await db.query(
-      `DELETE FROM faculty_allocation 
-       WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
-       AND employee_id = $4 AND venue = $5 AND slot_day = $6 
+      `DELETE FROM faculty_allocation
+       WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+       AND employee_id = $4 AND venue = $5 AND slot_day = $6
        AND slot_name = $7 AND slot_time = $8
        RETURNING *`,
       [

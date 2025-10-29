@@ -544,19 +544,19 @@ function renderFacultyAllocations(allocations) {
         <td>${firstAllocation.venue}</td>
         <td>
           ${
-            currentUser && currentUser.role === "admin"
+            currentUser && (currentUser.role === "admin" || currentUser.role === "timetable_coordinator")
               ? `
-            <button class="btn btn-sm btn-primary edit-allocation-btn" 
+            <button class="btn btn-sm btn-primary edit-allocation-btn"
               data-allocation='${JSON.stringify(firstAllocation)}'>
               <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn btn-sm btn-danger delete-allocation-btn"
+              data-allocation='${JSON.stringify(firstAllocation)}'>
+              <i class="fas fa-trash"></i>
             </button>
           `
               : ""
           }
-          <button class="btn btn-sm btn-danger delete-allocation-btn" 
-            data-allocation='${JSON.stringify(firstAllocation)}'>
-            <i class="fas fa-trash"></i>
-          </button>
         </td>
       `;
       facultyAllocationTableBody.appendChild(row);
@@ -652,19 +652,19 @@ function renderFacultyAllocations(allocations) {
           <td>${allocation.venue}</td>
           <td>
             ${
-              currentUser && currentUser.role === "admin"
+              currentUser && (currentUser.role === "admin" || currentUser.role === "timetable_coordinator")
                 ? `
-              <button class="btn btn-sm btn-primary edit-allocation-btn" 
+              <button class="btn btn-sm btn-primary edit-allocation-btn"
                 data-allocation='${JSON.stringify(allocation)}'>
                 <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn btn-sm btn-danger delete-allocation-btn"
+                data-allocation='${JSON.stringify(allocation)}'>
+                <i class="fas fa-trash"></i>
               </button>
             `
                 : ""
             }
-            <button class="btn btn-sm btn-danger delete-allocation-btn" 
-              data-allocation='${JSON.stringify(allocation)}'>
-              <i class="fas fa-trash"></i>
-            </button>
           </td>
         `;
         facultyAllocationTableBody.appendChild(row);
