@@ -1633,6 +1633,49 @@ function handleAddFacultyAllocation() {
   allocationFacultyNameDisplay.textContent = "";
   allocationSlotDayDisplay.textContent = "";
 
+  // Re-enable all fields for create mode (in case they were disabled in edit mode)
+  if (allocationYearInput) {
+    allocationYearInput.disabled = false;
+    allocationYearInput.style.backgroundColor = "";
+    allocationYearInput.style.cursor = "";
+  }
+
+  if (allocationSemesterTypeInput) {
+    allocationSemesterTypeInput.disabled = false;
+    allocationSemesterTypeInput.style.backgroundColor = "";
+    allocationSemesterTypeInput.style.cursor = "";
+  }
+
+  if (allocationCourseCodeInput) {
+    allocationCourseCodeInput.disabled = false;
+    allocationCourseCodeInput.style.backgroundColor = "";
+    allocationCourseCodeInput.style.cursor = "";
+  }
+
+  if (allocationSlotNameInput) {
+    allocationSlotNameInput.disabled = false;
+    allocationSlotNameInput.style.backgroundColor = "";
+    allocationSlotNameInput.style.cursor = "";
+  }
+
+  if (allocationEmployeeIdInput) {
+    allocationEmployeeIdInput.disabled = false;
+    allocationEmployeeIdInput.style.backgroundColor = "";
+    allocationEmployeeIdInput.style.cursor = "";
+  }
+
+  if (allocationVenueTypeInput) {
+    allocationVenueTypeInput.disabled = false;
+    allocationVenueTypeInput.style.backgroundColor = "";
+    allocationVenueTypeInput.style.cursor = "";
+  }
+
+  if (allocationVenueInput) {
+    allocationVenueInput.disabled = false;
+    allocationVenueInput.style.backgroundColor = "";
+    allocationVenueInput.style.cursor = "";
+  }
+
   // Update modal title
   if (facultyAllocationModalLabel) {
     facultyAllocationModalLabel.textContent = "Create Faculty Slot Allocation";
@@ -1642,18 +1685,138 @@ function handleAddFacultyAllocation() {
   if (facultyAllocationModal) facultyAllocationModal.show();
 }
 
+// Handle update faculty allocation (edit mode)
+function handleUpdateFacultyAllocation() {
+  console.log("Update button clicked - Edit mode");
+
+  // Get employee ID from hidden field or input
+  const hiddenEmployeeIdInput = document.getElementById("hidden-employee-id-field");
+  const newEmployeeId = hiddenEmployeeIdInput
+    ? hiddenEmployeeIdInput.value
+    : allocationEmployeeIdInput.value;
+
+  // Get faculty name from display or search input
+  const facultyNameSearch = document.getElementById("faculty-name-search");
+  const newFacultyName = facultyNameSearch
+    ? facultyNameSearch.value
+    : allocationFacultyNameDisplay.textContent;
+
+  // Prepare old and new allocation data
+  const oldAllocation = {
+    slot_year: currentEditData.slot_year,
+    semester_type: currentEditData.semester_type,
+    course_code: currentEditData.course_code,
+    employee_id: currentEditData.employee_id,
+    faculty_name: currentEditData.faculty_name,
+    venue: currentEditData.venue,
+    slot_day: currentEditData.slot_day,
+    slot_name: currentEditData.slot_name,
+    slot_time: currentEditData.slot_time,
+  };
+
+  const newAllocation = {
+    slot_year: currentEditData.slot_year, // Readonly in edit mode
+    semester_type: currentEditData.semester_type, // Readonly in edit mode
+    course_code: currentEditData.course_code, // Readonly in edit mode
+    employee_id: parseInt(newEmployeeId),
+    faculty_name: newFacultyName,
+    venue: allocationVenueInput.value,
+    slot_day: currentEditData.slot_day, // Readonly in edit mode
+    slot_name: currentEditData.slot_name, // Readonly in edit mode
+    slot_time: currentEditData.slot_time, // Readonly in edit mode
+  };
+
+  console.log("Old allocation:", oldAllocation);
+  console.log("New allocation:", newAllocation);
+
+  // Validate that something changed
+  if (
+    oldAllocation.employee_id === newAllocation.employee_id &&
+    oldAllocation.venue === newAllocation.venue
+  ) {
+    localShowAlert("No changes detected. Please modify faculty or venue.", "warning");
+    return;
+  }
+
+  // Validate new values
+  if (!newAllocation.employee_id || !newAllocation.venue) {
+    localShowAlert("Please select both faculty and venue", "danger");
+    return;
+  }
+
+  // Make PUT request to update allocation
+  fetch(`${window.API_URL}/faculty-allocations`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: localStorage.getItem("token"),
+    },
+    body: JSON.stringify({
+      oldAllocation: oldAllocation,
+      newAllocation: newAllocation,
+    }),
+  })
+    .then(async (response) => {
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle error responses
+        throw new Error(data.message || "Failed to update allocation");
+      }
+
+      return data;
+    })
+    .then((data) => {
+      console.log("Update response:", data);
+
+      // Show success message with details
+      let successMessage = `Faculty allocation updated successfully!`;
+      if (data.allocationsUpdated > 0) {
+        successMessage += ` ${data.allocationsUpdated} slot allocation(s) updated.`;
+      }
+      if (data.studentsUpdated > 0) {
+        successMessage += ` ${data.studentsUpdated} student registration(s) updated.`;
+      }
+
+      if (data.changes) {
+        if (data.changes.facultyChanged) {
+          successMessage += `\nFaculty: ${data.changes.facultyChanged.from} → ${data.changes.facultyChanged.to}`;
+        }
+        if (data.changes.venueChanged) {
+          successMessage += `\nVenue: ${data.changes.venueChanged.from} → ${data.changes.venueChanged.to}`;
+        }
+      }
+
+      localShowAlert(successMessage, "success");
+
+      // Close modal and refresh data
+      if (facultyAllocationModal) facultyAllocationModal.hide();
+      loadFacultyAllocations();
+    })
+    .catch((error) => {
+      console.error("Update error:", error);
+      localShowAlert(error.message || "Error updating faculty allocation", "danger");
+    });
+}
+
 // Handle save faculty allocation
 function handleSaveFacultyAllocation() {
   console.log("Save button clicked");
 
   // Check if this is a P=4 lab allocation (Fall 2025-26)
-  const isP4Lab = p4LabSelectionContainer && 
+  const isP4Lab = p4LabSelectionContainer &&
                   p4LabSelectionContainer.style.display === "block" &&
-                  allocationLabPair1.value && 
+                  allocationLabPair1.value &&
                   allocationLabPair2.value;
 
   if (isP4Lab) {
     handleSaveP4FacultyAllocation();
+    return;
+  }
+
+  // Handle EDIT mode separately
+  if (isEditMode && currentEditData) {
+    handleUpdateFacultyAllocation();
     return;
   }
 
@@ -1668,7 +1831,7 @@ function handleSaveFacultyAllocation() {
   // Get form values
   const allocationData = {
     slot_year: allocationYearInput.value,
-    semester_type: allocationSemesterInput.value,
+    semester_type: allocationSemesterTypeInput.value,
     course_code: allocationCourseCodeInput.value,
     employee_id: parseInt(employeeId),
     venue: allocationVenueInput.value,
@@ -2117,12 +2280,108 @@ function openEditAllocationModal(allocation) {
   allocationCourseTpcDisplay.textContent = `${allocation.theory}-${allocation.practical}-${allocation.credits}`;
   allocationEmployeeIdInput.value = allocation.employee_id;
   allocationFacultyNameDisplay.textContent = allocation.faculty_name;
-  allocationSlotNameInput.value = allocation.slot_name;
-  allocationVenueInput.value = allocation.venue;
+
+  // For slot name dropdown, ensure the current slot exists as an option before disabling
+  if (allocationSlotNameInput) {
+    // Clear existing options
+    allocationSlotNameInput.innerHTML = "";
+
+    // Add the current slot as the only option
+    const option = document.createElement("option");
+    option.value = allocation.slot_name;
+    option.textContent = allocation.slot_name;
+    option.selected = true;
+    allocationSlotNameInput.appendChild(option);
+  }
+
+  // Set venue type and load venues
+  if (allocationVenueTypeInput && allocation.venue_type) {
+    allocationVenueTypeInput.value = allocation.venue_type;
+
+    // Load venues of this type
+    fetch(`${window.API_URL}/venues`, {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    })
+      .then((response) => response.json())
+      .then((venues) => {
+        const filteredVenues = venues.filter(
+          (v) => v.infra_type === allocation.venue_type && v.is_active === true
+        );
+
+        allocationVenueInput.innerHTML = '<option value="">Select Venue</option>';
+        filteredVenues.forEach((venue) => {
+          const option = document.createElement("option");
+          option.value = venue.venue;
+          option.textContent = venue.venue;
+          if (venue.venue === allocation.venue) {
+            option.selected = true;
+          }
+          allocationVenueInput.appendChild(option);
+        });
+      })
+      .catch((error) => {
+        console.error("Error loading venues:", error);
+      });
+  } else {
+    // If venue_type is not available, just set the current venue as the only option
+    allocationVenueInput.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = allocation.venue;
+    option.textContent = allocation.venue;
+    option.selected = true;
+    allocationVenueInput.appendChild(option);
+  }
+
+  // Make fields readonly except Faculty, Venue Type, and Venue
+  // Year, Semester, Course Code, and Slot Name should be readonly in edit mode
+  if (allocationYearInput) {
+    allocationYearInput.disabled = true;
+    allocationYearInput.style.backgroundColor = "#e9ecef";
+    allocationYearInput.style.cursor = "not-allowed";
+  }
+
+  if (allocationSemesterTypeInput) {
+    allocationSemesterTypeInput.disabled = true;
+    allocationSemesterTypeInput.style.backgroundColor = "#e9ecef";
+    allocationSemesterTypeInput.style.cursor = "not-allowed";
+  }
+
+  if (allocationCourseCodeInput) {
+    allocationCourseCodeInput.disabled = true;
+    allocationCourseCodeInput.style.backgroundColor = "#e9ecef";
+    allocationCourseCodeInput.style.cursor = "not-allowed";
+  }
+
+  if (allocationSlotNameInput) {
+    allocationSlotNameInput.disabled = true;
+    allocationSlotNameInput.style.backgroundColor = "#e9ecef";
+    allocationSlotNameInput.style.cursor = "not-allowed";
+  }
+
+  // Ensure Faculty, Venue Type, and Venue inputs are enabled
+  if (allocationEmployeeIdInput) {
+    allocationEmployeeIdInput.disabled = false;
+    allocationEmployeeIdInput.style.backgroundColor = "";
+    allocationEmployeeIdInput.style.cursor = "";
+  }
+
+  if (allocationVenueTypeInput) {
+    allocationVenueTypeInput.disabled = false;
+    allocationVenueTypeInput.style.backgroundColor = "";
+    allocationVenueTypeInput.style.cursor = "";
+  }
+
+  if (allocationVenueInput) {
+    allocationVenueInput.disabled = false;
+    allocationVenueInput.style.backgroundColor = "";
+    allocationVenueInput.style.cursor = "";
+  }
 
   // Update modal title
   if (facultyAllocationModalLabel) {
-    facultyAllocationModalLabel.textContent = "Edit Faculty Slot Allocation";
+    facultyAllocationModalLabel.textContent = "Edit Faculty Slot Allocation (Faculty & Venue Only)";
   }
 
   // Show modal

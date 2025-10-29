@@ -1229,42 +1229,333 @@ exports.getAvailableSlotsForCourse = async (req, res) => {
   }
 };
 
+// Helper function: Get student count for a specific allocation
+async function getStudentCountForAllocation(client, allocation) {
+  const result = await client.query(
+    `SELECT COUNT(*) as student_count
+     FROM student_registrations
+     WHERE course_code = $1
+       AND slot_year = $2
+       AND semester_type = $3
+       AND slot_name = $4
+       AND venue = $5
+       AND faculty_name = $6`,
+    [
+      allocation.course_code,
+      allocation.slot_year,
+      allocation.semester_type,
+      allocation.slot_name,
+      allocation.venue,
+      allocation.faculty_name,
+    ]
+  );
+  return parseInt(result.rows[0].student_count);
+}
+
+// Helper function: Get venue capacity
+async function getVenueCapacity(client, venueName) {
+  const result = await client.query(
+    `SELECT capacity FROM venue WHERE venue = $1`,
+    [venueName]
+  );
+  if (result.rows.length === 0) {
+    throw new Error(`Venue ${venueName} not found`);
+  }
+  return result.rows[0].capacity;
+}
+
+// Helper function: Check faculty conflict for update
+async function checkFacultyConflictForUpdate(
+  client,
+  newEmployeeId,
+  slotYear,
+  semesterType,
+  slotDay,
+  slotTime,
+  currentCourseCode
+) {
+  const result = await client.query(
+    `SELECT fa.*, c.course_name, v.venue as venue_name
+     FROM faculty_allocation fa
+     JOIN course c ON fa.course_code = c.course_code
+     JOIN venue v ON fa.venue = v.venue
+     WHERE fa.slot_year = $1
+       AND fa.semester_type = $2
+       AND fa.employee_id = $3
+       AND fa.slot_day = $4
+       AND fa.slot_time = $5
+       AND fa.course_code != $6`,
+    [slotYear, semesterType, newEmployeeId, slotDay, slotTime, currentCourseCode]
+  );
+  return result.rows;
+}
+
+// Helper function: Check venue conflict for update
+async function checkVenueConflictForUpdate(
+  client,
+  newVenue,
+  slotYear,
+  semesterType,
+  slotDay,
+  slotTime,
+  currentCourseCode,
+  currentEmployeeId
+) {
+  const result = await client.query(
+    `SELECT fa.*, c.course_name, f.name as faculty_name
+     FROM faculty_allocation fa
+     JOIN course c ON fa.course_code = c.course_code
+     JOIN faculty f ON fa.employee_id = f.employee_id
+     WHERE fa.slot_year = $1
+       AND fa.semester_type = $2
+       AND fa.venue = $3
+       AND fa.slot_day = $4
+       AND fa.slot_time = $5
+       AND (fa.course_code != $6 OR fa.employee_id != $7)`,
+    [
+      slotYear,
+      semesterType,
+      newVenue,
+      slotDay,
+      slotTime,
+      currentCourseCode,
+      currentEmployeeId,
+    ]
+  );
+  return result.rows;
+}
+
 // Update faculty allocation
 exports.updateFacultyAllocation = async (req, res) => {
   try {
     const { oldAllocation, newAllocation } = req.body;
 
+    console.log("Update request - Old:", oldAllocation);
+    console.log("Update request - New:", newAllocation);
+
+    // Validate that only faculty and/or venue can change
+    if (
+      oldAllocation.slot_year !== newAllocation.slot_year ||
+      oldAllocation.semester_type !== newAllocation.semester_type ||
+      oldAllocation.course_code !== newAllocation.course_code ||
+      oldAllocation.slot_name !== newAllocation.slot_name ||
+      oldAllocation.slot_day !== newAllocation.slot_day ||
+      oldAllocation.slot_time !== newAllocation.slot_time
+    ) {
+      return res.status(400).json({
+        message:
+          "Only faculty and venue can be changed. Other fields must remain the same.",
+      });
+    }
+
+    // Check what changed
+    const facultyChanged =
+      oldAllocation.employee_id !== newAllocation.employee_id;
+    const venueChanged = oldAllocation.venue !== newAllocation.venue;
+
+    if (!facultyChanged && !venueChanged) {
+      return res.status(400).json({
+        message: "No changes detected. Please modify faculty or venue.",
+      });
+    }
+
     // Start a transaction
-    const client = await db.getClient();
+    const client = await db.pool.connect();
 
     try {
       await client.query("BEGIN");
 
-      // Delete old allocation
-      await client.query(
-        `DELETE FROM faculty_allocation 
-         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3 
-         AND employee_id = $4 AND venue = $5 AND slot_day = $6 
-         AND slot_name = $7 AND slot_time = $8`,
+      // Get student count for this allocation
+      const studentCount = await getStudentCountForAllocation(
+        client,
+        oldAllocation
+      );
+      console.log(`Found ${studentCount} students registered for this allocation`);
+
+      // If faculty changed, check for conflicts
+      if (facultyChanged) {
+        const facultyConflicts = await checkFacultyConflictForUpdate(
+          client,
+          newAllocation.employee_id,
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.slot_day,
+          oldAllocation.slot_time,
+          oldAllocation.course_code
+        );
+
+        if (facultyConflicts.length > 0) {
+          const conflict = facultyConflicts[0];
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            message: `Faculty conflict: ${newAllocation.faculty_name} is already teaching ${conflict.course_name} in ${conflict.venue_name} at this time slot (${oldAllocation.slot_day} ${oldAllocation.slot_time})`,
+            conflict: conflict,
+          });
+        }
+      }
+
+      // If venue changed, check capacity and conflicts
+      if (venueChanged) {
+        // Check venue conflicts
+        const venueConflicts = await checkVenueConflictForUpdate(
+          client,
+          newAllocation.venue,
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.slot_day,
+          oldAllocation.slot_time,
+          oldAllocation.course_code,
+          oldAllocation.employee_id
+        );
+
+        if (venueConflicts.length > 0) {
+          const conflict = venueConflicts[0];
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            message: `Venue conflict: ${newAllocation.venue} is already booked by ${conflict.faculty_name} for ${conflict.course_name} at this time slot (${oldAllocation.slot_day} ${oldAllocation.slot_time})`,
+            conflict: conflict,
+          });
+        }
+
+        // Check venue capacity
+        const newVenueCapacity = await getVenueCapacity(
+          client,
+          newAllocation.venue
+        );
+        const oldVenueCapacity = await getVenueCapacity(
+          client,
+          oldAllocation.venue
+        );
+
+        console.log(
+          `Venue capacity check: Old=${oldVenueCapacity}, New=${newVenueCapacity}, Students=${studentCount}`
+        );
+
+        if (newVenueCapacity < studentCount) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            message: `Venue capacity insufficient: ${newAllocation.venue} has capacity of ${newVenueCapacity}, but ${studentCount} students are registered for this course.`,
+            details: {
+              oldVenue: oldAllocation.venue,
+              oldCapacity: oldVenueCapacity,
+              newVenue: newAllocation.venue,
+              newCapacity: newVenueCapacity,
+              studentCount: studentCount,
+            },
+          });
+        }
+      }
+
+      // Get all related allocations (same course, slot_name, and faculty)
+      // For theory courses, A1 might have multiple days (MON, WED, FRI)
+      const relatedAllocations = await client.query(
+        `SELECT * FROM faculty_allocation
+         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+         AND employee_id = $4 AND slot_name = $5`,
         [
           oldAllocation.slot_year,
           oldAllocation.semester_type,
           oldAllocation.course_code,
           oldAllocation.employee_id,
-          oldAllocation.venue,
-          oldAllocation.slot_day,
           oldAllocation.slot_name,
-          oldAllocation.slot_time,
         ]
       );
 
-      // Insert new allocation with clash checks
-      // (Use the same clash checking logic as in createFacultyAllocation)
+      console.log(`Found ${relatedAllocations.rows.length} related allocation(s) to update`);
+
+      // Delete all related allocations
+      await client.query(
+        `DELETE FROM faculty_allocation
+         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+         AND employee_id = $4 AND slot_name = $5`,
+        [
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.course_code,
+          oldAllocation.employee_id,
+          oldAllocation.slot_name,
+        ]
+      );
+
+      // Insert new allocations for all related slots
+      for (const relatedAlloc of relatedAllocations.rows) {
+        await client.query(
+          `INSERT INTO faculty_allocation
+           (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            newAllocation.slot_year,
+            newAllocation.semester_type,
+            newAllocation.course_code,
+            newAllocation.employee_id,
+            venueChanged ? newAllocation.venue : relatedAlloc.venue, // Use new venue if changed
+            relatedAlloc.slot_day, // Keep original day
+            relatedAlloc.slot_name, // Keep original slot name
+            relatedAlloc.slot_time, // Keep original time
+          ]
+        );
+      }
+
+      // Update student registrations if there are any students
+      if (studentCount > 0) {
+        let updateFields = [];
+        let updateParams = [];
+        let paramIndex = 1;
+
+        if (facultyChanged) {
+          updateFields.push(`faculty_name = $${paramIndex++}`);
+          updateParams.push(newAllocation.faculty_name);
+        }
+
+        if (venueChanged) {
+          updateFields.push(`venue = $${paramIndex++}`);
+          updateParams.push(newAllocation.venue);
+        }
+
+        updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+        // Add WHERE clause parameters
+        updateParams.push(
+          oldAllocation.course_code,
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.slot_name,
+          oldAllocation.venue,
+          oldAllocation.faculty_name
+        );
+
+        const updateQuery = `
+          UPDATE student_registrations
+          SET ${updateFields.join(", ")}
+          WHERE course_code = $${paramIndex++}
+            AND slot_year = $${paramIndex++}
+            AND semester_type = $${paramIndex++}
+            AND slot_name = $${paramIndex++}
+            AND venue = $${paramIndex++}
+            AND faculty_name = $${paramIndex++}
+          RETURNING *`;
+
+        const updateResult = await client.query(updateQuery, updateParams);
+        console.log(`Updated ${updateResult.rowCount} student registration(s)`);
+      }
 
       await client.query("COMMIT");
 
       res.status(200).json({
         message: "Faculty allocation updated successfully",
+        allocationsUpdated: relatedAllocations.rows.length,
+        studentsUpdated: studentCount,
+        changes: {
+          facultyChanged: facultyChanged
+            ? {
+                from: oldAllocation.faculty_name,
+                to: newAllocation.faculty_name,
+              }
+            : null,
+          venueChanged: venueChanged
+            ? { from: oldAllocation.venue, to: newAllocation.venue }
+            : null,
+        },
       });
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1274,9 +1565,10 @@ exports.updateFacultyAllocation = async (req, res) => {
     }
   } catch (error) {
     console.error("Update faculty allocation error:", error);
-    res
-      .status(500)
-      .json({ message: "Server error while updating faculty allocation" });
+    res.status(500).json({
+      message: "Server error while updating faculty allocation",
+      error: error.message,
+    });
   }
 };
 
