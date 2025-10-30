@@ -16,6 +16,7 @@ router.get("/semesters", isFacultyOrCoordinator, attendanceController.getAvailab
 router.get("/allocations", isFacultyOrCoordinator, attendanceController.getFacultyAllocations);
 router.get("/students", isFacultyOrCoordinator, attendanceController.getEnrolledStudents);
 router.post("/mark", isFacultyOrCoordinator, attendanceController.markAttendance);
+router.delete("/clear", isFacultyOrCoordinator, attendanceController.clearAttendance);
 router.get("/records", isFacultyOrCoordinator, attendanceController.getAttendanceRecords);
 router.get("/report", isFacultyOrCoordinator, attendanceController.getAttendanceReport);
 router.get("/date-range", isFacultyOrCoordinator, attendanceController.getAttendanceByDateRange);
