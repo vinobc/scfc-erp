@@ -1362,13 +1362,14 @@ async function loadAttendanceMarkingInterface(courseCode, employeeId, venue, slo
     
     const responseData = await response.json();
     console.log("👥 Students response data:", responseData);
-    
+
     // Handle both old and new response formats
     const students = responseData.students || responseData;
-    const attendanceDate = responseData.attendance_date || new Date().toISOString().split('T')[0];
-    
+    // IMPORTANT: On initial load, always leave date blank - faculty must explicitly select it
+    const attendanceDate = '';
+
     console.log("📊 Number of students:", students.length);
-    console.log("📅 Attendance date:", attendanceDate);
+    console.log("📅 Attendance date (forced blank on initial load):", attendanceDate);
     
     if (students.length === 0) {
       console.warn("⚠️ No students found for this course session");
@@ -1451,16 +1452,24 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
             <div class="card-body">
               <div class="row mb-3">
                 <div class="col-md-4">
-                  <label for="attendance-date" class="form-label">Attendance Date</label>
-                  <input type="date" id="attendance-date" class="form-control" value="${attendanceDate}" onchange="reloadAttendanceForDate('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')">
+                  <label for="attendance-date" class="form-label">Attendance Date <span class="text-danger">*</span></label>
+                  <input type="date" id="attendance-date" class="form-control" value="${attendanceDate || ''}" onkeydown="return false"
+                    data-course-code="${courseCode}"
+                    data-employee-id="${employeeId}"
+                    data-venue="${venue}"
+                    data-slot-day="${slotDay}"
+                    data-slot-name="${slotName}"
+                    data-slot-time="${slotTime}"
+                    data-slot-year="${slotYear}"
+                    data-semester-type="${semesterType}">
                 </div>
                 <div class="col-md-8">
                   <label class="form-label">Bulk Actions</label>
                   <div>
-                    <button class="btn btn-sm btn-success me-2" onclick="bulkMarkAttendance('present')">
+                    <button id="mark-all-present-btn" class="btn btn-sm btn-success me-2" onclick="bulkMarkAttendance('present')" disabled>
                       <i class="fas fa-check me-1"></i>Mark All Present
                     </button>
-                    <button class="btn btn-sm btn-warning me-2" onclick="bulkMarkAttendance('absent')">
+                    <button id="mark-all-absent-btn" class="btn btn-sm btn-warning me-2" onclick="bulkMarkAttendance('absent')" disabled>
                       <i class="fas fa-times me-1"></i>Mark All Absent
                     </button>
                   </div>
@@ -1481,15 +1490,13 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
   `;
 
   students.forEach((student, index) => {
-    const currentStatus = student.current_status || null;
+    // Only pre-select attendance if a specific date is selected
+    const currentStatus = attendanceDate ? (student.current_status || null) : null;
     interfaceHtml += `
-      <tr ${currentStatus ? 'class="table-light"' : ''}>
+      <tr>
         <td>${index + 1}</td>
         <td>${student.enrollment_number}</td>
-        <td>
-          ${student.student_name}
-          ${currentStatus ? `<br><small class="badge bg-secondary">Previously marked: ${currentStatus.toUpperCase()}</small>` : ''}
-        </td>
+        <td>${student.student_name}</td>
         <td>
           <div class="btn-group" role="group" aria-label="Attendance options">
             <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}>
@@ -1510,7 +1517,7 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
               
               <div class="row mt-3">
                 <div class="col-md-6">
-                  <button class="btn btn-primary btn-lg" onclick="saveAttendanceData('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')">
+                  <button id="save-attendance-btn" class="btn btn-primary btn-lg" onclick="saveAttendanceData('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')" disabled>
                     <i class="fas fa-save me-2"></i>Save Attendance
                   </button>
                 </div>
@@ -1523,6 +1530,51 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
   `;
 
   content.innerHTML = interfaceHtml;
+
+  // Setup date field event listener to enable/disable buttons AND load previous attendance
+  const dateInput = document.getElementById("attendance-date");
+  const markPresentBtn = document.getElementById("mark-all-present-btn");
+  const markAbsentBtn = document.getElementById("mark-all-absent-btn");
+  const saveBtn = document.getElementById("save-attendance-btn");
+
+  if (dateInput && markPresentBtn && markAbsentBtn && saveBtn) {
+    // Function to update button states
+    const updateButtonStates = function() {
+      const hasDate = dateInput.value.trim() !== "";
+
+      // Enable/disable buttons based on date selection
+      markPresentBtn.disabled = !hasDate;
+      markAbsentBtn.disabled = !hasDate;
+      saveBtn.disabled = !hasDate;
+
+      // If date is selected, load previously marked attendance for that date
+      if (hasDate) {
+        const courseCode = dateInput.dataset.courseCode;
+        const employeeId = dateInput.dataset.employeeId;
+        const venue = dateInput.dataset.venue;
+        const slotDay = dateInput.dataset.slotDay;
+        const slotName = dateInput.dataset.slotName;
+        const slotTime = dateInput.dataset.slotTime;
+        const slotYear = dateInput.dataset.slotYear;
+        const semesterType = dateInput.dataset.semesterType;
+
+        reloadAttendanceForDate(courseCode, employeeId, venue, slotDay, slotName, slotTime, slotYear, semesterType);
+      }
+    };
+
+    // Add event listener for date changes
+    dateInput.addEventListener("change", updateButtonStates);
+
+    // Force initial state: clear date field and disable all buttons on first load
+    // Only when user explicitly selects a date should buttons be enabled
+    if (!attendanceDate) {
+      dateInput.value = '';  // Force blank on initial load
+    }
+    const hasInitialDate = dateInput.value.trim() !== "";
+    markPresentBtn.disabled = !hasInitialDate;
+    markAbsentBtn.disabled = !hasInitialDate;
+    saveBtn.disabled = !hasInitialDate;
+  }
 }
 
 // Bulk mark attendance - Original working implementation
