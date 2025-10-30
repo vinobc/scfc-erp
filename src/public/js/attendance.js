@@ -384,16 +384,16 @@ function renderAttendanceInterface() {
       <div class="card-body">
         <div class="row mb-3">
           <div class="col-md-4">
-            <label for="attendance-date" class="form-label">Attendance Date</label>
-            <input type="date" id="attendance-date" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+            <label for="attendance-date" class="form-label">Attendance Date <span class="text-danger">*</span></label>
+            <input type="date" id="attendance-date" class="form-control" value="" onkeydown="return false">
           </div>
           <div class="col-md-8">
             <label class="form-label">Bulk Actions</label>
             <div>
-              <button class="btn btn-sm btn-success me-2" onclick="bulkMarkAttendance('present')">
+              <button id="mark-all-present-btn" class="btn btn-sm btn-success me-2" onclick="bulkMarkAttendance('present')" disabled>
                 <i class="fas fa-check me-1"></i>Mark All Present
               </button>
-              <button class="btn btn-sm btn-warning me-2" onclick="bulkMarkAttendance('absent')">
+              <button id="mark-all-absent-btn" class="btn btn-sm btn-warning me-2" onclick="bulkMarkAttendance('absent')" disabled>
                 <i class="fas fa-times me-1"></i>Mark All Absent
               </button>
             </div>
@@ -439,7 +439,7 @@ function renderAttendanceInterface() {
         
         <div class="row mt-3">
           <div class="col-md-6">
-            <button class="btn btn-primary" onclick="saveAttendance()">
+            <button id="save-attendance-btn" class="btn btn-primary" onclick="saveAttendance()" disabled>
               <i class="fas fa-save me-2"></i>Save Attendance
             </button>
           </div>
@@ -454,6 +454,19 @@ function renderAttendanceInterface() {
   `;
 
   attendanceInterface.innerHTML = interfaceHtml;
+
+  // Setup date field event listener to enable/disable buttons
+  const dateInput = document.getElementById("attendance-date");
+  const markPresentBtn = document.getElementById("mark-all-present-btn");
+  const markAbsentBtn = document.getElementById("mark-all-absent-btn");
+  const saveBtn = document.getElementById("save-attendance-btn");
+
+  dateInput.addEventListener("change", function() {
+    const hasDate = this.value.trim() !== "";
+    markPresentBtn.disabled = !hasDate;
+    markAbsentBtn.disabled = !hasDate;
+    saveBtn.disabled = !hasDate;
+  });
 }
 
 // Bulk mark attendance

@@ -126,6 +126,18 @@ const SYNC_TABLES = [
       "semester_slot_config",
     ],
   },
+  {
+    name: "attendance",
+    primaryKey: "id",
+    dependencies: [
+      "student",
+      "course",
+      "faculty",
+      "venue",
+      "allowed_slot_names",
+      "allowed_slot_times",
+    ],
+  },
 ];
 
 async function testConnections() {
