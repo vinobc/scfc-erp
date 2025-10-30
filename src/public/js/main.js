@@ -1520,6 +1520,9 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
                   <button id="save-attendance-btn" class="btn btn-primary btn-lg" onclick="saveAttendanceData('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')" disabled>
                     <i class="fas fa-save me-2"></i>Save Attendance
                   </button>
+                  <button id="clear-attendance-btn" class="btn btn-outline-danger btn-lg ms-3" onclick="clearAttendanceData('${courseCode}', '${employeeId}', '${venue}', '${slotDay}', '${slotName}', '${slotTime}', '${slotYear}', '${semesterType}')" style="display: none;">
+                    <i class="fas fa-trash me-2"></i>Clear Attendance
+                  </button>
                 </div>
               </div>
             </div>
@@ -1536,8 +1539,9 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
   const markPresentBtn = document.getElementById("mark-all-present-btn");
   const markAbsentBtn = document.getElementById("mark-all-absent-btn");
   const saveBtn = document.getElementById("save-attendance-btn");
+  const clearBtn = document.getElementById("clear-attendance-btn");
 
-  if (dateInput && markPresentBtn && markAbsentBtn && saveBtn) {
+  if (dateInput && markPresentBtn && markAbsentBtn && saveBtn && clearBtn) {
     // Function to update button states
     const updateButtonStates = function() {
       const hasDate = dateInput.value.trim() !== "";
@@ -1559,6 +1563,9 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
         const semesterType = dateInput.dataset.semesterType;
 
         reloadAttendanceForDate(courseCode, employeeId, venue, slotDay, slotName, slotTime, slotYear, semesterType);
+      } else {
+        // Hide clear button if no date selected
+        clearBtn.style.display = 'none';
       }
     };
 
@@ -1574,6 +1581,10 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
     markPresentBtn.disabled = !hasInitialDate;
     markAbsentBtn.disabled = !hasInitialDate;
     saveBtn.disabled = !hasInitialDate;
+
+    // Show/hide clear button based on whether attendance exists
+    const hasExistingAttendance = students.some(s => s.current_status);
+    clearBtn.style.display = (hasInitialDate && hasExistingAttendance) ? 'inline-block' : 'none';
   }
 }
 
@@ -1696,6 +1707,77 @@ async function saveAttendanceData(courseCode, employeeId, venue, slotDay, slotNa
   } catch (error) {
     console.error("Error saving attendance:", error);
     showAlert("Error saving attendance. Please try again.", "error");
+  }
+}
+
+// Clear attendance for a specific date
+async function clearAttendanceData(courseCode, employeeId, venue, slotDay, slotName, slotTime, slotYear, semesterType) {
+  console.log("🗑️ Clear attendance button clicked");
+  const attendanceDate = document.getElementById("attendance-date").value;
+  console.log("📅 Selected date for clearing:", attendanceDate);
+
+  if (!attendanceDate) {
+    showAlert("Please select a date first", "warning");
+    return;
+  }
+
+  // Count how many students have attendance marked
+  const radioButtons = document.querySelectorAll('input[type="radio"]:checked');
+  const studentCount = radioButtons.length;
+
+  if (studentCount === 0) {
+    showAlert("No attendance found for this date", "info");
+    return;
+  }
+
+  // Show confirmation dialog
+  const confirmMessage = `Are you sure you want to delete attendance for ${courseCode} - ${slotDay} ${slotName} on ${attendanceDate}? This will remove records for ${studentCount} students. This action cannot be undone.`;
+
+  if (!confirm(confirmMessage)) {
+    console.log("❌ Clear attendance cancelled by user");
+    return;
+  }
+
+  try {
+    console.log("🌐 Making clear attendance API call...");
+    const response = await fetch(`${window.API_URL}/attendance/clear`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token")
+      },
+      body: JSON.stringify({
+        slot_year: slotYear,
+        semester_type: semesterType,
+        course_code: courseCode,
+        employee_id: parseInt(employeeId),
+        venue: venue,
+        slot_day: slotDay,
+        slot_name: slotName,
+        slot_time: slotTime,
+        attendance_date: attendanceDate
+      })
+    });
+
+    console.log("📡 Clear attendance API response status:", response.status);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ Clear attendance API error:", errorText);
+      throw new Error("Failed to clear attendance");
+    }
+
+    const result = await response.json();
+    console.log("✅ Attendance cleared successfully!", result);
+
+    // Show success notification
+    showAlert(`Attendance cleared for ${courseCode} on ${attendanceDate}`, "success");
+
+    // Reload the interface to show cleared state
+    reloadAttendanceForDate(courseCode, employeeId, venue, slotDay, slotName, slotTime, slotYear, semesterType);
+
+  } catch (error) {
+    console.error("Error clearing attendance:", error);
+    showAlert("Error clearing attendance. Please try again.", "error");
   }
 }
 

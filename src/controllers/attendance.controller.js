@@ -173,6 +173,47 @@ exports.markAttendance = async (req, res) => {
   }
 };
 
+// Clear attendance for a specific date and slot
+exports.clearAttendance = async (req, res) => {
+  try {
+    const facultyId = req.userId;
+    const { slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time, attendance_date } = req.body;
+
+    // Validate required parameters
+    if (!slot_year || !semester_type || !course_code || !employee_id || !venue || !slot_day || !slot_name || !slot_time || !attendance_date) {
+      return res.status(400).json({ message: "All parameters are required" });
+    }
+
+    console.log("Clearing attendance for:", { course_code, slot_day, slot_name, attendance_date });
+
+    // Delete all attendance records for this specific date and slot
+    const result = await db.query(
+      `DELETE FROM attendance
+       WHERE slot_year = $1
+         AND semester_type = $2
+         AND course_code = $3
+         AND employee_id = $4
+         AND venue = $5
+         AND slot_day = $6
+         AND slot_name = $7
+         AND slot_time = $8
+         AND attendance_date = $9`,
+      [slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time, attendance_date]
+    );
+
+    console.log(`Deleted ${result.rowCount} attendance records`);
+
+    res.status(200).json({
+      message: "Attendance cleared successfully",
+      deleted_count: result.rowCount
+    });
+
+  } catch (error) {
+    console.error("Clear attendance error:", error);
+    res.status(500).json({ message: "Server error while clearing attendance" });
+  }
+};
+
 // Get attendance records for a course
 exports.getAttendanceRecords = async (req, res) => {
   try {
