@@ -15,12 +15,20 @@ let programLongNameInput;
 let programShortNameInput;
 let programDurationInput;
 let programCreditsInput;
+let programDeptDropdown;
 let programDeptLongNameInput;
 let programDeptShortNameInput;
+let programDeptShortNameDisplay;
+let programSpecDropdown;
 let programSpecLongNameInput;
 let programSpecShortNameInput;
+let programSpecShortNameDisplay;
 let programDescriptionInput;
 let programIsActiveInput;
+
+// Department and specialization data
+let departmentsData = [];
+let specializationsData = [];
 
 // Modal elements
 let programModal;
@@ -51,17 +59,25 @@ document.addEventListener("DOMContentLoaded", () => {
   programShortNameInput = document.getElementById("program-short-name-field");
   programDurationInput = document.getElementById("program-duration-field");
   programCreditsInput = document.getElementById("program-credits-field");
+  programDeptDropdown = document.getElementById("program-dept-dropdown");
   programDeptLongNameInput = document.getElementById(
     "program-dept-long-name-field"
   );
   programDeptShortNameInput = document.getElementById(
     "program-dept-short-name-field"
   );
+  programDeptShortNameDisplay = document.getElementById(
+    "program-dept-short-name-display"
+  );
+  programSpecDropdown = document.getElementById("program-spec-dropdown");
   programSpecLongNameInput = document.getElementById(
     "program-spec-long-name-field"
   );
   programSpecShortNameInput = document.getElementById(
     "program-spec-short-name-field"
+  );
+  programSpecShortNameDisplay = document.getElementById(
+    "program-spec-short-name-display"
   );
   programDescriptionInput = document.getElementById(
     "program-description-field"
@@ -118,8 +134,20 @@ document.addEventListener("DOMContentLoaded", () => {
     programStatusFilter.addEventListener("change", filterPrograms);
   }
 
+  // Add event listeners for department and specialization dropdowns
+  if (programDeptDropdown) {
+    programDeptDropdown.addEventListener("change", handleDepartmentDropdownChange);
+  }
+
+  if (programSpecDropdown) {
+    programSpecDropdown.addEventListener("change", handleSpecializationDropdownChange);
+  }
+
   // Initial load of schools dropdown for filter
   loadSchoolsDropdown();
+
+  // Initial load of departments and specializations
+  loadDepartmentsAndSpecializations();
 
   // Initial load of programs when the page loads
   const programsLink = document.getElementById("programs-link");
@@ -170,6 +198,104 @@ function loadSchoolsDropdown() {
       console.error("Load schools error:", error);
       showAlert("Failed to load schools. Please try again.", "danger");
     });
+}
+
+// Load departments and specializations from existing programs
+function loadDepartmentsAndSpecializations() {
+  fetch(`${window.API_URL}/programs`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((programs) => {
+      // Extract unique departments
+      const deptMap = new Map();
+      programs.forEach((program) => {
+        if (program.department_name_long && program.department_name_short) {
+          const key = `${program.department_name_long}|${program.department_name_short}`;
+          if (!deptMap.has(key)) {
+            deptMap.set(key, {
+              long_name: program.department_name_long,
+              short_name: program.department_name_short,
+            });
+          }
+        }
+      });
+      departmentsData = Array.from(deptMap.values());
+
+      // Extract unique specializations
+      const specMap = new Map();
+      programs.forEach((program) => {
+        if (program.specialization_name_long && program.specialization_name_short) {
+          const key = `${program.specialization_name_long}|${program.specialization_name_short}`;
+          if (!specMap.has(key)) {
+            specMap.set(key, {
+              long_name: program.specialization_name_long,
+              short_name: program.specialization_name_short,
+            });
+          }
+        }
+      });
+      specializationsData = Array.from(specMap.values());
+
+      // Populate department dropdown
+      if (programDeptDropdown) {
+        let html = '<option value="">Select department or leave blank...</option>';
+        departmentsData.forEach((dept) => {
+          html += `<option value="${dept.long_name}|${dept.short_name}">${dept.long_name} (${dept.short_name})</option>`;
+        });
+        programDeptDropdown.innerHTML = html;
+      }
+
+      // Populate specialization dropdown
+      if (programSpecDropdown) {
+        let html = '<option value="">Select specialization or leave blank...</option>';
+        specializationsData.forEach((spec) => {
+          html += `<option value="${spec.long_name}|${spec.short_name}">${spec.long_name} (${spec.short_name})</option>`;
+        });
+        programSpecDropdown.innerHTML = html;
+      }
+    })
+    .catch((error) => {
+      console.error("Load departments/specializations error:", error);
+    });
+}
+
+// Handle department dropdown change
+function handleDepartmentDropdownChange(event) {
+  const value = event.target.value;
+
+  if (value === "") {
+    // Empty selection - clear fields
+    programDeptLongNameInput.value = "";
+    programDeptShortNameInput.value = "";
+    if (programDeptShortNameDisplay) programDeptShortNameDisplay.value = "";
+  } else {
+    // Existing department selected - auto-fill fields
+    const [longName, shortName] = value.split("|");
+    programDeptLongNameInput.value = longName;
+    programDeptShortNameInput.value = shortName;
+    if (programDeptShortNameDisplay) programDeptShortNameDisplay.value = shortName;
+  }
+}
+
+// Handle specialization dropdown change
+function handleSpecializationDropdownChange(event) {
+  const value = event.target.value;
+
+  if (value === "") {
+    // Empty selection - clear fields
+    programSpecLongNameInput.value = "";
+    programSpecShortNameInput.value = "";
+    if (programSpecShortNameDisplay) programSpecShortNameDisplay.value = "";
+  } else {
+    // Existing specialization selected - auto-fill fields
+    const [longName, shortName] = value.split("|");
+    programSpecLongNameInput.value = longName;
+    programSpecShortNameInput.value = shortName;
+    if (programSpecShortNameDisplay) programSpecShortNameDisplay.value = shortName;
+  }
 }
 
 // Load all programs from the API
@@ -406,6 +532,18 @@ function handleAddProgram() {
   if (programForm) programForm.reset();
   if (programIdInput) programIdInput.value = "";
 
+  // Reset department dropdown
+  if (programDeptDropdown) programDeptDropdown.value = "";
+  if (programDeptLongNameInput) programDeptLongNameInput.value = "";
+  if (programDeptShortNameInput) programDeptShortNameInput.value = "";
+  if (programDeptShortNameDisplay) programDeptShortNameDisplay.value = "";
+
+  // Reset specialization dropdown
+  if (programSpecDropdown) programSpecDropdown.value = "";
+  if (programSpecLongNameInput) programSpecLongNameInput.value = "";
+  if (programSpecShortNameInput) programSpecShortNameInput.value = "";
+  if (programSpecShortNameDisplay) programSpecShortNameDisplay.value = "";
+
   // Update modal title
   if (programModalLabel) programModalLabel.textContent = "Add New Program";
 
@@ -444,15 +582,37 @@ function openEditProgramModal(programId) {
         programDurationInput.value = program.duration_years;
       if (programCreditsInput)
         programCreditsInput.value = program.total_credits;
-      if (programDeptLongNameInput)
-        programDeptLongNameInput.value = program.department_name_long || "";
-      if (programDeptShortNameInput)
-        programDeptShortNameInput.value = program.department_name_short || "";
-      if (programSpecLongNameInput)
-        programSpecLongNameInput.value = program.specialization_name_long || "";
-      if (programSpecShortNameInput)
-        programSpecShortNameInput.value =
-          program.specialization_name_short || "";
+
+      // Set department dropdown and fields
+      if (program.department_name_long && program.department_name_short) {
+        const deptValue = `${program.department_name_long}|${program.department_name_short}`;
+        programDeptDropdown.value = deptValue;
+        programDeptLongNameInput.value = program.department_name_long;
+        programDeptShortNameInput.value = program.department_name_short;
+        if (programDeptShortNameDisplay) programDeptShortNameDisplay.value = program.department_name_short;
+      } else {
+        // No department - reset
+        programDeptDropdown.value = "";
+        programDeptLongNameInput.value = "";
+        programDeptShortNameInput.value = "";
+        if (programDeptShortNameDisplay) programDeptShortNameDisplay.value = "";
+      }
+
+      // Set specialization dropdown and fields
+      if (program.specialization_name_long && program.specialization_name_short) {
+        const specValue = `${program.specialization_name_long}|${program.specialization_name_short}`;
+        programSpecDropdown.value = specValue;
+        programSpecLongNameInput.value = program.specialization_name_long;
+        programSpecShortNameInput.value = program.specialization_name_short;
+        if (programSpecShortNameDisplay) programSpecShortNameDisplay.value = program.specialization_name_short;
+      } else {
+        // No specialization - reset
+        programSpecDropdown.value = "";
+        programSpecLongNameInput.value = "";
+        programSpecShortNameInput.value = "";
+        if (programSpecShortNameDisplay) programSpecShortNameDisplay.value = "";
+      }
+
       if (programDescriptionInput)
         programDescriptionInput.value = program.description || "";
       if (programIsActiveInput)
@@ -600,6 +760,9 @@ function handleSaveProgram() {
 
       // Reload programs
       loadPrograms();
+
+      // Reload departments and specializations to update dropdowns with any new values
+      loadDepartmentsAndSpecializations();
     })
     .catch((error) => {
       console.error("Save program error:", error);

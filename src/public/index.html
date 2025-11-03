@@ -2707,23 +2707,39 @@
                   <label for="program-dept-long-name-field" class="form-label"
                     >Department Long Name</label
                   >
+                  <select
+                    class="form-select"
+                    id="program-dept-dropdown"
+                  >
+                    <option value="">Select department or leave blank...</option>
+                    <!-- Options populated by JavaScript -->
+                  </select>
                   <input
-                    type="text"
-                    class="form-control"
+                    type="hidden"
                     id="program-dept-long-name-field"
-                    maxlength="100"
                   />
+                  <div class="form-text">
+                    Select from existing departments
+                  </div>
                 </div>
                 <div class="col-md-6 mb-3">
                   <label for="program-dept-short-name-field" class="form-label"
                     >Department Short Name</label
                   >
                   <input
+                    type="hidden"
+                    id="program-dept-short-name-field"
+                  />
+                  <input
                     type="text"
                     class="form-control"
-                    id="program-dept-short-name-field"
-                    maxlength="20"
+                    id="program-dept-short-name-display"
+                    readonly
+                    placeholder="Auto-filled from dropdown"
                   />
+                  <div class="form-text">
+                    Auto-filled when department selected
+                  </div>
                 </div>
               </div>
               <div class="row">
@@ -2731,23 +2747,39 @@
                   <label for="program-spec-long-name-field" class="form-label"
                     >Specialization Long Name</label
                   >
+                  <select
+                    class="form-select"
+                    id="program-spec-dropdown"
+                  >
+                    <option value="">Select specialization or leave blank...</option>
+                    <!-- Options populated by JavaScript -->
+                  </select>
                   <input
-                    type="text"
-                    class="form-control"
+                    type="hidden"
                     id="program-spec-long-name-field"
-                    maxlength="100"
                   />
+                  <div class="form-text">
+                    Select from existing specializations
+                  </div>
                 </div>
                 <div class="col-md-6 mb-3">
                   <label for="program-spec-short-name-field" class="form-label"
                     >Specialization Short Name</label
                   >
                   <input
+                    type="hidden"
+                    id="program-spec-short-name-field"
+                  />
+                  <input
                     type="text"
                     class="form-control"
-                    id="program-spec-short-name-field"
-                    maxlength="20"
+                    id="program-spec-short-name-display"
+                    readonly
+                    placeholder="Auto-filled from dropdown"
                   />
+                  <div class="form-text">
+                    Auto-filled when specialization selected
+                  </div>
                 </div>
               </div>
               <div class="mb-3">
