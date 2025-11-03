@@ -5,6 +5,10 @@ let saveVenueBtn;
 let venueSearchInput;
 let venueStatusFilter;
 
+// Store schools for lookup
+let schoolsMap = {}; // school_code -> school_short_name
+let schoolsReverseMap = {}; // school_short_name -> school_code
+
 // Venue form elements
 let venueForm;
 let venueIdInput;
@@ -135,6 +139,9 @@ document.addEventListener("DOMContentLoaded", () => {
       loadVenues();
     });
   }
+
+  // Load schools for dropdown
+  loadSchoolsForVenues();
 });
 
 // Toggle between dropdown and custom input for infrastructure type
@@ -236,6 +243,44 @@ function resetInfraTypeFields() {
   }
 }
 
+// Load schools and populate the dropdown
+function loadSchoolsForVenues() {
+  fetch(`${window.API_URL}/schools`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Failed to load schools");
+      }
+      return response.json();
+    })
+    .then((schools) => {
+      // Store schools in maps for lookup (both directions)
+      schoolsMap = {}; // code -> short_name
+      schoolsReverseMap = {}; // short_name -> code
+      schools.forEach((school) => {
+        schoolsMap[school.school_code] = school.school_short_name;
+        schoolsReverseMap[school.school_short_name] = school.school_code;
+      });
+
+      // Populate school select in venue form
+      if (venueSchoolInput) {
+        let options = '<option value="">None</option>';
+        schools.forEach((school) => {
+          if (school.is_active) {
+            options += `<option value="${school.school_code}">${school.school_code} - ${school.school_short_name}</option>`;
+          }
+        });
+        venueSchoolInput.innerHTML = options;
+      }
+    })
+    .catch((error) => {
+      console.error("Load schools error:", error);
+    });
+}
+
 // Load all venues from the API
 function loadVenues() {
   console.log("venues.js: Loading venues");
@@ -307,10 +352,20 @@ function renderVenues(venues) {
 
     // Apply search filter
     if (searchTerm) {
+      // Get school name for search - handle both codes and legacy short names
+      let schoolName = "";
+      if (venue.assigned_to_school) {
+        // If it's a code (SCL001), get the short name
+        if (schoolsMap[venue.assigned_to_school]) {
+          schoolName = schoolsMap[venue.assigned_to_school];
+        } else {
+          // Otherwise it's already a short name (legacy data)
+          schoolName = venue.assigned_to_school;
+        }
+      }
       return (
         venue.venue.toLowerCase().includes(searchTerm) ||
-        (venue.assigned_to_school &&
-          venue.assigned_to_school.toLowerCase().includes(searchTerm)) ||
+        schoolName.toLowerCase().includes(searchTerm) ||
         venue.infra_type.toLowerCase().includes(searchTerm)
       );
     }
@@ -331,9 +386,21 @@ function renderVenues(venues) {
   filteredVenues.forEach((venue) => {
     const row = document.createElement("tr");
 
+    // Get school name - handle both school codes (SCL001) and short names (ASET)
+    let schoolDisplay = "-";
+    if (venue.assigned_to_school) {
+      // First try as school code (SCL001 -> SEET)
+      if (schoolsMap[venue.assigned_to_school]) {
+        schoolDisplay = schoolsMap[venue.assigned_to_school];
+      } else {
+        // Otherwise display as-is (legacy data like "ASET")
+        schoolDisplay = venue.assigned_to_school;
+      }
+    }
+
     row.innerHTML = `
       <td>${venue.venue}</td>
-      <td>${venue.assigned_to_school || "-"}</td>
+      <td>${schoolDisplay}</td>
       <td>${venue.capacity}</td>
       <td>${venue.infra_type}</td>
       <td>${venue.seats || "-"}</td>
@@ -475,8 +542,17 @@ function openEditVenueModal(venueId) {
       // Fill form with venue data
       if (venueIdInput) venueIdInput.value = venue.venue_id;
       if (venueNameInput) venueNameInput.value = venue.venue;
-      if (venueSchoolInput)
-        venueSchoolInput.value = venue.assigned_to_school || "";
+
+      // Handle school assignment - convert legacy short names to codes
+      if (venueSchoolInput) {
+        let schoolValue = venue.assigned_to_school || "";
+        // If it's a legacy short name (ASET, AIB), convert to code (SCL001)
+        if (schoolValue && !schoolValue.startsWith("SCL") && schoolsReverseMap[schoolValue]) {
+          schoolValue = schoolsReverseMap[schoolValue];
+        }
+        venueSchoolInput.value = schoolValue;
+      }
+
       if (venueCapacityInput) venueCapacityInput.value = venue.capacity;
 
       // Handle infrastructure type
