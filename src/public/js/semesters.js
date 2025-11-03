@@ -106,7 +106,38 @@ document.addEventListener("DOMContentLoaded", () => {
       loadSemesters();
     });
   }
+
+  // Populate academic year dropdown
+  populateAcademicYearDropdown();
 });
+
+// Populate academic year dropdown with auto-generated years
+function populateAcademicYearDropdown() {
+  if (!academicYearInput) return;
+
+  const currentYear = new Date().getFullYear();
+  const startYear = currentYear - 2; // Show 2 years in the past
+  const endYear = currentYear + 5; // Show 5 years in the future
+
+  // Keep the first option (Select academic year...)
+  const firstOption = academicYearInput.querySelector('option[value=""]');
+  academicYearInput.innerHTML = '';
+  if (firstOption) {
+    academicYearInput.appendChild(firstOption);
+  }
+
+  // Generate academic year options (e.g., 2023-24, 2024-25, etc.)
+  for (let year = startYear; year <= endYear; year++) {
+    const nextYear = (year + 1).toString().slice(-2); // Get last 2 digits
+    const academicYear = `${year}-${nextYear}`;
+
+    const option = document.createElement('option');
+    option.value = academicYear;
+    option.textContent = academicYear;
+
+    academicYearInput.appendChild(option);
+  }
+}
 
 // Load all semesters from the API
 function loadSemesters() {

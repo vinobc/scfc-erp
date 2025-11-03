@@ -2427,16 +2427,16 @@
                 <label for="academic-year-field" class="form-label"
                   >Academic Year *</label
                 >
-                <input
-                  type="text"
-                  class="form-control"
+                <select
+                  class="form-select"
                   id="academic-year-field"
-                  placeholder="e.g., 2023-24"
-                  maxlength="7"
                   required
-                />
+                >
+                  <option value="">Select academic year...</option>
+                  <!-- Options populated by JavaScript -->
+                </select>
                 <div class="form-text">
-                  Academic year in YYYY-YY format (e.g., 2023-24).
+                  Select the academic year for this semester.
                 </div>
               </div>
               <div class="form-check mb-3">
