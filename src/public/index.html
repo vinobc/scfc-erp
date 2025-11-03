@@ -3367,12 +3367,26 @@
                 <label for="prerequisite-field" class="form-label"
                   >Prerequisite</label
                 >
-                <input
-                  type="text"
-                  class="form-control"
-                  id="prerequisite-field"
-                  maxlength="100"
-                />
+                <div class="dropdown w-100">
+                  <button
+                    class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
+                    type="button"
+                    id="prerequisite-dropdown-btn"
+                    data-bs-toggle="dropdown"
+                    data-bs-auto-close="outside"
+                    aria-expanded="false"
+                  >
+                    <span id="prerequisite-display">Select courses...</span>
+                  </button>
+                  <ul
+                    class="dropdown-menu w-100"
+                    id="prerequisite-checkboxes"
+                    style="max-height: 300px; overflow-y: auto;"
+                  >
+                    <!-- Search box and course checkboxes populated by JavaScript -->
+                  </ul>
+                </div>
+                <input type="hidden" id="prerequisite-field" />
                 <div class="form-text">
                   Courses that must be completed before taking this course.
                 </div>
@@ -3381,12 +3395,26 @@
                 <label for="antirequisite-field" class="form-label"
                   >Antirequisite</label
                 >
-                <input
-                  type="text"
-                  class="form-control"
-                  id="antirequisite-field"
-                  maxlength="100"
-                />
+                <div class="dropdown w-100">
+                  <button
+                    class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
+                    type="button"
+                    id="antirequisite-dropdown-btn"
+                    data-bs-toggle="dropdown"
+                    data-bs-auto-close="outside"
+                    aria-expanded="false"
+                  >
+                    <span id="antirequisite-display">Select courses...</span>
+                  </button>
+                  <ul
+                    class="dropdown-menu w-100"
+                    id="antirequisite-checkboxes"
+                    style="max-height: 300px; overflow-y: auto;"
+                  >
+                    <!-- Search box and course checkboxes populated by JavaScript -->
+                  </ul>
+                </div>
+                <input type="hidden" id="antirequisite-field" />
                 <div class="form-text">
                   Courses that cannot be taken along with this course.
                 </div>
@@ -3395,12 +3423,26 @@
                 <label for="course-equivalence-field" class="form-label"
                   >Course Equivalence</label
                 >
-                <input
-                  type="text"
-                  class="form-control"
-                  id="course-equivalence-field"
-                  maxlength="100"
-                />
+                <div class="dropdown w-100">
+                  <button
+                    class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
+                    type="button"
+                    id="course-equivalence-dropdown-btn"
+                    data-bs-toggle="dropdown"
+                    data-bs-auto-close="outside"
+                    aria-expanded="false"
+                  >
+                    <span id="course-equivalence-display">Select courses...</span>
+                  </button>
+                  <ul
+                    class="dropdown-menu w-100"
+                    id="course-equivalence-checkboxes"
+                    style="max-height: 300px; overflow-y: auto;"
+                  >
+                    <!-- Search box and course checkboxes populated by JavaScript -->
+                  </ul>
+                </div>
+                <input type="hidden" id="course-equivalence-field" />
                 <div class="form-text">
                   Equivalent courses from other programs/universities.
                 </div>
