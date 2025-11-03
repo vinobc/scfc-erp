@@ -3483,15 +3483,20 @@
                 <label for="programs-offered-to-field" class="form-label"
                   >Programs Offered To *</label
                 >
-                <textarea
-                  class="form-control"
+                <select
+                  class="form-select"
                   id="programs-offered-to-field"
-                  rows="3"
-                  maxlength="800"
+                  multiple
+                  size="8"
                   required
-                ></textarea>
+                >
+                  <!-- Options populated by JavaScript -->
+                </select>
                 <div class="form-text">
-                  List of programs this course is offered to.
+                  Hold Ctrl (Cmd on Mac) to select/deselect multiple programs. Click on a selected program while holding Ctrl/Cmd to deselect it.
+                </div>
+                <div id="selected-programs-display" class="mt-2">
+                  <!-- Selected programs will be displayed here -->
                 </div>
               </div>
               <div class="mb-3">
