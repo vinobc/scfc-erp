@@ -17,6 +17,27 @@ let courseOwnerDropdownBtn;
 let courseOwnerDisplay;
 let courseOwnerCheckboxes;
 
+// Courses data for prerequisite/antirequisite/equivalence multi-select
+let coursesData = [];
+let selectedPrerequisites = new Set();
+let selectedAntirequisites = new Set();
+let selectedEquivalences = new Set();
+
+// Prerequisite dropdown elements
+let prerequisiteDropdownBtn;
+let prerequisiteDisplay;
+let prerequisiteCheckboxes;
+
+// Antirequisite dropdown elements
+let antirequisiteDropdownBtn;
+let antirequisiteDisplay;
+let antirequisiteCheckboxes;
+
+// Course equivalence dropdown elements
+let courseEquivalenceDropdownBtn;
+let courseEquivalenceDisplay;
+let courseEquivalenceCheckboxes;
+
 // Course form elements
 let courseForm;
 let courseOwnerInput;
@@ -70,8 +91,17 @@ document.addEventListener("DOMContentLoaded", () => {
   creditsInput = document.getElementById("credits-field");
   courseTypeInput = document.getElementById("course-type-field");
   prerequisiteInput = document.getElementById("prerequisite-field");
+  prerequisiteDropdownBtn = document.getElementById("prerequisite-dropdown-btn");
+  prerequisiteDisplay = document.getElementById("prerequisite-display");
+  prerequisiteCheckboxes = document.getElementById("prerequisite-checkboxes");
   antirequisiteInput = document.getElementById("antirequisite-field");
+  antirequisiteDropdownBtn = document.getElementById("antirequisite-dropdown-btn");
+  antirequisiteDisplay = document.getElementById("antirequisite-display");
+  antirequisiteCheckboxes = document.getElementById("antirequisite-checkboxes");
   courseEquivalenceInput = document.getElementById("course-equivalence-field");
+  courseEquivalenceDropdownBtn = document.getElementById("course-equivalence-dropdown-btn");
+  courseEquivalenceDisplay = document.getElementById("course-equivalence-display");
+  courseEquivalenceCheckboxes = document.getElementById("course-equivalence-checkboxes");
   programsOfferedToInput = document.getElementById("programs-offered-to-field");
   curriculumVersionInput = document.getElementById("curriculum-version-field");
   remarksInput = document.getElementById("remarks-field");
@@ -160,6 +190,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load schools for course owner dropdown
   loadSchoolsForCourseOwner();
+
+  // Load courses for prerequisite/antirequisite/equivalence dropdowns
+  loadCoursesForDropdowns();
 });
 
 // Load schools and populate course owner dropdown
@@ -294,6 +327,397 @@ function getCourseOwnerDisplayNames(value) {
 
   const parts = value.split(/[,&]/).map((s) => s.trim());
   return parts.map((p) => schoolMap[p] || p).join(", ");
+}
+
+// Load courses and populate prerequisite/antirequisite/equivalence dropdowns
+function loadCoursesForDropdowns() {
+  fetch(`${window.API_URL}/courses`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((courses) => {
+      coursesData = courses;
+
+      // Populate prerequisite checkboxes
+      if (prerequisiteCheckboxes) {
+        // Start with search box and divider
+        let html = `
+          <li class="px-3 py-2">
+            <input
+              type="text"
+              class="form-control form-control-sm"
+              id="prerequisite-search"
+              placeholder="Search courses..."
+            />
+          </li>
+          <li><hr class="dropdown-divider"></li>
+        `;
+
+        courses.forEach((course) => {
+          if (course.is_active) {
+            html += `
+              <li class="px-3 py-2 prerequisite-item">
+                <div class="form-check">
+                  <input
+                    class="form-check-input prerequisite-checkbox"
+                    type="checkbox"
+                    value="${course.course_code}"
+                    id="prereq-${course.course_code}"
+                  />
+                  <label class="form-check-label" for="prereq-${course.course_code}">
+                    ${course.course_code} - ${course.course_name}
+                  </label>
+                </div>
+              </li>
+            `;
+          }
+        });
+        prerequisiteCheckboxes.innerHTML = html;
+
+        // Add event listeners for checkboxes
+        const checkboxes = document.querySelectorAll(".prerequisite-checkbox");
+        checkboxes.forEach((checkbox) => {
+          checkbox.addEventListener("change", handlePrerequisiteCheckboxChange);
+        });
+
+        // Add event listener for search
+        const searchInput = document.getElementById("prerequisite-search");
+        if (searchInput) {
+          searchInput.addEventListener("input", filterPrerequisiteCourses);
+        }
+      }
+
+      // Populate antirequisite checkboxes
+      if (antirequisiteCheckboxes) {
+        // Start with search box and divider
+        let html = `
+          <li class="px-3 py-2">
+            <input
+              type="text"
+              class="form-control form-control-sm"
+              id="antirequisite-search"
+              placeholder="Search courses..."
+            />
+          </li>
+          <li><hr class="dropdown-divider"></li>
+        `;
+
+        courses.forEach((course) => {
+          if (course.is_active) {
+            html += `
+              <li class="px-3 py-2 antirequisite-item">
+                <div class="form-check">
+                  <input
+                    class="form-check-input antirequisite-checkbox"
+                    type="checkbox"
+                    value="${course.course_code}"
+                    id="antireq-${course.course_code}"
+                  />
+                  <label class="form-check-label" for="antireq-${course.course_code}">
+                    ${course.course_code} - ${course.course_name}
+                  </label>
+                </div>
+              </li>
+            `;
+          }
+        });
+        antirequisiteCheckboxes.innerHTML = html;
+
+        // Add event listeners for checkboxes
+        const checkboxes = document.querySelectorAll(".antirequisite-checkbox");
+        checkboxes.forEach((checkbox) => {
+          checkbox.addEventListener("change", handleAntirequisiteCheckboxChange);
+        });
+
+        // Add event listener for search
+        const searchInput = document.getElementById("antirequisite-search");
+        if (searchInput) {
+          searchInput.addEventListener("input", filterAntirequisiteCourses);
+        }
+      }
+
+      // Populate course equivalence checkboxes
+      if (courseEquivalenceCheckboxes) {
+        // Start with search box and divider
+        let html = `
+          <li class="px-3 py-2">
+            <input
+              type="text"
+              class="form-control form-control-sm"
+              id="course-equivalence-search"
+              placeholder="Search courses..."
+            />
+          </li>
+          <li><hr class="dropdown-divider"></li>
+        `;
+
+        courses.forEach((course) => {
+          if (course.is_active) {
+            html += `
+              <li class="px-3 py-2 equivalence-item">
+                <div class="form-check">
+                  <input
+                    class="form-check-input equivalence-checkbox"
+                    type="checkbox"
+                    value="${course.course_code}"
+                    id="equiv-${course.course_code}"
+                  />
+                  <label class="form-check-label" for="equiv-${course.course_code}">
+                    ${course.course_code} - ${course.course_name}
+                  </label>
+                </div>
+              </li>
+            `;
+          }
+        });
+        courseEquivalenceCheckboxes.innerHTML = html;
+
+        // Add event listeners for checkboxes
+        const checkboxes = document.querySelectorAll(".equivalence-checkbox");
+        checkboxes.forEach((checkbox) => {
+          checkbox.addEventListener("change", handleEquivalenceCheckboxChange);
+        });
+
+        // Add event listener for search
+        const searchInput = document.getElementById("course-equivalence-search");
+        if (searchInput) {
+          searchInput.addEventListener("input", filterEquivalenceCourses);
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Load courses error:", error);
+    });
+}
+
+// Handle prerequisite checkbox changes
+function handlePrerequisiteCheckboxChange(event) {
+  const courseCode = event.target.value;
+  if (event.target.checked) {
+    selectedPrerequisites.add(courseCode);
+  } else {
+    selectedPrerequisites.delete(courseCode);
+  }
+  updatePrerequisiteDisplay();
+}
+
+// Handle antirequisite checkbox changes
+function handleAntirequisiteCheckboxChange(event) {
+  const courseCode = event.target.value;
+  if (event.target.checked) {
+    selectedAntirequisites.add(courseCode);
+  } else {
+    selectedAntirequisites.delete(courseCode);
+  }
+  updateAntirequisiteDisplay();
+}
+
+// Handle course equivalence checkbox changes
+function handleEquivalenceCheckboxChange(event) {
+  const courseCode = event.target.value;
+  if (event.target.checked) {
+    selectedEquivalences.add(courseCode);
+  } else {
+    selectedEquivalences.delete(courseCode);
+  }
+  updateEquivalenceDisplay();
+}
+
+// Update prerequisite display and hidden input
+function updatePrerequisiteDisplay() {
+  const courseMap = {};
+  coursesData.forEach((c) => {
+    courseMap[c.course_code] = c.course_code;
+  });
+
+  const selectedCodes = Array.from(selectedPrerequisites)
+    .map((code) => courseMap[code] || code)
+    .join(", ");
+
+  if (prerequisiteDisplay) {
+    prerequisiteDisplay.textContent = selectedCodes || "Select courses...";
+  }
+
+  if (prerequisiteInput) {
+    prerequisiteInput.value = Array.from(selectedPrerequisites).join(", ");
+  }
+}
+
+// Update antirequisite display and hidden input
+function updateAntirequisiteDisplay() {
+  const courseMap = {};
+  coursesData.forEach((c) => {
+    courseMap[c.course_code] = c.course_code;
+  });
+
+  const selectedCodes = Array.from(selectedAntirequisites)
+    .map((code) => courseMap[code] || code)
+    .join(", ");
+
+  if (antirequisiteDisplay) {
+    antirequisiteDisplay.textContent = selectedCodes || "Select courses...";
+  }
+
+  if (antirequisiteInput) {
+    antirequisiteInput.value = Array.from(selectedAntirequisites).join(", ");
+  }
+}
+
+// Update course equivalence display and hidden input
+function updateEquivalenceDisplay() {
+  const courseMap = {};
+  coursesData.forEach((c) => {
+    courseMap[c.course_code] = c.course_code;
+  });
+
+  const selectedCodes = Array.from(selectedEquivalences)
+    .map((code) => courseMap[code] || code)
+    .join(", ");
+
+  if (courseEquivalenceDisplay) {
+    courseEquivalenceDisplay.textContent = selectedCodes || "Select courses...";
+  }
+
+  if (courseEquivalenceInput) {
+    courseEquivalenceInput.value = Array.from(selectedEquivalences).join(", ");
+  }
+}
+
+// Reset prerequisite selection
+function resetPrerequisiteSelection() {
+  selectedPrerequisites.clear();
+  const checkboxes = document.querySelectorAll(".prerequisite-checkbox");
+  checkboxes.forEach((cb) => (cb.checked = false));
+  updatePrerequisiteDisplay();
+}
+
+// Reset antirequisite selection
+function resetAntirequisiteSelection() {
+  selectedAntirequisites.clear();
+  const checkboxes = document.querySelectorAll(".antirequisite-checkbox");
+  checkboxes.forEach((cb) => (cb.checked = false));
+  updateAntirequisiteDisplay();
+}
+
+// Reset course equivalence selection
+function resetEquivalenceSelection() {
+  selectedEquivalences.clear();
+  const checkboxes = document.querySelectorAll(".equivalence-checkbox");
+  checkboxes.forEach((cb) => (cb.checked = false));
+  updateEquivalenceDisplay();
+}
+
+// Set prerequisite selection from value
+function setPrerequisiteSelection(value) {
+  resetPrerequisiteSelection();
+  if (!value) return;
+
+  const codes = value.split(",").map((s) => s.trim()).filter((s) => s);
+  codes.forEach((code) => {
+    if (code) {
+      selectedPrerequisites.add(code);
+      const checkbox = document.getElementById(`prereq-${code}`);
+      if (checkbox) checkbox.checked = true;
+    }
+  });
+  updatePrerequisiteDisplay();
+}
+
+// Set antirequisite selection from value
+function setAntirequisiteSelection(value) {
+  resetAntirequisiteSelection();
+  if (!value) return;
+
+  const codes = value.split(",").map((s) => s.trim()).filter((s) => s);
+  codes.forEach((code) => {
+    if (code) {
+      selectedAntirequisites.add(code);
+      const checkbox = document.getElementById(`antireq-${code}`);
+      if (checkbox) checkbox.checked = true;
+    }
+  });
+  updateAntirequisiteDisplay();
+}
+
+// Set course equivalence selection from value
+function setEquivalenceSelection(value) {
+  resetEquivalenceSelection();
+  if (!value) return;
+
+  const codes = value.split(",").map((s) => s.trim()).filter((s) => s);
+  codes.forEach((code) => {
+    if (code) {
+      selectedEquivalences.add(code);
+      const checkbox = document.getElementById(`equiv-${code}`);
+      if (checkbox) checkbox.checked = true;
+    }
+  });
+  updateEquivalenceDisplay();
+}
+
+// Filter prerequisite courses based on search input
+function filterPrerequisiteCourses() {
+  const searchInput = document.getElementById("prerequisite-search");
+  if (!searchInput) return;
+
+  const searchTerm = searchInput.value.toLowerCase().trim();
+  const checkboxes = document.querySelectorAll(".prerequisite-checkbox");
+
+  checkboxes.forEach((checkbox) => {
+    const listItem = checkbox.closest("li");
+    const label = checkbox.nextElementSibling;
+    const text = label ? label.textContent.toLowerCase() : "";
+
+    if (text.includes(searchTerm)) {
+      listItem.style.display = "";
+    } else {
+      listItem.style.display = "none";
+    }
+  });
+}
+
+// Filter antirequisite courses based on search input
+function filterAntirequisiteCourses() {
+  const searchInput = document.getElementById("antirequisite-search");
+  if (!searchInput) return;
+
+  const searchTerm = searchInput.value.toLowerCase().trim();
+  const checkboxes = document.querySelectorAll(".antirequisite-checkbox");
+
+  checkboxes.forEach((checkbox) => {
+    const listItem = checkbox.closest("li");
+    const label = checkbox.nextElementSibling;
+    const text = label ? label.textContent.toLowerCase() : "";
+
+    if (text.includes(searchTerm)) {
+      listItem.style.display = "";
+    } else {
+      listItem.style.display = "none";
+    }
+  });
+}
+
+// Filter course equivalence courses based on search input
+function filterEquivalenceCourses() {
+  const searchInput = document.getElementById("course-equivalence-search");
+  if (!searchInput) return;
+
+  const searchTerm = searchInput.value.toLowerCase().trim();
+  const checkboxes = document.querySelectorAll(".equivalence-checkbox");
+
+  checkboxes.forEach((checkbox) => {
+    const listItem = checkbox.closest("li");
+    const label = checkbox.nextElementSibling;
+    const text = label ? label.textContent.toLowerCase() : "";
+
+    if (text.includes(searchTerm)) {
+      listItem.style.display = "";
+    } else {
+      listItem.style.display = "none";
+    }
+  });
 }
 
 // Hide admin-only elements for faculty and timetable coordinators
@@ -629,6 +1053,11 @@ function handleAddCourse() {
   // Reset course owner selection
   resetCourseOwnerSelection();
 
+  // Reset prerequisite/antirequisite/equivalence selections
+  resetPrerequisiteSelection();
+  resetAntirequisiteSelection();
+  resetEquivalenceSelection();
+
   // Make course code editable for new courses
   if (courseCodeInput) {
     courseCodeInput.readOnly = false;
@@ -674,12 +1103,12 @@ function openEditCourseModal(courseCode) {
       if (practicalInput) practicalInput.value = course.practical;
       if (creditsInput) creditsInput.value = course.credits;
       if (courseTypeInput) courseTypeInput.value = course.course_type;
-      if (prerequisiteInput)
-        prerequisiteInput.value = course.prerequisite || "";
-      if (antirequisiteInput)
-        antirequisiteInput.value = course.antirequisite || "";
-      if (courseEquivalenceInput)
-        courseEquivalenceInput.value = course.course_equivalence || "";
+
+      // Set prerequisite/antirequisite/equivalence selections
+      setPrerequisiteSelection(course.prerequisite || "");
+      setAntirequisiteSelection(course.antirequisite || "");
+      setEquivalenceSelection(course.course_equivalence || "");
+
       if (programsOfferedToInput)
         programsOfferedToInput.value = course.programs_offered_to;
       if (curriculumVersionInput)
