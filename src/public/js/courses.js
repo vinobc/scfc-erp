@@ -23,6 +23,9 @@ let selectedPrerequisites = new Set();
 let selectedAntirequisites = new Set();
 let selectedEquivalences = new Set();
 
+// Programs data for programs offered to multi-select
+let programsData = [];
+
 // Prerequisite dropdown elements
 let prerequisiteDropdownBtn;
 let prerequisiteDisplay;
@@ -103,6 +106,12 @@ document.addEventListener("DOMContentLoaded", () => {
   courseEquivalenceDisplay = document.getElementById("course-equivalence-display");
   courseEquivalenceCheckboxes = document.getElementById("course-equivalence-checkboxes");
   programsOfferedToInput = document.getElementById("programs-offered-to-field");
+
+  // Add event listener for programs selection change
+  if (programsOfferedToInput) {
+    programsOfferedToInput.addEventListener("change", updateSelectedProgramsDisplay);
+  }
+
   curriculumVersionInput = document.getElementById("curriculum-version-field");
   remarksInput = document.getElementById("remarks-field");
   courseIsActiveInput = document.getElementById("course-is-active-field");
@@ -193,6 +202,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load courses for prerequisite/antirequisite/equivalence dropdowns
   loadCoursesForDropdowns();
+
+  // Load programs for programs offered to dropdown
+  loadProgramsForDropdown();
 });
 
 // Load schools and populate course owner dropdown
@@ -747,6 +759,78 @@ function hideAdminOnlyElements() {
   }
 }
 
+// Update display of selected programs
+function updateSelectedProgramsDisplay() {
+  const displayDiv = document.getElementById("selected-programs-display");
+  if (!displayDiv || !programsOfferedToInput) return;
+
+  const selectedOptions = Array.from(programsOfferedToInput.selectedOptions);
+
+  if (selectedOptions.length === 0) {
+    displayDiv.innerHTML = '<small class="text-muted">No programs selected</small>';
+  } else {
+    let html = '<div class="d-flex flex-wrap gap-2">';
+    selectedOptions.forEach((option) => {
+      html += `
+        <span class="badge bg-primary d-flex align-items-center gap-1">
+          ${option.textContent}
+          <button type="button" class="btn-close btn-close-white" style="font-size: 0.6rem;"
+                  onclick="deselectProgram('${option.value}')" aria-label="Remove"></button>
+        </span>
+      `;
+    });
+    html += '</div>';
+    displayDiv.innerHTML = html;
+  }
+}
+
+// Deselect a program from the multi-select
+window.deselectProgram = function(programValue) {
+  if (!programsOfferedToInput) return;
+
+  Array.from(programsOfferedToInput.options).forEach((option) => {
+    if (option.value === programValue) {
+      option.selected = false;
+    }
+  });
+
+  // Update the display
+  updateSelectedProgramsDisplay();
+}
+
+// Load programs and populate programs offered to dropdown
+function loadProgramsForDropdown() {
+  const dropdown = document.getElementById("programs-offered-to-field");
+
+  fetch(`${window.API_URL}/programs`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => response.json())
+    .then((programs) => {
+      programsData = programs.filter((program) => program.is_active);
+
+      // Populate the multi-select dropdown
+      const targetDropdown = dropdown || programsOfferedToInput;
+      if (targetDropdown) {
+        targetDropdown.innerHTML = "";
+
+        programsData.forEach((program) => {
+          if (program.program_name_short) {
+            const option = document.createElement("option");
+            option.value = program.program_name_short;
+            option.textContent = program.program_name_short;
+            targetDropdown.appendChild(option);
+          }
+        });
+      }
+    })
+    .catch((error) => {
+      console.error("Load programs error:", error);
+    });
+}
+
 // Load all courses from the API
 function loadCourses() {
   console.log("courses.js: Loading courses");
@@ -1058,6 +1142,12 @@ function handleAddCourse() {
   resetAntirequisiteSelection();
   resetEquivalenceSelection();
 
+  // Load programs for dropdown
+  loadProgramsForDropdown();
+
+  // Clear selected programs display
+  updateSelectedProgramsDisplay();
+
   // Make course code editable for new courses
   if (courseCodeInput) {
     courseCodeInput.readOnly = false;
@@ -1089,6 +1179,9 @@ function openEditCourseModal(courseCode) {
     .then((course) => {
       console.log(`Course data received:`, course);
 
+      // Load programs first, then fill form
+      loadProgramsForDropdown();
+
       // Fill form with course data
       // Set course owner (handles both new codes and legacy data)
       setCourseOwnerSelection(course.course_owner);
@@ -1109,8 +1202,29 @@ function openEditCourseModal(courseCode) {
       setAntirequisiteSelection(course.antirequisite || "");
       setEquivalenceSelection(course.course_equivalence || "");
 
-      if (programsOfferedToInput)
-        programsOfferedToInput.value = course.programs_offered_to;
+      // Set programs offered to multi-select after a small delay to ensure dropdown is populated
+      setTimeout(() => {
+        if (programsOfferedToInput) {
+          // Clear all selections first
+          Array.from(programsOfferedToInput.options).forEach(option => option.selected = false);
+
+          // Split the comma-separated string and select matching options
+          if (course.programs_offered_to) {
+            const programsList = course.programs_offered_to.split(",").map(p => p.trim());
+
+            // Only select programs that exist in dropdown (ignore non-matching values)
+            Array.from(programsOfferedToInput.options).forEach(option => {
+              if (programsList.includes(option.value)) {
+                option.selected = true;
+              }
+            });
+          }
+
+          // Update the display
+          updateSelectedProgramsDisplay();
+        }
+      }, 200);
+
       if (curriculumVersionInput)
         curriculumVersionInput.value = course.curriculum_version || "";
       if (remarksInput) remarksInput.value = course.remarks || "";
@@ -1175,9 +1289,11 @@ function handleSaveCourse() {
   const courseEquivalence = courseEquivalenceInput
     ? courseEquivalenceInput.value.trim()
     : "";
-  const programsOfferedTo = programsOfferedToInput
-    ? programsOfferedToInput.value.trim()
-    : "";
+  // Get selected programs from multi-select dropdown
+  const selectedPrograms = programsOfferedToInput
+    ? Array.from(programsOfferedToInput.selectedOptions).map(option => option.value)
+    : [];
+  const programsOfferedTo = selectedPrograms.join(", ");
   const curriculumVersion =
     curriculumVersionInput && curriculumVersionInput.value
       ? parseFloat(curriculumVersionInput.value)
