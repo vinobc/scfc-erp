@@ -3653,16 +3653,16 @@
                 <label for="student-year-field" class="form-label"
                   >Year Admitted *</label
                 >
-                <input
-                  type="number"
-                  class="form-control"
+                <select
+                  class="form-select"
                   id="student-year-field"
-                  min="2000"
-                  max="2099"
                   required
-                />
+                >
+                  <option value="">Select year...</option>
+                  <!-- Options populated by JavaScript -->
+                </select>
                 <div class="form-text">
-                  Year the student was admitted (e.g., 2023)
+                  Year the student was admitted
                 </div>
               </div>
               <div class="mb-3">

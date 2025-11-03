@@ -191,6 +191,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initial load of dropdowns
   loadDropdowns();
 
+  // Populate year admitted dropdown
+  populateYearAdmittedDropdown();
+
   // Initial load of students when the page loads
   const studentsLink = document.getElementById("students-link");
   if (studentsLink) {
@@ -261,6 +264,29 @@ function loadDropdowns() {
     .catch((error) => {
       console.error("Load schools error:", error);
     });
+}
+
+// Populate year admitted dropdown with years from 2023 to 2031
+function populateYearAdmittedDropdown() {
+  if (!studentYearInput) return;
+
+  const startYear = 2023;
+  const endYear = 2031;
+
+  // Keep the first option (Select year...)
+  const firstOption = studentYearInput.querySelector('option[value=""]');
+  studentYearInput.innerHTML = '';
+  if (firstOption) {
+    studentYearInput.appendChild(firstOption);
+  }
+
+  // Generate year options in descending order (most recent first)
+  for (let year = endYear; year >= startYear; year--) {
+    const option = document.createElement('option');
+    option.value = year;
+    option.textContent = year;
+    studentYearInput.appendChild(option);
+  }
 }
 
 // Load all students from the API
