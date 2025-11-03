@@ -357,6 +357,10 @@ function setupNavigation() {
               `;
             }
           }
+        } else if (targetPage === "semesters-page") {
+          if (typeof loadSemesters === "function") {
+            loadSemesters();
+          }
         }
         // Add other page data loading as needed
       } else {
