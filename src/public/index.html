@@ -3230,15 +3230,32 @@
                   <label for="course-owner-field" class="form-label"
                     >Course Owner *</label
                   >
+                  <div class="dropdown w-100">
+                    <button
+                      class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
+                      type="button"
+                      id="course-owner-dropdown-btn"
+                      data-bs-toggle="dropdown"
+                      data-bs-auto-close="outside"
+                      aria-expanded="false"
+                    >
+                      <span id="course-owner-display">Select schools...</span>
+                    </button>
+                    <ul
+                      class="dropdown-menu w-100"
+                      id="course-owner-checkboxes"
+                      style="max-height: 300px; overflow-y: auto;"
+                    >
+                      <!-- School checkboxes populated by JavaScript -->
+                    </ul>
+                  </div>
                   <input
-                    type="text"
-                    class="form-control"
+                    type="hidden"
                     id="course-owner-field"
-                    maxlength="20"
                     required
                   />
                   <div class="form-text">
-                    Department/School that owns this course.
+                    Select one or more schools that own this course.
                   </div>
                 </div>
                 <div class="col-md-6 mb-3">

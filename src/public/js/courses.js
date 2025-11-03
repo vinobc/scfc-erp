@@ -8,6 +8,15 @@ let courseTypeFilter;
 let importCoursesBtn;
 let fileInput;
 
+// Schools data for course owner multi-select
+let schoolsData = [];
+let selectedSchoolCodes = new Set();
+
+// Course owner dropdown elements
+let courseOwnerDropdownBtn;
+let courseOwnerDisplay;
+let courseOwnerCheckboxes;
+
 // Course form elements
 let courseForm;
 let courseOwnerInput;
@@ -51,6 +60,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize form elements
   courseForm = document.getElementById("course-form");
   courseOwnerInput = document.getElementById("course-owner-field");
+  courseOwnerDropdownBtn = document.getElementById("course-owner-dropdown-btn");
+  courseOwnerDisplay = document.getElementById("course-owner-display");
+  courseOwnerCheckboxes = document.getElementById("course-owner-checkboxes");
   courseCodeInput = document.getElementById("course-code-field");
   courseNameInput = document.getElementById("course-name-field");
   theoryInput = document.getElementById("theory-field");
@@ -145,7 +157,144 @@ document.addEventListener("DOMContentLoaded", () => {
       loadCourses();
     });
   }
+
+  // Load schools for course owner dropdown
+  loadSchoolsForCourseOwner();
 });
+
+// Load schools and populate course owner dropdown
+function loadSchoolsForCourseOwner() {
+  fetch(`${window.API_URL}/schools`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error("Failed to load schools");
+      return response.json();
+    })
+    .then((schools) => {
+      schoolsData = schools;
+
+      // Populate checkboxes
+      if (courseOwnerCheckboxes) {
+        let html = "";
+        schools.forEach((school) => {
+          if (school.is_active) {
+            html += `
+              <li class="px-3 py-2">
+                <div class="form-check">
+                  <input
+                    class="form-check-input course-owner-checkbox"
+                    type="checkbox"
+                    value="${school.school_code}"
+                    id="owner-${school.school_code}"
+                  />
+                  <label class="form-check-label" for="owner-${school.school_code}">
+                    ${school.school_short_name}
+                  </label>
+                </div>
+              </li>
+            `;
+          }
+        });
+        courseOwnerCheckboxes.innerHTML = html;
+
+        // Add event listeners
+        const checkboxes = document.querySelectorAll(".course-owner-checkbox");
+        checkboxes.forEach((checkbox) => {
+          checkbox.addEventListener("change", handleOwnerCheckboxChange);
+        });
+      }
+    })
+    .catch((error) => {
+      console.error("Load schools error:", error);
+    });
+}
+
+// Handle checkbox selection
+function handleOwnerCheckboxChange(event) {
+  const schoolCode = event.target.value;
+  if (event.target.checked) {
+    selectedSchoolCodes.add(schoolCode);
+  } else {
+    selectedSchoolCodes.delete(schoolCode);
+  }
+  updateCourseOwnerDisplay();
+}
+
+// Update display and hidden input
+function updateCourseOwnerDisplay() {
+  const schoolMap = {};
+  schoolsData.forEach((s) => {
+    schoolMap[s.school_code] = s.school_short_name;
+  });
+
+  const selectedNames = Array.from(selectedSchoolCodes)
+    .map((code) => schoolMap[code] || code)
+    .join(", ");
+
+  if (courseOwnerDisplay) {
+    courseOwnerDisplay.textContent = selectedNames || "Select schools...";
+  }
+
+  if (courseOwnerInput) {
+    courseOwnerInput.value = Array.from(selectedSchoolCodes).join(",");
+  }
+}
+
+// Reset selection
+function resetCourseOwnerSelection() {
+  selectedSchoolCodes.clear();
+  const checkboxes = document.querySelectorAll(".course-owner-checkbox");
+  checkboxes.forEach((cb) => (cb.checked = false));
+  updateCourseOwnerDisplay();
+}
+
+// Set selection from value (handles legacy data)
+function setCourseOwnerSelection(value) {
+  resetCourseOwnerSelection();
+  if (!value) return;
+
+  // Create reverse map: short_name -> code
+  const reverseMap = {};
+  schoolsData.forEach((s) => {
+    reverseMap[s.school_short_name] = s.school_code;
+  });
+
+  // Split by comma or ampersand
+  const parts = value.split(/[,&]/).map((s) => s.trim());
+
+  parts.forEach((part) => {
+    let code = part;
+    // If it's a short name (not code), convert to code
+    if (!part.startsWith("SCL") && reverseMap[part]) {
+      code = reverseMap[part];
+    }
+
+    if (code) {
+      selectedSchoolCodes.add(code);
+      const checkbox = document.getElementById(`owner-${code}`);
+      if (checkbox) checkbox.checked = true;
+    }
+  });
+
+  updateCourseOwnerDisplay();
+}
+
+// Get display names from codes
+function getCourseOwnerDisplayNames(value) {
+  if (!value) return "-";
+
+  const schoolMap = {};
+  schoolsData.forEach((s) => {
+    schoolMap[s.school_code] = s.school_short_name;
+    schoolMap[s.school_short_name] = s.school_short_name; // Handle legacy
+  });
+
+  const parts = value.split(/[,&]/).map((s) => s.trim());
+  return parts.map((p) => schoolMap[p] || p).join(", ");
+}
 
 // Hide admin-only elements for faculty and timetable coordinators
 function hideAdminOnlyElements() {
@@ -307,10 +456,11 @@ function renderCourses(courses) {
 
     // Apply search filter
     if (searchTerm) {
+      const ownerDisplay = getCourseOwnerDisplayNames(course.course_owner);
       return (
         course.course_code.toLowerCase().includes(searchTerm) ||
         course.course_name.toLowerCase().includes(searchTerm) ||
-        course.course_owner.toLowerCase().includes(searchTerm)
+        ownerDisplay.toLowerCase().includes(searchTerm)
       );
     }
 
@@ -336,12 +486,15 @@ function renderCourses(courses) {
     // Format the TPC (Theory, Practical, Credits)
     const tpc = `${course.theory}-${course.practical}-${course.credits}`;
 
+    // Get course owner display names
+    const ownerDisplay = getCourseOwnerDisplayNames(course.course_owner);
+
     // Build the row HTML based on user role
     let rowHTML = `
       <td>${course.course_code}</td>
       <td>
         <strong>${course.course_name}</strong><br>
-        <small>${course.course_owner}</small>
+        <small>${ownerDisplay}</small>
       </td>
       <td>${tpc}</td>
       <td>${course.course_type}</td>
@@ -473,6 +626,9 @@ function handleAddCourse() {
   // Reset form
   if (courseForm) courseForm.reset();
 
+  // Reset course owner selection
+  resetCourseOwnerSelection();
+
   // Make course code editable for new courses
   if (courseCodeInput) {
     courseCodeInput.readOnly = false;
@@ -505,7 +661,9 @@ function openEditCourseModal(courseCode) {
       console.log(`Course data received:`, course);
 
       // Fill form with course data
-      if (courseOwnerInput) courseOwnerInput.value = course.course_owner;
+      // Set course owner (handles both new codes and legacy data)
+      setCourseOwnerSelection(course.course_owner);
+
       if (courseCodeInput) {
         courseCodeInput.value = course.course_code;
         // Make course code read-only for editing existing courses

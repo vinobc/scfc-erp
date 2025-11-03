@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS course CASCADE;
 
 -- Create course table
 CREATE TABLE course (
-    course_owner VARCHAR(20) NOT NULL,
+    course_owner VARCHAR(100) NOT NULL,
     course_code VARCHAR(10) NOT NULL PRIMARY KEY,
     course_name VARCHAR(150) NOT NULL,
     theory INTEGER NOT NULL CHECK (theory >= 0 AND theory <= 10),
