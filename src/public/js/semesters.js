@@ -140,13 +140,31 @@ function loadSemesters() {
       return response.json();
     })
     .then((semesters) => {
-      // Rest of your function...
+      console.log("DEBUG - Semesters data:", semesters);
+      if (semesters.length === 0) {
+        if (semestersTableBody) {
+          semestersTableBody.innerHTML =
+            '<tr><td colspan="5" class="text-center">No semesters found. Add a new semester to get started.</td></tr>';
+        }
+        return;
+      }
+
+      // Render the semesters
+      renderSemesters(semesters);
     })
     .catch((error) => {
       console.error("Load semesters error:", error);
-      // Rest of your error handling...
+      if (semestersTableBody) {
+        semestersTableBody.innerHTML =
+          '<tr><td colspan="5" class="text-center text-danger">Error loading semesters. Please try again.</td></tr>';
+      }
+      showAlert("Failed to load semesters. Please try again.", "danger");
     });
 }
+
+// Expose loadSemesters globally so main.js can call it
+window.loadSemesters = loadSemesters;
+
 // Render semesters in the table
 function renderSemesters(semesters) {
   if (!semestersTableBody) {

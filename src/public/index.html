@@ -4744,7 +4744,6 @@
 
       console.log("Using API URL:", window.API_URL);
     </script>
-    <script src="js/main.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/schools.js"></script>
     <script src="js/semesters.js"></script>
@@ -4767,5 +4766,7 @@
     <script src="js/courses-view.js"></script>
     <script src="js/student-auth.js"></script>
     <script src="js/attendance.js"></script>
+    <!-- Load main.js LAST so all module functions are available -->
+    <script src="js/main.js"></script>
   </body>
 </html>
