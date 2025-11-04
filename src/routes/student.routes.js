@@ -5,6 +5,7 @@ const {
   verifyToken,
   isAdmin,
   isStaffOrAdmin,
+  isTimetableCoordinator,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -38,10 +39,10 @@ router.post(
   studentController.importStudents
 );
 
-// Admin reset student password (admin only)
+// Admin and Timetable Coordinator reset student password
 router.put(
   "/:enrollment_no/reset-password",
-  isAdmin,
+  isTimetableCoordinator,
   studentController.adminResetStudentPassword
 );
 
