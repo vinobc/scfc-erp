@@ -198,10 +198,27 @@ document.addEventListener("DOMContentLoaded", () => {
   const studentsLink = document.getElementById("students-link");
   if (studentsLink) {
     studentsLink.addEventListener("click", () => {
+      updateStudentPageByRole();
       loadStudents();
     });
   }
 });
+
+// Update student page visibility based on user role
+function updateStudentPageByRole() {
+  // Get current user from global scope (set in main.js)
+  const userRole = currentUser ? currentUser.role : null;
+
+  if (userRole === "timetable_coordinator") {
+    // Hide all admin-only buttons for timetable coordinators
+    if (addStudentBtn) addStudentBtn.style.display = "none";
+    if (importStudentsBtn) importStudentsBtn.style.display = "none";
+    if (bulkStatusBtn) bulkStatusBtn.style.display = "none";
+
+    const createUserAccountsBtn = document.getElementById("create-user-accounts-btn");
+    if (createUserAccountsBtn) createUserAccountsBtn.style.display = "none";
+  }
+}
 
 // Load all dropdowns (programs, schools, years)
 function loadDropdowns() {
@@ -423,11 +440,55 @@ function renderStudents(students) {
   // Add each student to the table
   filteredStudents.forEach((student) => {
     const row = document.createElement("tr");
-    
+
     // Add visual indicator for inactive students
     if (student.is_active === false) {
       row.style.opacity = "0.7";
       row.style.backgroundColor = "#f8f9fa";
+    }
+
+    // Check user role for conditional button rendering
+    const userRole = currentUser ? currentUser.role : null;
+    const isTimetableCoordinator = userRole === "timetable_coordinator";
+
+    // Build action buttons based on role
+    let actionButtons = `
+      <button class="btn btn-sm btn-warning action-btn reset-student-password-btn" data-enrollment="${student.enrollment_no}" data-name="${student.student_name}" title="Reset Password">
+        <i class="fas fa-key"></i>
+      </button>
+    `;
+
+    // Add edit and delete buttons only for admin
+    if (!isTimetableCoordinator) {
+      actionButtons = `
+        <button class="btn btn-sm btn-primary action-btn edit-student-btn" data-enrollment="${student.enrollment_no}">
+          <i class="fas fa-edit"></i>
+        </button>
+        ${actionButtons}
+        <button class="btn btn-sm btn-danger action-btn delete-student-btn" data-enrollment="${student.enrollment_no}" data-name="${student.student_name}">
+          <i class="fas fa-trash"></i>
+        </button>
+      `;
+    }
+
+    // Build status column based on role
+    let statusColumn = '';
+    if (isTimetableCoordinator) {
+      // For timetable coordinators, just show status as text (no toggle button)
+      statusColumn = `<td><span class="badge ${student.is_active !== false ? 'bg-success' : 'bg-danger'}">${student.is_active !== false ? 'Active' : 'Inactive'}</span></td>`;
+    } else {
+      // For admin, show toggle button
+      statusColumn = `
+        <td>
+          <button class="btn btn-sm ${student.is_active !== false ? 'btn-success' : 'btn-danger'} action-btn toggle-student-status-btn"
+                  data-enrollment="${student.enrollment_no}"
+                  data-name="${student.student_name}"
+                  data-status="${student.is_active !== false ? 'active' : 'inactive'}"
+                  title="${student.is_active !== false ? 'Click to deactivate' : 'Click to activate'}">
+            <i class="fas fa-power-off"></i> ${student.is_active !== false ? 'Active' : 'Inactive'}
+          </button>
+        </td>
+      `;
     }
 
     row.innerHTML = `
@@ -438,32 +499,8 @@ function renderStudents(students) {
       <td>${student.school_name}</td>
       <td>${student.year_admitted}</td>
       <td>${student.email_id || "-"}</td>
-      <td>
-        <button class="btn btn-sm ${student.is_active !== false ? 'btn-success' : 'btn-danger'} action-btn toggle-student-status-btn" 
-                data-enrollment="${student.enrollment_no}" 
-                data-name="${student.student_name}" 
-                data-status="${student.is_active !== false ? 'active' : 'inactive'}"
-                title="${student.is_active !== false ? 'Click to deactivate' : 'Click to activate'}">
-          <i class="fas fa-power-off"></i> ${student.is_active !== false ? 'Active' : 'Inactive'}
-        </button>
-      </td>
-      <td>
-  <button class="btn btn-sm btn-primary action-btn edit-student-btn" data-enrollment="${
-    student.enrollment_no
-  }">
-    <i class="fas fa-edit"></i>
-  </button>
-  <button class="btn btn-sm btn-warning action-btn reset-student-password-btn" data-enrollment="${
-    student.enrollment_no
-  }" data-name="${student.student_name}" title="Reset Password">
-    <i class="fas fa-key"></i>
-  </button>
-  <button class="btn btn-sm btn-danger action-btn delete-student-btn" data-enrollment="${
-    student.enrollment_no
-  }" data-name="${student.student_name}">
-    <i class="fas fa-trash"></i>
-  </button>
-</td>
+      ${statusColumn}
+      <td>${actionButtons}</td>
     `;
 
     studentsTableBody.appendChild(row);
