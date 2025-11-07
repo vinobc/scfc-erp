@@ -1587,7 +1587,7 @@ function handleVenueTypeChange(event) {
       filteredVenues.forEach((venue) => {
         const option = document.createElement("option");
         option.value = venue.venue;
-        option.textContent = venue.venue;
+        option.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         allocationVenueInput.appendChild(option);
       });
     })
@@ -2314,7 +2314,7 @@ function openEditAllocationModal(allocation) {
         filteredVenues.forEach((venue) => {
           const option = document.createElement("option");
           option.value = venue.venue;
-          option.textContent = venue.venue;
+          option.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
           if (venue.venue === allocation.venue) {
             option.selected = true;
           }
@@ -2325,13 +2325,34 @@ function openEditAllocationModal(allocation) {
         console.error("Error loading venues:", error);
       });
   } else {
-    // If venue_type is not available, just set the current venue as the only option
-    allocationVenueInput.innerHTML = "";
-    const option = document.createElement("option");
-    option.value = allocation.venue;
-    option.textContent = allocation.venue;
-    option.selected = true;
-    allocationVenueInput.appendChild(option);
+    // If venue_type is not available, fetch venue data to show capacity
+    fetch(`${window.API_URL}/venues`, {
+      headers: {
+        Authorization: localStorage.getItem("token"),
+      },
+    })
+      .then((response) => response.json())
+      .then((venues) => {
+        const matchingVenue = venues.find((v) => v.venue === allocation.venue);
+        allocationVenueInput.innerHTML = "";
+        const option = document.createElement("option");
+        option.value = allocation.venue;
+        option.textContent = matchingVenue
+          ? `${matchingVenue.venue} (Capacity: ${matchingVenue.capacity})`
+          : allocation.venue;
+        option.selected = true;
+        allocationVenueInput.appendChild(option);
+      })
+      .catch((error) => {
+        console.error("Error loading venue data:", error);
+        // Fallback to just showing venue name if fetch fails
+        allocationVenueInput.innerHTML = "";
+        const option = document.createElement("option");
+        option.value = allocation.venue;
+        option.textContent = allocation.venue;
+        option.selected = true;
+        allocationVenueInput.appendChild(option);
+      });
   }
 
   // Make fields readonly except Faculty, Venue Type, and Venue
