@@ -99,6 +99,7 @@ function updateNavigationByRole(userRole) {
     courses: document.getElementById("courses-link"),
     venues: document.getElementById("venues-link"),
     faculty: document.getElementById("faculty-link"),
+    staff: document.getElementById("staff-link"),
     users: document.getElementById("users-link"),
     students: document.getElementById("students-link"),
     timetable: document.getElementById("timetable-link"),
