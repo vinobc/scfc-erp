@@ -295,6 +295,20 @@ function renderStaff(staffList) {
                 data-id="${staff.staff_id}" data-active="${staff.is_active}">
           <i class="fas fa-${staff.is_active ? "pause" : "play"}"></i>
         </button>
+        <button class="btn btn-sm btn-info action-btn create-staff-user-btn"
+                data-id="${staff.staff_id}"
+                data-name="${staff.name}"
+                data-employee-id="${staff.employee_id}"
+                title="Create User Account">
+          <i class="fas fa-user-plus"></i>
+        </button>
+        <button class="btn btn-sm btn-secondary action-btn reset-staff-password-btn"
+                data-id="${staff.staff_id}"
+                data-name="${staff.name}"
+                data-employee-id="${staff.employee_id}"
+                title="Reset Password">
+          <i class="fas fa-key"></i>
+        </button>
         <button class="btn btn-sm btn-danger action-btn delete-staff-btn"
                 data-id="${staff.staff_id}"
                 data-name="${staff.name}"
@@ -371,6 +385,33 @@ function addStaffButtonListeners() {
     button.addEventListener("click", () => {
       console.log(`Delete button clicked for staff ID: ${staffId}`);
       openStaffDeleteModal(staffId, staffName, employeeId);
+    });
+  });
+
+  // Create user account buttons
+  const createUserButtons = document.querySelectorAll(".create-staff-user-btn");
+  console.log(`Found ${createUserButtons.length} create user buttons`);
+
+  createUserButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const staffId = button.getAttribute("data-id");
+      const staffName = button.getAttribute("data-name");
+      const employeeId = button.getAttribute("data-employee-id");
+      console.log(`Create user button clicked for staff ID: ${staffId}`);
+      createStaffUserAccount(staffId, staffName, employeeId);
+    });
+  });
+
+  // Reset password buttons
+  const resetPasswordButtons = document.querySelectorAll(".reset-staff-password-btn");
+  console.log(`Found ${resetPasswordButtons.length} reset password buttons`);
+
+  resetPasswordButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const staffName = button.getAttribute("data-name");
+      const employeeId = button.getAttribute("data-employee-id");
+      console.log(`Reset password button clicked for employee ID: ${employeeId}`);
+      resetStaffPassword(staffName, employeeId);
     });
   });
 }
@@ -644,5 +685,95 @@ function handleStaffDeleteConfirm() {
         confirmStaffDeleteBtn.disabled = false;
         confirmStaffDeleteBtn.innerHTML = "Delete";
       }
+    });
+}
+
+// Create user account for staff member
+function createStaffUserAccount(staffId, staffName, employeeId) {
+  if (!confirm(`Create user account for ${staffName} (Employee ID: ${employeeId})?\n\nUsername will be: ${employeeId}@blr.amity.edu\nDefault password will be: Staff@${employeeId}`)) {
+    return;
+  }
+
+  fetch(`${window.API_URL}/users/staff`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: localStorage.getItem("token"),
+    },
+    body: JSON.stringify({ staff_id: parseInt(staffId) }),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then((data) => {
+          throw new Error(data.message || "Failed to create user account");
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      window.showAlert(
+        `User account created successfully!\n\nUsername: ${data.user.username}\nDefault Password: ${data.defaultPassword}\n\nPlease share these credentials with the staff member.`,
+        "success"
+      );
+    })
+    .catch((error) => {
+      console.error("Create staff user error:", error);
+      window.showAlert(error.message, "danger");
+    });
+}
+
+// Reset staff user password
+function resetStaffPassword(staffName, employeeId) {
+  // First, find the user by username
+  const username = `${employeeId}@blr.amity.edu`;
+
+  if (!confirm(`Reset password for ${staffName}?\n\nPassword will be reset to: Staff@${employeeId}`)) {
+    return;
+  }
+
+  // Get all users to find the staff user's ID
+  fetch(`${window.API_URL}/users`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Failed to fetch users");
+      }
+      return response.json();
+    })
+    .then((users) => {
+      const staffUser = users.find(u => u.username === username && u.role === 'staff');
+      if (!staffUser) {
+        throw new Error("Staff user account not found. Create user account first.");
+      }
+
+      // Reset the password
+      return fetch(`${window.API_URL}/users/${staffUser.user_id}/reset-password`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: localStorage.getItem("token"),
+        },
+      });
+    })
+    .then((response) => {
+      if (!response.ok) {
+        return response.json().then((data) => {
+          throw new Error(data.message || "Failed to reset password");
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      window.showAlert(
+        `Password reset successfully!\n\nUsername: ${data.username}\nNew Password: ${data.new_password}`,
+        "success"
+      );
+    })
+    .catch((error) => {
+      console.error("Reset staff password error:", error);
+      window.showAlert(error.message, "danger");
     });
 }

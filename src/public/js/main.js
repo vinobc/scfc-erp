@@ -107,6 +107,8 @@ function updateNavigationByRole(userRole) {
     projectAllocation: document.getElementById("project-allocation-link"),
     attendance: document.getElementById("attendance-link"),
     systemConfig: document.getElementById("system-config-link"),
+    coursesView: document.getElementById("courses-view-link"),
+    changePassword: document.getElementById("change-password-link"),
     logout: document.getElementById("logout-link"),
   };
 
@@ -157,6 +159,20 @@ function updateNavigationByRole(userRole) {
       if (navItems.timetable && navItems.timetable.parentElement) {
         navItems.timetable.parentElement.style.display = "block";
         customizeTimetableMenuForFaculty();
+      }
+      break;
+
+    case "staff":
+      // Staff sees: Timetable (View Student Slot TimeTable only), Change Password, Logout
+      [navItems.timetable, navItems.changePassword, navItems.logout].forEach((item) => {
+        if (item && item.parentElement) {
+          item.parentElement.style.display = "block";
+        }
+      });
+
+      // Customize timetable menu for staff (only View Student Slot TimeTable)
+      if (navItems.timetable && navItems.timetable.parentElement) {
+        customizeTimetableMenuForStaff();
       }
       break;
 
@@ -243,6 +259,24 @@ function customizeTimetableMenuForCoordinator() {
   if (viewClassSlotLink && viewClassSlotLink.parentElement) {
     viewClassSlotLink.parentElement.style.display = "block";
   }
+  if (viewStudentTimetableLink && viewStudentTimetableLink.parentElement) {
+    viewStudentTimetableLink.parentElement.style.display = "block";
+  }
+}
+
+// Customize timetable menu for staff (only View Student Slot TimeTable)
+function customizeTimetableMenuForStaff() {
+  const timetableSubmenu = document.getElementById("timetable-submenu");
+  if (!timetableSubmenu) return;
+
+  // Hide all timetable submenu items first
+  const allSubmenuItems = timetableSubmenu.querySelectorAll(".nav-item");
+  allSubmenuItems.forEach((item) => {
+    item.style.display = "none";
+  });
+
+  // Show only View Student Slot TimeTable
+  const viewStudentTimetableLink = document.getElementById("view-student-timetable-link");
   if (viewStudentTimetableLink && viewStudentTimetableLink.parentElement) {
     viewStudentTimetableLink.parentElement.style.display = "block";
   }
