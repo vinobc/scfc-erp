@@ -2189,11 +2189,11 @@ exports.getAdminStudentTimetable = async (req, res) => {
       });
     }
 
-    // Check if user has admin/faculty/coordinator access
+    // Check if user has admin/faculty/coordinator/staff access
     const userRole = req.userRole;
-    if (!userRole || !['admin', 'faculty', 'timetable_coordinator'].includes(userRole)) {
+    if (!userRole || !['admin', 'faculty', 'timetable_coordinator', 'staff'].includes(userRole)) {
       return res.status(403).json({
-        message: "Access denied. Admin, faculty, or coordinator access required.",
+        message: "Access denied. Admin, faculty, coordinator, or staff access required.",
       });
     }
 

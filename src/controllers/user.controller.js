@@ -149,6 +149,77 @@ exports.createFacultyUser = async (req, res) => {
   }
 };
 
+// Create new user account for staff (non-teaching employees)
+exports.createStaffUser = async (req, res) => {
+  try {
+    const { staff_id } = req.body;
+
+    // Validate required fields
+    if (!staff_id) {
+      return res.status(400).json({
+        message: "Staff ID is required",
+      });
+    }
+
+    // Check if staff member exists
+    const staffResult = await db.query(
+      "SELECT staff_id, name, email, employee_id FROM staff WHERE staff_id = $1 AND is_active = true",
+      [staff_id]
+    );
+
+    if (staffResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Active staff member not found with this ID",
+      });
+    }
+
+    const staff = staffResult.rows[0];
+
+    // Generate username
+    const username = `${staff.employee_id}@blr.amity.edu`;
+
+    // Check if user already exists with this username
+    const existingUser = await db.query(
+      'SELECT user_id FROM "user" WHERE username = $1',
+      [username]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        message: "User account already exists for this staff member",
+      });
+    }
+
+    // Generate email
+    const email = staff.email || username;
+
+    // Generate default password
+    const defaultPassword = `Staff@${staff.employee_id}`;
+    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+    // Create user account with role 'staff'
+    // Note: employee_id is set to NULL because the user table's FK references faculty table only
+    const result = await db.query(
+      `INSERT INTO "user"
+       (username, email, password_hash, full_name, role)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING user_id, username, email, full_name, role, is_active, created_at`,
+      [username, email, passwordHash, staff.name, "staff"]
+    );
+
+    res.status(201).json({
+      message: "Staff user account created successfully",
+      user: result.rows[0],
+      defaultPassword: defaultPassword,
+    });
+  } catch (error) {
+    console.error("Create staff user error:", error);
+    res
+      .status(500)
+      .json({ message: "Server error while creating staff user account" });
+  }
+};
+
 // Update user
 exports.updateUser = async (req, res) => {
   try {
@@ -287,7 +358,7 @@ exports.createAdminUser = async (req, res) => {
   }
 };
 
-// Admin reset faculty/coordinator password to default
+// Admin reset faculty/coordinator/staff password to default
 exports.adminResetUserPassword = async (req, res) => {
   try {
     const { id } = req.params;
@@ -296,25 +367,38 @@ exports.adminResetUserPassword = async (req, res) => {
     const userResult = await db.query(
       `SELECT u.user_id, u.username, u.full_name, u.role, u.employee_id
        FROM "user" u
-       WHERE u.user_id = $1 AND u.role IN ('faculty', 'timetable_coordinator')`,
+       WHERE u.user_id = $1 AND u.role IN ('faculty', 'timetable_coordinator', 'staff')`,
       [parseInt(id)]
     );
 
     if (userResult.rows.length === 0) {
       return res.status(404).json({
-        message: "Faculty or coordinator user not found",
+        message: "Faculty, coordinator, or staff user not found",
       });
     }
 
     const user = userResult.rows[0];
 
-    if (!user.employee_id) {
+    // For staff users, extract employee_id from username (format: {employee_id}@blr.amity.edu)
+    let employeeId = user.employee_id;
+    if (user.role === 'staff' && !employeeId) {
+      // Extract employee_id from username
+      const match = user.username.match(/^(\d+)@/);
+      if (match) {
+        employeeId = match[1];
+      }
+    }
+
+    if (!employeeId) {
       return res.status(400).json({
         message: "Cannot reset password: user has no employee ID",
       });
     }
 
-    const defaultPassword = `Faculty@${user.employee_id}`;
+    // Use appropriate password format based on role
+    const defaultPassword = user.role === 'staff'
+      ? `Staff@${employeeId}`
+      : `Faculty@${employeeId}`;
 
     // Hash the default password
     const saltRounds = 10;
@@ -333,7 +417,7 @@ exports.adminResetUserPassword = async (req, res) => {
       user_name: user.full_name,
       username: user.username,
       role: user.role,
-      employee_id: user.employee_id,
+      employee_id: employeeId,
       new_password: defaultPassword,
     });
   } catch (error) {
