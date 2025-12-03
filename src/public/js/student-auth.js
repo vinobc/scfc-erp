@@ -462,7 +462,7 @@ async function initializeStudentNavigation() {
   await checkAndUpdateRegistrationStatus();
   await checkAndUpdateWithdrawalStatus();
 
-  // Show dashboard by default
+  // Show dashboard (welcome page) by default
   showStudentPage("dashboard");
 }
 
@@ -602,12 +602,25 @@ function updateStudentHeader(student) {
     "student-school": student.school_name,
     "student-program": student.program_name,
     "student-year": student.year_admitted,
+    "student-welcome-user-name": student.student_name,
   };
 
   Object.entries(elements).forEach(([id, value]) => {
     const element = document.getElementById(id);
     if (element) element.textContent = value || "-";
   });
+
+  // Hide dashboard link for students
+  const dashboardLink = document.getElementById("student-dashboard-link");
+  if (dashboardLink && dashboardLink.parentElement) {
+    dashboardLink.parentElement.style.display = "none";
+  }
+
+  // Hide "Student Dashboard" page title
+  const pageTitle = document.getElementById("student-page-title");
+  if (pageTitle) {
+    pageTitle.style.display = "none";
+  }
 }
 
 // Show student interface

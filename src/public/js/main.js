@@ -76,8 +76,13 @@ function checkAuthStatus() {
       // Update navigation based on role
       updateNavigationByRole(user.role);
 
-      // Load dashboard data
-      loadDashboardData();
+      // Customize dashboard based on role
+      customizeDashboardForRole(user.role, user);
+
+      // Load dashboard data only for admin
+      if (user.role === "admin") {
+        loadDashboardData();
+      }
     })
     .catch((error) => {
       console.error("Auth check error:", error);
@@ -192,6 +197,29 @@ function updateNavigationByRole(userRole) {
           item.parentElement.style.display = "block";
         }
       });
+  }
+}
+
+// Customize dashboard display based on role
+function customizeDashboardForRole(role, user) {
+  const statsRow = document.getElementById("dashboard-stats-row");
+  const adminWelcome = document.getElementById("admin-welcome-section");
+  const nonAdminWelcome = document.getElementById("non-admin-welcome");
+  const pageTitle = document.getElementById("page-title");
+
+  if (role === "admin") {
+    // Admin sees full dashboard
+    if (statsRow) statsRow.style.display = "flex";
+    if (adminWelcome) adminWelcome.style.display = "block";
+    if (nonAdminWelcome) nonAdminWelcome.style.display = "none";
+    if (pageTitle) pageTitle.style.display = "block";
+  } else {
+    // Non-admin sees simple welcome
+    if (statsRow) statsRow.style.display = "none";
+    if (adminWelcome) adminWelcome.style.display = "none";
+    if (nonAdminWelcome) nonAdminWelcome.style.display = "block";
+    // Hide "Dashboard" page title for non-admin
+    if (pageTitle) pageTitle.style.display = "none";
   }
 }
 
