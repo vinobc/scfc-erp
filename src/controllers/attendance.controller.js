@@ -42,7 +42,7 @@ exports.getAvailableSemesters = async (req, res) => {
 exports.getFacultyAllocations = async (req, res) => {
   try {
     const facultyId = req.userId;
-    const { slot_year, semester_type } = req.query;
+    const { slot_year, semester_type, course_code } = req.query;
 
     if (!slot_year || !semester_type) {
       return res.status(400).json({ message: "slot_year and semester_type are required" });
@@ -66,15 +66,27 @@ exports.getFacultyAllocations = async (req, res) => {
     }
 
     // Get faculty allocations with course details for the user's employee_id
-    const result = await db.query(
-      `SELECT fa.*, c.course_name, c.theory, c.practical, c.course_type, f.name as faculty_name
-       FROM faculty_allocation fa
-       JOIN course c ON fa.course_code = c.course_code
-       JOIN faculty f ON fa.employee_id = f.employee_id
-       WHERE fa.employee_id = $1 AND fa.slot_year = $2 AND fa.semester_type = $3
-       ORDER BY fa.course_code, fa.slot_day, fa.slot_time`,
-      [user.employee_id, slot_year, semester_type]
-    );
+    // If course_code is provided, filter by it (for slot selection page)
+    // Otherwise return all allocations (for course selection page)
+    const query = course_code
+      ? `SELECT fa.*, c.course_name, c.theory, c.practical, c.course_type, f.name as faculty_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         WHERE fa.employee_id = $1 AND fa.slot_year = $2 AND fa.semester_type = $3 AND fa.course_code = $4
+         ORDER BY fa.slot_day, fa.slot_time`
+      : `SELECT fa.*, c.course_name, c.theory, c.practical, c.course_type, f.name as faculty_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         WHERE fa.employee_id = $1 AND fa.slot_year = $2 AND fa.semester_type = $3
+         ORDER BY fa.course_code, fa.slot_day, fa.slot_time`;
+
+    const params = course_code
+      ? [user.employee_id, slot_year, semester_type, course_code]
+      : [user.employee_id, slot_year, semester_type];
+
+    const result = await db.query(query, params);
 
     res.status(200).json(result.rows);
   } catch (error) {
