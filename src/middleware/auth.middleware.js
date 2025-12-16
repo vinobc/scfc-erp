@@ -30,6 +30,12 @@ exports.verifyToken = (req, res, next) => {
     req.userId = decoded.id;
     req.userRole = decoded.role;
     req.username = decoded.username;
+    // Extract impersonated_by flag if present (for admin proxy login)
+    req.impersonatedBy = decoded.impersonated_by || null;
+    req.enrollmentNo = decoded.enrollment_no || null;
+    if (req.impersonatedBy) {
+      console.log(`DEBUG - User is being impersonated by admin ID: ${req.impersonatedBy}`);
+    }
     next();
   } catch (error) {
     console.log("DEBUG - Token verification failed:", error.message);
