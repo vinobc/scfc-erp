@@ -110,6 +110,15 @@ async function checkAndUpdateRegistrationStatus() {
   try {
     console.log("🔍 Checking course registration status...");
 
+    // Admin bypass: If admin is impersonating a student, always enable registration
+    const impersonating = localStorage.getItem("impersonating");
+    const adminToken = localStorage.getItem("adminToken");
+    if (impersonating && adminToken) {
+      console.log("🔓 Admin impersonation detected - bypassing registration status check");
+      updateCourseRegistrationNavigation(true, "Course registration enabled (Admin Proxy Mode)");
+      return;
+    }
+
     const response = await fetch(
       `${window.API_URL}/system-config/course-registration-status`,
       {
@@ -141,6 +150,15 @@ async function checkAndUpdateRegistrationStatus() {
 async function checkAndUpdateWithdrawalStatus() {
   try {
     console.log("🔍 Checking course withdrawal status...");
+
+    // Admin bypass: If admin is impersonating a student, always enable withdrawal
+    const impersonating = localStorage.getItem("impersonating");
+    const adminToken = localStorage.getItem("adminToken");
+    if (impersonating && adminToken) {
+      console.log("🔓 Admin impersonation detected - bypassing withdrawal status check");
+      updateCourseWithdrawalNavigation(true, "Course withdrawal enabled (Admin Proxy Mode)");
+      return;
+    }
 
     const response = await fetch(
       `${window.API_URL}/course-withdrawal/withdrawal-status`,
@@ -471,6 +489,54 @@ function checkExistingStudentSession() {
   console.log("Checking for existing student session...");
 
   const token = localStorage.getItem("token");
+
+  // Check if admin is impersonating a student
+  const impersonating = localStorage.getItem("impersonating");
+  const impersonatedUser = localStorage.getItem("impersonatedUser");
+  const adminToken = localStorage.getItem("adminToken");
+
+  console.log("🔍 Checking impersonation - impersonating:", impersonating, "impersonatedUser:", impersonatedUser, "adminToken:", adminToken ? "exists" : "none");
+
+  if (impersonating && impersonatedUser && adminToken) {
+    try {
+      const impersonationData = JSON.parse(impersonating);
+      const userData = JSON.parse(impersonatedUser);
+
+      console.log("📋 Parsed impersonation data:", impersonationData);
+      console.log("📋 Parsed user data:", userData);
+      console.log("📋 User role:", impersonationData.role, "Enrollment:", userData.enrollment_no);
+
+      if (impersonationData.role === "student" && userData.enrollment_no) {
+        console.log("🔓 Admin impersonation detected - loading student interface with impersonated data");
+
+        // Restore student interface with impersonated user data
+        hideAdminInterface();
+        console.log("✅ Admin interface hidden");
+
+        showStudentInterface();
+        console.log("✅ Student interface shown");
+
+        updateStudentHeader(userData);
+        console.log("✅ Student header updated with:", userData.student_name, userData.enrollment_no);
+
+        currentStudent = userData;
+
+        // Initialize student navigation (no password reset required for impersonation)
+        initializeStudentNavigation();
+        console.log("✅ Student navigation initialized");
+
+        console.log("✅ Student interface restored for impersonated user");
+        return; // Exit early - don't continue with normal flow
+      } else {
+        console.log("⚠️ Not a student impersonation or missing enrollment_no");
+      }
+    } catch (e) {
+      console.error("❌ Error parsing impersonation data:", e);
+    }
+  } else {
+    console.log("ℹ️ No impersonation detected");
+  }
+
   if (token) {
     // Verify the token and get user info
     fetch(`${window.API_URL}/auth/me`, {
@@ -596,6 +662,8 @@ function handleStudentLoginSuccess(data) {
 
 // Update student header with information
 function updateStudentHeader(student) {
+  console.log("📝 updateStudentHeader called with:", student);
+
   const elements = {
     "student-enrollment-no": student.enrollment_no,
     "student-name": student.student_name,
@@ -607,7 +675,12 @@ function updateStudentHeader(student) {
 
   Object.entries(elements).forEach(([id, value]) => {
     const element = document.getElementById(id);
-    if (element) element.textContent = value || "-";
+    if (element) {
+      element.textContent = value || "-";
+      console.log(`✅ Set ${id} to: ${value}`);
+    } else {
+      console.log(`❌ Element not found: ${id}`);
+    }
   });
 
   // Hide dashboard link for students

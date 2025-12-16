@@ -33,6 +33,9 @@ document.addEventListener("DOMContentLoaded", () => {
   userRoleElement = document.getElementById("user-role");
   alertContainer = document.getElementById("alert-container");
 
+  // Check for admin impersonation mode and show proxy banner
+  checkImpersonationMode();
+
   // Check if user is logged in
   checkAuthStatus();
 
@@ -45,6 +48,65 @@ document.addEventListener("DOMContentLoaded", () => {
     logoutLink.addEventListener("click", handleLogout);
   }
 });
+
+// Check if admin is impersonating a user and show proxy banner
+function checkImpersonationMode() {
+  const impersonating = localStorage.getItem("impersonating");
+  const adminToken = localStorage.getItem("adminToken");
+
+  if (impersonating && adminToken) {
+    try {
+      const impersonationData = JSON.parse(impersonating);
+      showProxyBanner(impersonationData.name, impersonationData.role);
+      console.log(`🔍 Proxy mode active: Viewing as ${impersonationData.name} (${impersonationData.role})`);
+    } catch (e) {
+      console.error("Error parsing impersonation data:", e);
+    }
+  }
+}
+
+// Show the proxy mode banner
+function showProxyBanner(userName, userRole) {
+  const proxyBanner = document.getElementById("proxyBanner");
+  const proxyUserName = document.getElementById("proxyUserName");
+  const proxyUserRole = document.getElementById("proxyUserRole");
+
+  if (proxyBanner && proxyUserName && proxyUserRole) {
+    proxyUserName.textContent = userName;
+    proxyUserRole.textContent = userRole;
+    proxyBanner.style.display = "block";
+
+    // Add padding to body to account for fixed banner
+    document.body.style.paddingTop = "50px";
+  }
+}
+
+// Return to admin mode (called from proxy banner button)
+function returnToAdmin() {
+  const adminToken = localStorage.getItem("adminToken");
+
+  if (!adminToken) {
+    console.error("No admin token found");
+    return;
+  }
+
+  // Restore admin token
+  localStorage.setItem("token", adminToken);
+
+  // Clean up impersonation data
+  localStorage.removeItem("adminToken");
+  localStorage.removeItem("adminUser");
+  localStorage.removeItem("impersonating");
+  localStorage.removeItem("impersonatedUser");
+
+  console.log("✅ Returning to admin mode");
+
+  // Reload to show admin interface
+  window.location.reload();
+}
+
+// Make returnToAdmin globally available
+window.returnToAdmin = returnToAdmin;
 
 // Authentication status check
 function checkAuthStatus() {
@@ -2392,12 +2454,25 @@ document.addEventListener("DOMContentLoaded", () => {
           document.body.className = "authenticated student-user";
           console.log("Set student classes automatically");
 
-          // Set current student data
-          currentStudent = user;
+          // Check if admin is impersonating - if so, skip updating header
+          // (the impersonation code in student-auth.js handles this with full student data)
+          const impersonatedUser = localStorage.getItem("impersonatedUser");
+          if (impersonatedUser) {
+            console.log("Skipping header update - impersonation mode active (handled by student-auth.js)");
+            // Use the full impersonated user data instead
+            try {
+              currentStudent = JSON.parse(impersonatedUser);
+            } catch (e) {
+              currentStudent = user;
+            }
+          } else {
+            // Set current student data
+            currentStudent = user;
 
-          // Update header if possible
-          if (typeof updateStudentHeader === "function") {
-            updateStudentHeader(user);
+            // Update header if possible
+            if (typeof updateStudentHeader === "function") {
+              updateStudentHeader(user);
+            }
           }
         } else {
           // Admin/staff - set admin classes

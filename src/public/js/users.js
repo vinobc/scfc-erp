@@ -166,14 +166,21 @@ function renderUsers(users) {
   ${
     user.role !== "admin"
       ? `
-    <button class="btn btn-sm btn-outline-primary edit-user-btn" 
+    <button class="btn btn-sm btn-outline-info impersonate-user-btn"
+      data-user-id="${user.user_id}"
+      data-user-name="${user.full_name}"
+      data-user-role="${user.role}"
+      title="Login As This User">
+      <i class="fas fa-user-secret"></i>
+    </button>
+    <button class="btn btn-sm btn-outline-primary edit-user-btn"
       data-user-id="${user.user_id}">
       <i class="fas fa-edit"></i>
     </button>
     ${
       user.role === "faculty" || user.role === "timetable_coordinator"
-        ? `<button class="btn btn-sm btn-outline-warning reset-user-password-btn" 
-          data-user-id="${user.user_id}" 
+        ? `<button class="btn btn-sm btn-outline-warning reset-user-password-btn"
+          data-user-id="${user.user_id}"
           data-user-name="${user.full_name}"
           data-employee-id="${user.employee_id}"
           title="Reset Password">
@@ -181,8 +188,8 @@ function renderUsers(users) {
         </button>`
         : ""
     }
-    <button class="btn btn-sm btn-outline-danger delete-user-btn" 
-      data-user-id="${user.user_id}" 
+    <button class="btn btn-sm btn-outline-danger delete-user-btn"
+      data-user-id="${user.user_id}"
       data-user-name="${user.full_name}">
       <i class="fas fa-trash"></i>
     </button>
@@ -219,6 +226,16 @@ function renderUsers(users) {
       const userName = btn.getAttribute("data-user-name");
       const employeeId = btn.getAttribute("data-employee-id");
       confirmResetUserPassword(userId, userName, employeeId);
+    });
+  });
+
+  // Impersonate user buttons
+  document.querySelectorAll(".impersonate-user-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const userId = btn.getAttribute("data-user-id");
+      const userName = btn.getAttribute("data-user-name");
+      const userRole = btn.getAttribute("data-user-role");
+      impersonateUser(userId, userName, userRole);
     });
   });
 }
@@ -419,6 +436,87 @@ function resetUserPassword(userId, userName, employeeId) {
       showAlert(error.message, "danger");
     });
 }
+
+// Impersonate user (admin proxy login)
+async function impersonateUser(userId, userName, userRole) {
+  if (!confirm(`Are you sure you want to login as ${userName} (${userRole})?\n\nYou will see their interface and can make changes on their behalf.`)) {
+    return;
+  }
+
+  try {
+    // Save current admin token and user info
+    localStorage.setItem("adminToken", localStorage.getItem("token"));
+    localStorage.setItem("adminUser", JSON.stringify(window.currentUser || {}));
+
+    // Call impersonate API
+    const response = await fetch(`${window.API_URL}/auth/impersonate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+      body: JSON.stringify({ user_id: parseInt(userId) }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to impersonate user");
+    }
+
+    const data = await response.json();
+
+    // Replace current token with impersonation token
+    localStorage.setItem("token", data.token);
+    localStorage.setItem(
+      "impersonating",
+      JSON.stringify({
+        name: userName,
+        role: userRole,
+        userId: userId,
+      })
+    );
+
+    // Store the full user data for the impersonated user (includes student details)
+    localStorage.setItem("impersonatedUser", JSON.stringify(data.user));
+
+    console.log(`✅ Admin impersonating user: ${userName} (${userRole})`);
+    console.log("📋 Impersonated user data:", data.user);
+
+    // Reload the page to show target user's interface
+    window.location.reload();
+  } catch (error) {
+    console.error("Impersonation error:", error);
+    showAlert(error.message || "Failed to impersonate user", "danger");
+  }
+}
+
+// Return to admin from impersonation mode
+function returnToAdmin() {
+  const adminToken = localStorage.getItem("adminToken");
+
+  if (!adminToken) {
+    console.error("No admin token found - cannot return to admin");
+    showAlert("Error: Cannot return to admin mode", "danger");
+    return;
+  }
+
+  // Restore admin token
+  localStorage.setItem("token", adminToken);
+
+  // Clean up impersonation data
+  localStorage.removeItem("adminToken");
+  localStorage.removeItem("adminUser");
+  localStorage.removeItem("impersonating");
+  localStorage.removeItem("impersonatedUser");
+
+  console.log("✅ Returning to admin mode");
+
+  // Reload to show admin interface
+  window.location.reload();
+}
+
+// Make returnToAdmin globally available (called from HTML button)
+window.returnToAdmin = returnToAdmin;
 
 // Show alert message - use existing alert container
 function showAlert(message, type = "info", timeout = 5000) {

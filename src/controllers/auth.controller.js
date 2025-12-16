@@ -142,6 +142,98 @@ const validatePasswordComplexity = (password) => {
   return { isValid: true };
 };
 
+// Impersonate user (admin only)
+exports.impersonate = async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    const adminUserId = req.userId;
+
+    if (!user_id) {
+      return res.status(400).json({ message: "user_id is required" });
+    }
+
+    // Query target user with full details (join with student, program, school tables)
+    const result = await db.query(
+      `SELECT u.user_id, u.username, u.email, u.full_name, u.role, u.is_active,
+              s.enrollment_no, s.student_name, s.program_id, s.school_id,
+              s.program_name, s.school_name, s.year_admitted,
+              p.program_name_short,
+              sc.school_short_name
+       FROM "user" u
+       LEFT JOIN student s ON u.user_id = s.user_id
+       LEFT JOIN program p ON s.program_id = p.program_id
+       LEFT JOIN school sc ON s.school_id = sc.school_id
+       WHERE u.user_id = $1`,
+      [user_id]
+    );
+
+    const targetUser = result.rows[0];
+
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!targetUser.is_active) {
+      return res.status(400).json({ message: "Cannot impersonate inactive user" });
+    }
+
+    // Prevent impersonating other admins
+    if (targetUser.role === "admin") {
+      return res.status(403).json({ message: "Cannot impersonate admin users" });
+    }
+
+    console.log(
+      `Admin (user_id: ${adminUserId}) impersonating user: ${targetUser.username} (role: ${targetUser.role})`
+    );
+
+    // Generate JWT token for target user with impersonated_by flag
+    const token = jwt.sign(
+      {
+        id: targetUser.user_id,
+        username: targetUser.username,
+        role: targetUser.role,
+        enrollment_no: targetUser.enrollment_no || null,
+        impersonated_by: adminUserId,
+      },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    // Build user response object
+    const userResponse = {
+      user_id: targetUser.user_id,
+      username: targetUser.username,
+      email: targetUser.email,
+      full_name: targetUser.full_name,
+      role: targetUser.role,
+    };
+
+    // Add student-specific fields if impersonating a student
+    if (targetUser.role === "student" && targetUser.enrollment_no) {
+      userResponse.enrollment_no = targetUser.enrollment_no;
+      userResponse.student_name = targetUser.student_name;
+      userResponse.program_id = targetUser.program_id;
+      userResponse.school_id = targetUser.school_id;
+      userResponse.program_name = targetUser.program_name;
+      userResponse.school_name = targetUser.school_name;
+      userResponse.program_name_short = targetUser.program_name_short;
+      userResponse.school_short_name = targetUser.school_short_name;
+      userResponse.year_admitted = targetUser.year_admitted;
+      userResponse.must_reset_password = false; // Admin bypass - no password reset required
+    }
+
+    // Return token and user info
+    res.status(200).json({
+      message: "Impersonation successful",
+      token,
+      user: userResponse,
+    });
+  } catch (error) {
+    console.error("Impersonate error:", error);
+    res.status(500).json({ message: "Server error during impersonation" });
+  }
+};
+
 // Change password
 exports.changePassword = async (req, res) => {
   try {

@@ -6,10 +6,16 @@ const { verifyToken } = require("../middleware/auth.middleware");
 // Middleware to check if course registration is enabled
 const checkRegistrationEnabled = async (req, res, next) => {
   try {
+    // Admin bypass: If admin is impersonating a user, allow access regardless of registration status
+    if (req.impersonatedBy) {
+      console.log(`🔓 Admin impersonation bypass - allowing course registration access (impersonated by admin ID: ${req.impersonatedBy})`);
+      return next();
+    }
+
     // Check if course registration is enabled
     const db = require("../config/db");
     const result = await db.query(
-      `SELECT config_value FROM system_config 
+      `SELECT config_value FROM system_config
        WHERE config_key = 'course_registration_enabled' AND is_active = true`
     );
 
