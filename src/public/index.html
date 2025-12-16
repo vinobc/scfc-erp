@@ -2241,8 +2241,29 @@
                             </h6>
                           </div>
                           <div class="card-body">
+                            <!-- Semester Selection Section -->
+                            <div class="row mb-4" id="student-attendance-selector">
+                              <div class="col-md-4">
+                                <label for="student-attendance-year" class="form-label">Academic Year</label>
+                                <select class="form-select" id="student-attendance-year">
+                                  <option value="">Select Academic Year</option>
+                                </select>
+                              </div>
+                              <div class="col-md-4">
+                                <label for="student-attendance-semester" class="form-label">Semester</label>
+                                <select class="form-select" id="student-attendance-semester">
+                                  <option value="">Select Semester</option>
+                                </select>
+                              </div>
+                              <div class="col-md-4 d-flex align-items-end">
+                                <button type="button" class="btn btn-primary" id="student-attendance-load-btn" onclick="loadStudentAttendanceForSemester()">
+                                  <i class="fas fa-search me-1"></i>View Attendance
+                                </button>
+                              </div>
+                            </div>
+
                             <!-- Course Overview Section -->
-                            <div class="row mb-4">
+                            <div class="row mb-4" id="student-attendance-courses-section" style="display: none;">
                               <div class="col-12">
                                 <h5 class="mb-3">Course Overview</h5>
                                 <div id="student-attendance-overview">
@@ -2250,9 +2271,9 @@
                                 </div>
                               </div>
                             </div>
-                            
+
                             <!-- Detailed Attendance Section -->
-                            <div class="row">
+                            <div class="row" id="student-attendance-details-section" style="display: none;">
                               <div class="col-12">
                                 <h5 class="mb-3">Detailed Attendance</h5>
                                 <div id="student-attendance-details">

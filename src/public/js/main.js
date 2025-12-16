@@ -2029,24 +2029,122 @@ window.reloadAttendanceForDate = reloadAttendanceForDate;
 
 // ===== STUDENT ATTENDANCE VIEWING FUNCTIONS =====
 
-// Initialize student attendance functionality (for testing)
+// Store current semester selection for back navigation
+let currentAttendanceSelection = { slotYear: null, semesterType: null };
+
+// Initialize student attendance functionality - shows semester selector first
 async function initializeStudentAttendance() {
   console.log("🎓 Initializing student attendance...");
-  const overviewDiv = document.getElementById("student-attendance-overview");
-  const detailsDiv = document.getElementById("student-attendance-details");
-  
-  if (!overviewDiv || !detailsDiv) {
-    console.error("Student attendance containers not found");
+
+  const selectorDiv = document.getElementById("student-attendance-selector");
+  const coursesSection = document.getElementById("student-attendance-courses-section");
+  const detailsSection = document.getElementById("student-attendance-details-section");
+  const yearSelect = document.getElementById("student-attendance-year");
+  const semesterSelect = document.getElementById("student-attendance-semester");
+
+  if (!selectorDiv || !yearSelect || !semesterSelect) {
+    console.error("Student attendance selector elements not found");
     return;
   }
 
+  // Show selector, hide courses and details sections
+  selectorDiv.style.display = "";
+  if (coursesSection) coursesSection.style.display = "none";
+  if (detailsSection) detailsSection.style.display = "none";
+
   try {
-    // Fetch student courses with attendance
-    const response = await fetch(`${window.API_URL}/attendance/student/courses`, {
+    // Fetch available semesters for the student
+    const response = await fetch(`${window.API_URL}/attendance/student/semesters`, {
       headers: {
         "x-access-token": localStorage.getItem("token")
       }
     });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch semesters");
+    }
+
+    const semesters = await response.json();
+    console.log("📅 Available semesters:", semesters);
+
+    if (semesters.length === 0) {
+      selectorDiv.innerHTML = `
+        <div class="alert alert-info text-center">
+          <i class="fas fa-info-circle me-2"></i>
+          You have no registered courses for attendance tracking.
+        </div>
+      `;
+      return;
+    }
+
+    // Get unique years and populate year dropdown
+    const uniqueYears = [...new Set(semesters.map(s => s.slot_year))];
+    yearSelect.innerHTML = '<option value="">Select Academic Year</option>' +
+      uniqueYears.map(year => `<option value="${year}">${year}</option>`).join('');
+
+    // Populate semester dropdown with all options
+    semesterSelect.innerHTML = '<option value="">Select Semester</option>' +
+      '<option value="FALL">FALL</option>' +
+      '<option value="WINTER">WINTER</option>' +
+      '<option value="SUMMER">SUMMER</option>';
+
+    // Store semesters for validation
+    window.studentAvailableSemesters = semesters;
+
+  } catch (error) {
+    console.error("Error loading semesters:", error);
+    selectorDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        Error loading semester data. Please try again later.
+      </div>
+    `;
+  }
+}
+
+// Load attendance for selected semester
+async function loadStudentAttendanceForSemester() {
+  const yearSelect = document.getElementById("student-attendance-year");
+  const semesterSelect = document.getElementById("student-attendance-semester");
+  const coursesSection = document.getElementById("student-attendance-courses-section");
+  const detailsSection = document.getElementById("student-attendance-details-section");
+  const overviewDiv = document.getElementById("student-attendance-overview");
+
+  const slotYear = yearSelect?.value;
+  const semesterType = semesterSelect?.value;
+
+  if (!slotYear || !semesterType) {
+    alert("Please select both Academic Year and Semester");
+    return;
+  }
+
+  // Store selection for back navigation
+  currentAttendanceSelection = { slotYear, semesterType };
+
+  // Show courses section, hide details
+  if (coursesSection) coursesSection.style.display = "";
+  if (detailsSection) detailsSection.style.display = "none";
+
+  // Show loading
+  overviewDiv.innerHTML = `
+    <div class="text-center">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2">Loading attendance data...</p>
+    </div>
+  `;
+
+  try {
+    // Fetch courses for selected semester
+    const response = await fetch(
+      `${window.API_URL}/attendance/student/courses?slot_year=${encodeURIComponent(slotYear)}&semester_type=${encodeURIComponent(semesterType)}`,
+      {
+        headers: {
+          "x-access-token": localStorage.getItem("token")
+        }
+      }
+    );
 
     if (!response.ok) {
       throw new Error("Failed to fetch attendance data");
@@ -2059,49 +2157,71 @@ async function initializeStudentAttendance() {
       overviewDiv.innerHTML = `
         <div class="alert alert-info text-center">
           <i class="fas fa-info-circle me-2"></i>
-          You have no registered courses for attendance tracking.
+          No courses found for ${slotYear} - ${semesterType}.
         </div>
       `;
       return;
     }
 
-    // Display courses with attendance
+    // Display courses with attendance - TEL courses will appear as separate Theory/Lab cards
     let coursesHtml = `
       <div class="row">
         ${courses.map(course => {
-          const attendanceColor = course.attendance_percentage >= 75 ? 'success' : 
+          const attendanceColor = course.attendance_percentage >= 75 ? 'success' :
                                  course.attendance_percentage >= 60 ? 'warning' : 'danger';
-          const meetsRequirement = !course.theory || course.attendance_percentage >= 75;
-          
+
+          // Determine if this component requires 75% attendance
+          // Theory component (T) requires 75%, SINGLE with theory requires 75%
+          // Lab component (P) of TEL and SINGLE practical-only don't require 75%
+          const requiresAttendance = course.component_type === 'T' ||
+            (course.component_type === 'SINGLE' && course.theory > 0);
+          const meetsRequirement = !requiresAttendance || course.attendance_percentage >= 75;
+
+          // Build course title with component label for TEL courses
+          let courseTitle = `${course.course_code} - ${course.course_name}`;
+          if (course.component_label) {
+            courseTitle += ` (${course.component_label})`;
+          }
+
+          // Badge text
+          let badgeHtml = '';
+          if (requiresAttendance) {
+            badgeHtml = `<span class="badge ${meetsRequirement ? 'bg-success' : 'bg-danger'}">
+              ${meetsRequirement ? '✓ Meets 75%' : '✗ Below 75%'}
+            </span>`;
+          } else if (course.component_type === 'P') {
+            // Lab component of TEL course - no minimum required
+            badgeHtml = '<span class="badge bg-secondary">No min. required</span>';
+          } else {
+            // SINGLE course with only practical (pure lab course) - show both badges
+            badgeHtml = `<span class="badge bg-info">Lab Only</span>
+              <span class="badge bg-secondary ms-1">No min. required</span>`;
+          }
+
           return `
             <div class="col-md-6 mb-3">
-              <div class="card h-100" style="cursor: pointer;" onclick="viewStudentAttendanceDetails('${course.course_code}', '${course.slot_year}', '${course.semester_type}')">
+              <div class="card h-100" style="cursor: pointer;" onclick="viewStudentAttendanceDetails('${course.course_code}', '${course.slot_year}', '${course.semester_type}', '${course.slot_name || ''}')">
                 <div class="card-body">
-                  <h6 class="card-title">${course.course_code} - ${course.course_name}</h6>
-                  <p class="text-muted mb-2">${course.slot_year} | ${course.semester_type}</p>
-                  
+                  <h6 class="card-title">${courseTitle}</h6>
+                  <p class="text-muted mb-2">Slot: ${course.slot_name || 'N/A'}</p>
+
                   <div class="mb-3">
                     <div class="d-flex justify-content-between mb-1">
                       <span>Attendance</span>
                       <span class="badge bg-${attendanceColor}">${course.attendance_percentage || 0}%</span>
                     </div>
                     <div class="progress" style="height: 20px;">
-                      <div class="progress-bar bg-${attendanceColor}" role="progressbar" 
+                      <div class="progress-bar bg-${attendanceColor}" role="progressbar"
                            style="width: ${course.attendance_percentage || 0}%"
-                           aria-valuenow="${course.attendance_percentage || 0}" 
+                           aria-valuenow="${course.attendance_percentage || 0}"
                            aria-valuemin="0" aria-valuemax="100">
                       </div>
                     </div>
                   </div>
-                  
+
                   <div class="d-flex justify-content-between text-muted small">
                     <span>${course.present_classes || 0}/${course.total_classes || 0} classes</span>
-                    ${course.theory > 0 ? 
-                      `<span class="badge ${meetsRequirement ? 'bg-success' : 'bg-danger'}">
-                        ${meetsRequirement ? '✓ Meets 75%' : '✗ Below 75%'}
-                      </span>` : 
-                      '<span class="badge bg-info">Lab Only</span>'
-                    }
+                    ${badgeHtml}
                   </div>
                 </div>
               </div>
@@ -2109,16 +2229,13 @@ async function initializeStudentAttendance() {
           `;
         }).join('')}
       </div>
-      
+
       <div class="mt-3 text-muted">
         <small><i class="fas fa-info-circle me-1"></i>Click on a course to view detailed attendance records</small>
       </div>
     `;
-    
+
     overviewDiv.innerHTML = coursesHtml;
-    
-    // Reset details section
-    detailsDiv.innerHTML = `<p class="text-muted">Select a course above to view detailed attendance records.</p>`;
 
   } catch (error) {
     console.error("Error loading student attendance:", error);
@@ -2131,12 +2248,28 @@ async function initializeStudentAttendance() {
   }
 }
 
-// View detailed attendance for a course
-async function viewStudentAttendanceDetails(courseCode, slotYear, semesterType) {
-  console.log("📊 Viewing attendance details for:", courseCode);
+// Go back to courses view (used from detailed view)
+function backToStudentCourses() {
+  const coursesSection = document.getElementById("student-attendance-courses-section");
+  const detailsSection = document.getElementById("student-attendance-details-section");
+
+  if (coursesSection) coursesSection.style.display = "";
+  if (detailsSection) detailsSection.style.display = "none";
+}
+
+// View detailed attendance for a course (with optional slot_name for TEL component filtering)
+async function viewStudentAttendanceDetails(courseCode, slotYear, semesterType, slotName = '') {
+  console.log("📊 Viewing attendance details for:", courseCode, "slot:", slotName);
+
+  const coursesSection = document.getElementById("student-attendance-courses-section");
+  const detailsSection = document.getElementById("student-attendance-details-section");
   const detailsDiv = document.getElementById("student-attendance-details");
-  
+
   if (!detailsDiv) return;
+
+  // Hide courses, show details section
+  if (coursesSection) coursesSection.style.display = "none";
+  if (detailsSection) detailsSection.style.display = "";
 
   // Show loading
   detailsDiv.innerHTML = `
@@ -2149,14 +2282,17 @@ async function viewStudentAttendanceDetails(courseCode, slotYear, semesterType) 
   `;
 
   try {
-    const response = await fetch(
-      `${window.API_URL}/attendance/student/report/${courseCode}/${slotYear}/${semesterType}`,
-      {
-        headers: {
-          "x-access-token": localStorage.getItem("token")
-        }
+    // Build URL with optional slot_name query param
+    let url = `${window.API_URL}/attendance/student/report/${courseCode}/${slotYear}/${semesterType}`;
+    if (slotName) {
+      url += `?slot_name=${encodeURIComponent(slotName)}`;
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        "x-access-token": localStorage.getItem("token")
       }
-    );
+    });
 
     if (!response.ok) {
       throw new Error("Failed to fetch attendance details");
@@ -2166,19 +2302,25 @@ async function viewStudentAttendanceDetails(courseCode, slotYear, semesterType) 
     console.log("📋 Attendance details:", data);
 
     const { course_details, summary, attendance_records } = data;
-    const attendanceColor = summary.attendance_percentage >= 75 ? 'success' : 
+    const attendanceColor = summary.attendance_percentage >= 75 ? 'success' :
                            summary.attendance_percentage >= 60 ? 'warning' : 'danger';
+
+    // Build title with component info if available
+    let courseTitle = `${course_details.course_code} - ${course_details.course_name}`;
+    if (course_details.component_label) {
+      courseTitle += ` (${course_details.component_label})`;
+    }
 
     let detailsHtml = `
       <div class="mb-3">
-        <button class="btn btn-sm btn-outline-primary" onclick="initializeStudentAttendance()">
+        <button class="btn btn-sm btn-outline-primary" onclick="backToStudentCourses()">
           <i class="fas fa-arrow-left me-1"></i>Back to Courses
         </button>
       </div>
 
       <div class="card mb-4">
         <div class="card-header bg-primary">
-          <h6 class="mb-0 text-white">${course_details.course_code} - ${course_details.course_name}</h6>
+          <h6 class="mb-0 text-white">${courseTitle}</h6>
         </div>
         <div class="card-body">
           <div class="row">
@@ -2281,6 +2423,8 @@ async function viewStudentAttendanceDetails(courseCode, slotYear, semesterType) 
 
 // Export student functions
 window.initializeStudentAttendance = initializeStudentAttendance;
+window.loadStudentAttendanceForSemester = loadStudentAttendanceForSemester;
+window.backToStudentCourses = backToStudentCourses;
 window.viewStudentAttendanceDetails = viewStudentAttendanceDetails;
 
 console.log("✅ Attendance system loaded in main.js, initializeAttendance is now:", typeof window.initializeAttendance);

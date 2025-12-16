@@ -23,6 +23,7 @@ router.get("/date-range", isFacultyOrCoordinator, attendanceController.getAttend
 router.get("/low-attendance", isFacultyOrCoordinator, attendanceController.getLowAttendanceStudents);
 
 // Student attendance routes - protected by isStudent middleware
+router.get("/student/semesters", isStudent, attendanceController.getStudentSemesters);
 router.get("/student/courses", isStudent, attendanceController.getStudentCourses);
 router.get("/student/report/:course_code/:slot_year/:semester_type", isStudent, attendanceController.getStudentAttendanceReport);
 
