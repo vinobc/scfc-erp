@@ -2512,3 +2512,294 @@ exports.getAdminStudentTimetable = async (req, res) => {
     });
   }
 };
+
+// Atomic TEL Course Registration - registers both theory and practical in a single transaction
+exports.registerTELCourseAtomic = async (req, res) => {
+  const client = await db.pool.connect();
+
+  try {
+    const {
+      course_code,
+      slot_year,
+      semester_type,
+      theory_slot,
+      theory_venue,
+      theory_faculty,
+      practical_slot,
+      practical_venue,
+      practical_faculty,
+    } = req.body;
+    const userId = req.userId;
+
+    console.log(`🎯 Atomic TEL registration request for ${course_code}`);
+    console.log(`Theory: ${theory_slot} at ${theory_venue}, Practical: ${practical_slot} at ${practical_venue}`);
+
+    // Validate required fields
+    if (
+      !course_code ||
+      !slot_year ||
+      !semester_type ||
+      !theory_slot ||
+      !theory_venue ||
+      !theory_faculty ||
+      !practical_slot ||
+      !practical_venue ||
+      !practical_faculty
+    ) {
+      return res.status(400).json({
+        message: "Missing required fields for TEL registration",
+      });
+    }
+
+    // Get student details
+    const student = await getStudentByUserId(userId);
+
+    // Get course details
+    const courseResult = await db.query(
+      `SELECT course_code, course_name, theory, practical, credits, course_type
+       FROM course
+       WHERE course_code = $1`,
+      [course_code]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const course = courseResult.rows[0];
+    const { theory, practical } = course;
+
+    // Verify this is actually a TEL course
+    if (!(theory > 0 && practical > 0)) {
+      return res.status(400).json({
+        message: "This endpoint is only for TEL courses (courses with both theory and practical components)",
+      });
+    }
+
+    // Check if course is already registered (any component)
+    const existingRegistration = await db.query(
+      `SELECT COUNT(*) as count FROM student_registrations
+       WHERE enrollment_number = $1
+         AND slot_year = $2
+         AND semester_type = $3
+         AND course_code = $4`,
+      [student.enrollment_number, slot_year, semester_type, course_code]
+    );
+
+    if (parseInt(existingRegistration.rows[0].count) > 0) {
+      return res.status(400).json({
+        message: `You are already registered for ${course_code}. Please delete existing registration first.`,
+      });
+    }
+
+    // Check conflicts for theory slot
+    console.log(`🔍 Checking theory slot conflicts: ${theory_slot}`);
+    const theoryConflictCheck = await checkSlotConflicts(
+      student.enrollment_number,
+      slot_year,
+      semester_type,
+      theory_slot
+    );
+
+    if (theoryConflictCheck.hasConflict) {
+      return res.status(400).json({
+        message: `Theory component conflict: ${theoryConflictCheck.message}`,
+        conflict_details: {
+          component: "theory",
+          type: theoryConflictCheck.conflictType,
+          conflicting_slot: theoryConflictCheck.conflictingSlot,
+          conflicting_course: theoryConflictCheck.conflictingCourse,
+        },
+      });
+    }
+
+    // Check conflicts for practical slot
+    console.log(`🔍 Checking practical slot conflicts: ${practical_slot}`);
+    const practicalConflictCheck = await checkSlotConflicts(
+      student.enrollment_number,
+      slot_year,
+      semester_type,
+      practical_slot
+    );
+
+    if (practicalConflictCheck.hasConflict) {
+      return res.status(400).json({
+        message: `Practical component conflict: ${practicalConflictCheck.message}`,
+        conflict_details: {
+          component: "practical",
+          type: practicalConflictCheck.conflictType,
+          conflicting_slot: practicalConflictCheck.conflictingSlot,
+          conflicting_course: practicalConflictCheck.conflictingCourse,
+        },
+      });
+    }
+
+    // Check TEL component conflicts (theory vs practical)
+    const theorySlots = parseSlotNames(theory_slot);
+    const practicalSlots = parseSlotNames(practical_slot);
+
+    for (const tSlot of theorySlots) {
+      for (const pSlot of practicalSlots) {
+        if (tSlot === pSlot) {
+          return res.status(400).json({
+            message: `TEL Component Conflict: Theory and practical cannot use the same slot "${tSlot}"`,
+          });
+        }
+
+        const conflicts = await db.query(
+          `SELECT COUNT(*) as count FROM slot_conflict
+           WHERE slot_year = $1
+             AND semester_type = $2
+             AND ((slot_name = $3 AND conflicting_slot_name = $4)
+                  OR (slot_name = $4 AND conflicting_slot_name = $3))`,
+          [slot_year, semester_type, tSlot, pSlot]
+        );
+
+        if (parseInt(conflicts.rows[0].count) > 0) {
+          return res.status(400).json({
+            message: `TEL Component Conflict: Theory slot "${tSlot}" conflicts with practical slot "${pSlot}"`,
+          });
+        }
+      }
+    }
+
+    // Check seat availability for theory
+    const theorySeatCheck = await client.query(
+      `SELECT v.seats as total_seats,
+        (SELECT COUNT(*) FROM student_registrations sr
+         WHERE sr.course_code = $1 AND sr.slot_year = $2 AND sr.semester_type = $3
+         AND sr.venue = $4 AND (sr.slot_name = $5 OR (',' || sr.slot_name || ',') LIKE ('%,' || $5 || ',%'))
+        ) as current_registrations
+       FROM venue v WHERE v.venue = $4`,
+      [course_code, slot_year, semester_type, theory_venue, theory_slot]
+    );
+
+    if (theorySeatCheck.rows.length > 0) {
+      const theorySeats = theorySeatCheck.rows[0];
+      if (theorySeats.total_seats - theorySeats.current_registrations <= 0) {
+        return res.status(400).json({
+          message: `No seats available for theory component at ${theory_venue}`,
+        });
+      }
+    }
+
+    // Check seat availability for practical
+    const practicalSeatCheck = await client.query(
+      `SELECT v.seats as total_seats,
+        (SELECT COUNT(*) FROM student_registrations sr
+         WHERE sr.course_code = $1 AND sr.slot_year = $2 AND sr.semester_type = $3
+         AND sr.venue = $4 AND (sr.slot_name = $5 OR (',' || sr.slot_name || ',') LIKE ('%,' || $5 || ',%'))
+        ) as current_registrations
+       FROM venue v WHERE v.venue = $4`,
+      [course_code, slot_year, semester_type, practical_venue, practical_slot]
+    );
+
+    if (practicalSeatCheck.rows.length > 0) {
+      const practicalSeats = practicalSeatCheck.rows[0];
+      if (practicalSeats.total_seats - practicalSeats.current_registrations <= 0) {
+        return res.status(400).json({
+          message: `No seats available for practical component at ${practical_venue}`,
+        });
+      }
+    }
+
+    console.log(`✅ All validations passed, starting atomic registration`);
+
+    // BEGIN TRANSACTION - This is the key fix!
+    await client.query('BEGIN');
+
+    try {
+      // Insert theory component
+      await client.query(
+        `INSERT INTO student_registrations
+         (enrollment_number, student_name, program_code, year_admitted,
+          slot_year, semester_type, course_code, course_name,
+          theory, practical, credits, course_type,
+          slot_name, venue, faculty_name, component_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        [
+          student.enrollment_number,
+          student.student_name,
+          student.program_code,
+          student.year_admitted,
+          slot_year,
+          semester_type,
+          course_code,
+          course.course_name,
+          course.theory,
+          course.practical,
+          course.credits,
+          course.course_type,
+          theory_slot,
+          theory_venue,
+          theory_faculty,
+          'T'
+        ]
+      );
+
+      console.log(`✅ Theory component inserted`);
+
+      // Insert practical component
+      await client.query(
+        `INSERT INTO student_registrations
+         (enrollment_number, student_name, program_code, year_admitted,
+          slot_year, semester_type, course_code, course_name,
+          theory, practical, credits, course_type,
+          slot_name, venue, faculty_name, component_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        [
+          student.enrollment_number,
+          student.student_name,
+          student.program_code,
+          student.year_admitted,
+          slot_year,
+          semester_type,
+          course_code,
+          course.course_name,
+          course.theory,
+          course.practical,
+          course.credits,
+          course.course_type,
+          practical_slot,
+          practical_venue,
+          practical_faculty,
+          'P'
+        ]
+      );
+
+      console.log(`✅ Practical component inserted`);
+
+      // COMMIT TRANSACTION - Both succeeded!
+      await client.query('COMMIT');
+
+      console.log(`✅ Atomic TEL registration successful: ${course_code} for ${student.enrollment_number}`);
+
+      res.status(201).json({
+        message: "TEL course registration successful",
+        registration: {
+          course_code,
+          course_name: course.course_name,
+          theory_slot,
+          practical_slot,
+          credits: course.credits,
+        },
+      });
+
+    } catch (insertError) {
+      // ROLLBACK TRANSACTION - Something failed, undo everything
+      await client.query('ROLLBACK');
+      console.error(`❌ Transaction rolled back due to error:`, insertError);
+      throw insertError;
+    }
+
+  } catch (error) {
+    console.error("Atomic TEL registration error:", error);
+    res.status(500).json({
+      message: "Server error during TEL registration",
+      error: error.message,
+    });
+  } finally {
+    // Always release the client back to the pool
+    client.release();
+  }
+};
