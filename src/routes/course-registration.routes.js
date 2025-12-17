@@ -111,6 +111,14 @@ router.post(
   courseRegistrationController.validateTELRegistration
 );
 
+// Atomic TEL registration (both theory and practical in one transaction)
+router.post(
+  "/register-tel",
+  verifyToken,
+  checkRegistrationEnabled,
+  courseRegistrationController.registerTELCourseAtomic
+);
+
 // Get student slot timetable (read-only, always available)
 router.get(
   "/my-timetable",

@@ -1040,13 +1040,13 @@ async function registerTELCourse(courseCode) {
 
     const [year, type] = semesterSelect.value.split("|");
 
-    console.log(`📝 Starting TEL course validation for: ${courseCode}`);
+    console.log(`📝 Starting atomic TEL course registration for: ${courseCode}`);
     console.log(
       `Theory: ${theorySelection.value}, Practical: ${practicalSelection.value}`
     );
 
-    // Step 1: Pre-validate BOTH components before registering either
-    const preValidationData = {
+    // Prepare registration data with both theory and practical
+    const registrationData = {
       course_code: courseCode,
       slot_year: year,
       semester_type: type,
@@ -1058,124 +1058,34 @@ async function registerTELCourse(courseCode) {
       practical_faculty: practicalSelection.dataset.faculty,
     };
 
-    console.log("📤 Pre-validating TEL registration:", preValidationData);
+    console.log("📤 Sending atomic TEL registration:", registrationData);
 
-    // Call the new pre-validation endpoint
-    const preValidationResponse = await fetch(
-      `${window.API_URL}/course-registration/validate-tel`,
+    // Call the atomic registration endpoint - both components in one transaction
+    const response = await fetch(
+      `${window.API_URL}/course-registration/register-tel`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify(preValidationData),
+        body: JSON.stringify(registrationData),
       }
     );
 
-    const preValidationResult = await preValidationResponse.json();
+    const result = await response.json();
 
-    if (!preValidationResponse.ok) {
-      throw new Error(`Validation failed: ${preValidationResult.message}`);
+    if (!response.ok) {
+      throw new Error(result.message);
     }
 
-    console.log("✅ Pre-validation passed, proceeding with registration");
-
-    // Step 2: Register theory component
-    const theoryRegistration = {
-      course_code: courseCode,
-      slot_name: theorySelection.value,
-      slot_year: year,
-      semester_type: type,
-      venue: theorySelection.dataset.venue,
-      faculty_name: theorySelection.dataset.faculty,
-    };
-
-    console.log("📤 Registering theory component:", theoryRegistration);
-
-    const theoryResponse = await fetch(
-      `${window.API_URL}/course-registration/register`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify(theoryRegistration),
-      }
-    );
-
-    const theoryResult = await theoryResponse.json();
-
-    if (!theoryResponse.ok) {
-      throw new Error(`Theory registration failed: ${theoryResult.message}`);
-    }
-
-    console.log("✅ Theory component registered successfully");
-
-    // Step 3: Register practical component
-    const practicalRegistration = {
-      course_code: courseCode,
-      slot_name: practicalSelection.value,
-      slot_year: year,
-      semester_type: type,
-      venue: practicalSelection.dataset.venue,
-      faculty_name: practicalSelection.dataset.faculty,
-    };
-
-    console.log("📤 Registering practical component:", practicalRegistration);
-
-    const practicalResponse = await fetch(
-      `${window.API_URL}/course-registration/register`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify(practicalRegistration),
-      }
-    );
-
-    const practicalResult = await practicalResponse.json();
-
-    if (!practicalResponse.ok) {
-      // If practical registration fails, rollback theory registration
-      console.log("❌ Practical registration failed, rolling back theory...");
-
-      try {
-        await fetch(`${window.API_URL}/course-registration/delete`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({
-            course_code: courseCode,
-            slot_year: year,
-            semester_type: type,
-          }),
-        });
-        console.log("✅ Theory registration rolled back successfully");
-      } catch (rollbackError) {
-        console.error(
-          "❌ Failed to rollback theory registration:",
-          rollbackError
-        );
-      }
-
-      throw new Error(
-        `Practical registration failed: ${practicalResult.message}`
-      );
-    }
-
-    console.log("✅ Practical component registered successfully");
+    console.log("✅ Atomic TEL registration successful");
 
     // Show success message
     showAlert(
       `✅ Successfully registered for ${courseCode}!<br>` +
         `Theory: ${theorySelection.value} | Practical: ${practicalSelection.value}<br>` +
-        `Total Credits: ${theoryResult.registration.credits}`,
+        `Total Credits: ${result.registration.credits}`,
       "success"
     );
 
