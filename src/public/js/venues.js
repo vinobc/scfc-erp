@@ -664,8 +664,13 @@ function handleSaveVenue() {
     return;
   }
 
-  if (infraType.length > 20) {
-    showAlert("Infrastructure type must not exceed 20 characters.", "danger");
+  if (infraType.length > 50) {
+    showAlert("Infrastructure type must not exceed 50 characters.", "danger");
+    return;
+  }
+
+  if (!seats || seats <= 0) {
+    showAlert("Seats field is required and must be greater than 0.", "danger");
     return;
   }
 
