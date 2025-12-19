@@ -3036,7 +3036,7 @@
                     type="text"
                     class="form-control"
                     id="venue-infra-type-field"
-                    maxlength="20"
+                    maxlength="50"
                     required
                     style="display: none"
                   />
@@ -3056,21 +3056,22 @@
                   </button>
                 </div>
                 <div class="form-text">
-                  Select a venue type or enter a custom type (max 20
+                  Select a venue type or enter a custom type (max 50
                   characters). Custom types are saved to the dropdown. "Reset"
                   button clears all custom infrastructure types from the
                   dropdown.
                 </div>
               </div>
               <div class="mb-3">
-                <label for="venue-seats-field" class="form-label">Seats</label>
+                <label for="venue-seats-field" class="form-label">Seats *</label>
                 <input
                   type="number"
                   class="form-control"
                   id="venue-seats-field"
                   min="0"
+                  required
                 />
-                <div class="form-text">Number of seats (optional).</div>
+                <div class="form-text">Number of seats (required for registration limits).</div>
               </div>
               <div class="form-check mb-3">
                 <input

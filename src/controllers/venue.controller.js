@@ -49,7 +49,7 @@ exports.createVenue = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!venue || !capacity || !infra_type) {
+    if (!venue || !capacity || !infra_type || !seats) {
       return res.status(400).json({
         message: "Required fields missing. Please check your input.",
       });
