@@ -4082,16 +4082,14 @@ function clearConflictIndicators() {
   }
 }
 
-// P=4 Lab Selection Functions (Fall 2025-26)
+// P=4 Lab Selection Functions
 
 // Show/hide P=4 lab selection based on course P=4 and componentType=lab
 function toggleP4LabSelection(course, componentType) {
   if (!p4LabSelectionContainer || !course) return;
 
-  const shouldShowP4Selection = 
-    course.practical === 4 && 
-    allocationYearInput.value === "2025-26" &&
-    allocationSemesterTypeInput.value === "FALL" &&
+  const shouldShowP4Selection =
+    course.practical === 4 &&
     (
       // For Lab-only courses (T=0, P=4), always show P=4 selection
       (course.theory === 0) ||
@@ -4524,7 +4522,7 @@ function updateLabPairDayTime(labPair, displayElement, year = null, semester = n
   const currentYear = year || (allocationYearInput ? allocationYearInput.value : "");
   const currentSemester = semester || (allocationSemesterTypeInput ? allocationSemesterTypeInput.value : "");
   
-  // Fall 2025-26 lab slot timings (based on master timetable)
+  // 2025-26 lab slot timings for FALL and WINTER (based on master timetable)
   const fall2025DayTimeMap = {
     "L1+L2": "Monday 9:00 - 10:45",
     "L3+L4": "Monday 10:50 - 12:35",
@@ -4572,9 +4570,9 @@ function updateLabPairDayTime(labPair, displayElement, year = null, semester = n
     "L39+L40": "Friday 3:15 PM - 5:15 PM"
   };
   
-  // Use Fall 2025-26 timings if year is 2025-26 and semester is FALL
-  const dayTimeMap = (currentYear === "2025-26" && currentSemester === "FALL") 
-    ? fall2025DayTimeMap 
+  // Use 2025-26 timings for FALL and WINTER (same timetable)
+  const dayTimeMap = (currentYear === "2025-26" && (currentSemester === "FALL" || currentSemester === "WINTER"))
+    ? fall2025DayTimeMap
     : defaultDayTimeMap;
   
   displayElement.textContent = dayTimeMap[labPair] || "Unknown time slot";
