@@ -48,8 +48,8 @@ router.get(
   facultyAllocationController.getAvailableSlotsForFaculty
 );
 
-// Real-time conflict checking endpoint
-router.get(
+// Real-time conflict checking endpoint (POST for pre-validation with request body)
+router.post(
   "/check-conflicts",
   canManageFacultyAllocations,
   facultyAllocationController.checkConflicts

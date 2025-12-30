@@ -1,5 +1,27 @@
 const db = require("../config/db");
 
+// Helper function to parse slot time string to minutes since midnight
+function parseSlotTimeRange(timeStr) {
+  // Handle formats like "3.05–4.45", "4.00–4.50", "9.00-9.50"
+  const cleanStr = timeStr.replace(/–/g, "-"); // Normalize dashes
+  const [startStr, endStr] = cleanStr.split("-");
+
+  const parseTime = (str) => {
+    const [hours, mins] = str.trim().split(".").map(Number);
+    // Convert to 24-hour format (times before 8 are PM)
+    let h = hours;
+    if (h < 8) h += 12; // 1.15 -> 13.15, 4.00 -> 16.00
+    return h * 60 + (mins || 0);
+  };
+
+  return { start: parseTime(startStr), end: parseTime(endStr) };
+}
+
+// Helper function to check if two time ranges overlap
+function timesOverlap(range1, range2) {
+  return range1.start < range2.end && range2.start < range1.end;
+}
+
 // Get all faculty allocations
 exports.getAllFacultyAllocations = async (req, res) => {
   try {
@@ -111,6 +133,32 @@ exports.createFacultyAllocation = async (req, res) => {
         type: "venue_clash",
         existingAllocation: clash,
       });
+    }
+
+    // Additional check: Time-based overlap at same venue+day
+    // This catches cases where slot_time strings differ but times overlap
+    // e.g., '3.05-4.45' overlaps with '4.00-4.50'
+    const venueTimeOverlapCheck = await db.query(
+      `SELECT fa.*, c.course_name, f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2
+       AND fa.venue = $3 AND fa.slot_day = $4
+       AND fa.course_code != $5`,
+      [slot_year, semester_type, venue, slot_day, course_code]
+    );
+
+    const newSlotTimes = parseSlotTimeRange(slot_time);
+    for (const existing of venueTimeOverlapCheck.rows) {
+      const existingTimes = parseSlotTimeRange(existing.slot_time);
+      if (timesOverlap(newSlotTimes, existingTimes)) {
+        return res.status(409).json({
+          message: `Time overlap: ${venue} on ${slot_day} already has ${existing.slot_name} (${existing.slot_time}) for ${existing.course_name}, which overlaps with ${slot_name} (${slot_time})`,
+          type: "time_overlap_conflict",
+          existingAllocation: existing,
+        });
+      }
     }
 
     // Check for faculty clash (different course at same time)
@@ -2905,5 +2953,148 @@ exports.createFacultyAllocationP4 = async (req, res) => {
       message: "Server error while creating P=4 faculty allocation",
       error: error.message,
     });
+  }
+};
+
+// Check conflicts without creating allocation (for pre-validation)
+exports.checkConflicts = async (req, res) => {
+  try {
+    const {
+      slot_year,
+      semester_type,
+      course_code,
+      employee_id,
+      venue,
+      slot_day,
+      slot_name,
+      slot_time,
+    } = req.body;
+
+    // Validate required fields
+    if (!slot_year || !semester_type || !course_code || !employee_id || !venue || !slot_day || !slot_name || !slot_time) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // Check for venue clash (different faculty for same venue/time)
+    const venueClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2
+       AND fa.venue = $3 AND fa.slot_day = $4
+       AND fa.slot_time = $5 AND fa.employee_id != $6`,
+      [slot_year, semester_type, venue, slot_day, slot_time, employee_id]
+    );
+
+    if (venueClashCheck.rows.length > 0) {
+      const clash = venueClashCheck.rows[0];
+      return res.status(409).json({
+        message: `Venue clash: ${venue} is already booked on ${slot_day} at ${slot_time} for ${clash.course_name} by ${clash.faculty_name}`,
+        type: "venue_clash",
+      });
+    }
+
+    // Time-based overlap check
+    const venueTimeOverlapCheck = await db.query(
+      `SELECT fa.*, c.course_name, f.name as faculty_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN faculty f ON fa.employee_id = f.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2
+       AND fa.venue = $3 AND fa.slot_day = $4
+       AND fa.course_code != $5`,
+      [slot_year, semester_type, venue, slot_day, course_code]
+    );
+
+    const newSlotTimes = parseSlotTimeRange(slot_time);
+    for (const existing of venueTimeOverlapCheck.rows) {
+      const existingTimes = parseSlotTimeRange(existing.slot_time);
+      if (timesOverlap(newSlotTimes, existingTimes)) {
+        return res.status(409).json({
+          message: `Time overlap: ${venue} on ${slot_day} already has ${existing.slot_name} (${existing.slot_time}) for ${existing.course_name}, which overlaps with ${slot_name} (${slot_time})`,
+          type: "time_overlap_conflict",
+        });
+      }
+    }
+
+    // Check for faculty clash (different course at same time)
+    const facultyClashCheck = await db.query(
+      `SELECT fa.*, c.course_name, v.venue as venue_name
+       FROM faculty_allocation fa
+       JOIN course c ON fa.course_code = c.course_code
+       JOIN venue v ON fa.venue = v.venue
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2
+       AND fa.employee_id = $3 AND fa.slot_day = $4
+       AND fa.slot_time = $5 AND fa.course_code != $6`,
+      [slot_year, semester_type, employee_id, slot_day, slot_time, course_code]
+    );
+
+    if (facultyClashCheck.rows.length > 0) {
+      const clash = facultyClashCheck.rows[0];
+      return res.status(409).json({
+        message: `Faculty clash: Faculty is already assigned to ${clash.course_name} in ${clash.venue_name} on ${slot_day} at ${slot_time}`,
+        type: "faculty_clash",
+      });
+    }
+
+    // Check for slot conflicts
+    const conflictingSlots = await db.query(
+      `SELECT conflicting_slot_name
+       FROM slot_conflict
+       WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+      [slot_year, semester_type, slot_name]
+    );
+
+    if (conflictingSlots.rows.length > 0) {
+      const conflictingSlotNames = conflictingSlots.rows.map(
+        (row) => row.conflicting_slot_name
+      );
+
+      // Check if faculty is already allocated in any conflicting slot
+      const slotConflictCheck = await db.query(
+        `SELECT fa.*, c.course_name, v.venue as venue_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN venue v ON fa.venue = v.venue
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2
+         AND fa.employee_id = $3 AND fa.slot_name = ANY($4)`,
+        [slot_year, semester_type, employee_id, conflictingSlotNames]
+      );
+
+      if (slotConflictCheck.rows.length > 0) {
+        const conflict = slotConflictCheck.rows[0];
+        return res.status(409).json({
+          message: `Slot conflict: Faculty is already assigned to a conflicting slot ${conflict.slot_name} for ${conflict.course_name} in ${conflict.venue_name}`,
+          type: "slot_conflict",
+        });
+      }
+
+      // Check for venue-day slot conflicts
+      const venueDaySlotConflictCheck = await db.query(
+        `SELECT fa.*, c.course_name, f.name as faculty_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2
+         AND fa.venue = $3 AND fa.slot_day = $4
+         AND fa.slot_name = ANY($5)`,
+        [slot_year, semester_type, venue, slot_day, conflictingSlotNames]
+      );
+
+      if (venueDaySlotConflictCheck.rows.length > 0) {
+        const conflict = venueDaySlotConflictCheck.rows[0];
+        return res.status(409).json({
+          message: `Venue-day slot conflict: ${venue} on ${slot_day} already has ${conflict.slot_name} allocated to ${conflict.faculty_name} for ${conflict.course_name}, which conflicts with ${slot_name}`,
+          type: "venue_day_slot_conflict",
+        });
+      }
+    }
+
+    // No conflicts found
+    return res.status(200).json({ success: true, message: "No conflicts" });
+  } catch (error) {
+    console.error("Check conflicts error:", error);
+    return res.status(500).json({ message: error.message });
   }
 };

@@ -1869,7 +1869,7 @@ function handleSaveFacultyAllocation() {
       console.log("Slots response:", response);
       return response.json();
     })
-    .then((slots) => {
+    .then(async (slots) => {
       console.log("All slots:", slots);
 
       // Check if selected slot has linked slots
@@ -1905,6 +1905,78 @@ function handleSaveFacultyAllocation() {
       });
 
       console.log("All individual slots to allocate:", allIndividualSlots);
+
+      // PRE-CHECK: Validate ALL days before creating any allocation
+      // This prevents partial allocations when some days have conflicts
+      console.log("Starting pre-check for all slots...");
+      let hasConflict = false;
+      let conflictDetails = [];
+
+      for (const individualSlot of allIndividualSlots) {
+        let slotToSearch = individualSlot;
+        if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
+          slotToSearch = individualSlot.split('+')[0];
+        }
+
+        const preCheckSlots = slots.filter((s) => s.slot_name === slotToSearch);
+
+        for (const slot of preCheckSlots) {
+          let slotNameToUse;
+          if (is4HourLab && individualSlot === allIndividualSlots[0]) {
+            slotNameToUse = primarySlot;
+          } else if (is4HourLab) {
+            continue;
+          } else if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
+            slotNameToUse = individualSlot;
+          } else {
+            slotNameToUse = slot.slot_name;
+          }
+
+          try {
+            const checkResponse = await fetch(
+              `${window.API_URL}/faculty-allocations/check-conflicts`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: localStorage.getItem("token"),
+                },
+                body: JSON.stringify({
+                  slot_year: year,
+                  semester_type: semesterType,
+                  course_code: courseCode,
+                  employee_id: employeeId,
+                  venue: venue,
+                  slot_day: slot.slot_day,
+                  slot_name: slotNameToUse,
+                  slot_time: slot.slot_time,
+                }),
+              }
+            );
+
+            if (!checkResponse.ok) {
+              const errorData = await checkResponse.json();
+              hasConflict = true;
+              conflictDetails.push({
+                day: slot.slot_day,
+                time: slot.slot_time,
+                slot: slotNameToUse,
+                error: errorData.message
+              });
+            }
+          } catch (err) {
+            console.error("Pre-check error:", err);
+          }
+        }
+      }
+
+      if (hasConflict) {
+        const conflictMsg = conflictDetails.map(c => `${c.day} ${c.time} (${c.slot}): ${c.error}`).join('\n\n');
+        localShowAlert(`Cannot allocate - conflicts found on some days:\n\n${conflictMsg}\n\nPlease choose a different venue that is available for ALL required time slots.`, "danger");
+        return;
+      }
+
+      console.log("Pre-check passed, proceeding with allocations...");
 
       // Create promises array for all allocations
       const promises = [];
