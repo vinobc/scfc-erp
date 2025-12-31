@@ -1538,38 +1538,33 @@ exports.updateFacultyAllocation = async (req, res) => {
         }
       }
 
-      // Get all related allocations (same course, slot_name, and faculty)
-      // For theory courses, A1 might have multiple days (MON, WED, FRI)
+      // Get all related allocations (same course and faculty)
+      // For theory slots (A, B, C, etc.): get all days for that slot
+      // For lab slots (L1+L2, L17+L18, etc.): get ALL lab slots for that course+faculty
+      const isLabSlot = oldAllocation.slot_name.startsWith("L");
       const relatedAllocations = await client.query(
         `SELECT * FROM faculty_allocation
          WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
-         AND employee_id = $4 AND slot_name = $5`,
-        [
-          oldAllocation.slot_year,
-          oldAllocation.semester_type,
-          oldAllocation.course_code,
-          oldAllocation.employee_id,
-          oldAllocation.slot_name,
-        ]
+         AND employee_id = $4 AND ${isLabSlot ? "slot_name LIKE 'L%'" : "slot_name = $5"}`,
+        isLabSlot
+          ? [
+              oldAllocation.slot_year,
+              oldAllocation.semester_type,
+              oldAllocation.course_code,
+              oldAllocation.employee_id,
+            ]
+          : [
+              oldAllocation.slot_year,
+              oldAllocation.semester_type,
+              oldAllocation.course_code,
+              oldAllocation.employee_id,
+              oldAllocation.slot_name,
+            ]
       );
 
       console.log(`Found ${relatedAllocations.rows.length} related allocation(s) to update`);
 
-      // Delete all related allocations
-      await client.query(
-        `DELETE FROM faculty_allocation
-         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
-         AND employee_id = $4 AND slot_name = $5`,
-        [
-          oldAllocation.slot_year,
-          oldAllocation.semester_type,
-          oldAllocation.course_code,
-          oldAllocation.employee_id,
-          oldAllocation.slot_name,
-        ]
-      );
-
-      // Insert new allocations for all related slots
+      // Step 1: Insert new allocations first (different PK due to new employee_id/venue)
       for (const relatedAlloc of relatedAllocations.rows) {
         await client.query(
           `INSERT INTO faculty_allocation
@@ -1580,15 +1575,97 @@ exports.updateFacultyAllocation = async (req, res) => {
             newAllocation.semester_type,
             newAllocation.course_code,
             newAllocation.employee_id,
-            venueChanged ? newAllocation.venue : relatedAlloc.venue, // Use new venue if changed
-            relatedAlloc.slot_day, // Keep original day
-            relatedAlloc.slot_name, // Keep original slot name
-            relatedAlloc.slot_time, // Keep original time
+            venueChanged ? newAllocation.venue : relatedAlloc.venue,
+            relatedAlloc.slot_day,
+            relatedAlloc.slot_name,
+            relatedAlloc.slot_time,
           ]
         );
       }
 
+      // Step 2: Update attendance records to point to new allocation
+      // (must happen after new allocation exists due to FK constraint)
+      // For lab slots, update ALL lab slot attendance for this course+faculty
+      let attendanceUpdated = 0;
+      if (facultyChanged || venueChanged) {
+        let attendanceUpdateFields = [];
+        let attendanceParams = [];
+        let attendanceParamIndex = 1;
+
+        if (facultyChanged) {
+          attendanceUpdateFields.push(`employee_id = $${attendanceParamIndex++}`);
+          attendanceParams.push(newAllocation.employee_id);
+        }
+
+        if (venueChanged) {
+          attendanceUpdateFields.push(`venue = $${attendanceParamIndex++}`);
+          attendanceParams.push(newAllocation.venue);
+        }
+
+        attendanceUpdateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+        // Add WHERE clause parameters (lab slots use LIKE 'L%' to get all lab attendance)
+        attendanceParams.push(
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.course_code,
+          oldAllocation.employee_id,
+          oldAllocation.venue
+        );
+
+        const slotCondition = isLabSlot
+          ? "slot_name LIKE 'L%'"
+          : `slot_name = $${attendanceParamIndex + 5}`;
+
+        const attendanceUpdateQuery = `
+          UPDATE attendance
+          SET ${attendanceUpdateFields.join(", ")}
+          WHERE slot_year = $${attendanceParamIndex++}
+            AND semester_type = $${attendanceParamIndex++}
+            AND course_code = $${attendanceParamIndex++}
+            AND employee_id = $${attendanceParamIndex++}
+            AND venue = $${attendanceParamIndex++}
+            AND ${slotCondition}`;
+
+        // Add slot_name param only for non-lab slots
+        if (!isLabSlot) {
+          attendanceParams.push(oldAllocation.slot_name);
+        }
+
+        const attendanceUpdateResult = await client.query(
+          attendanceUpdateQuery,
+          attendanceParams
+        );
+        attendanceUpdated = attendanceUpdateResult.rowCount;
+        console.log(`Updated ${attendanceUpdated} attendance record(s)`);
+      }
+
+      // Step 3: Delete old allocations (filter by old employee_id AND old venue to avoid deleting new ones)
+      // For lab slots, delete ALL lab allocations for this course+faculty+venue
+      await client.query(
+        `DELETE FROM faculty_allocation
+         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+         AND employee_id = $4 AND ${isLabSlot ? "slot_name LIKE 'L%'" : "slot_name = $5"} AND venue = ${isLabSlot ? "$5" : "$6"}`,
+        isLabSlot
+          ? [
+              oldAllocation.slot_year,
+              oldAllocation.semester_type,
+              oldAllocation.course_code,
+              oldAllocation.employee_id,
+              oldAllocation.venue,
+            ]
+          : [
+              oldAllocation.slot_year,
+              oldAllocation.semester_type,
+              oldAllocation.course_code,
+              oldAllocation.employee_id,
+              oldAllocation.slot_name,
+              oldAllocation.venue,
+            ]
+      )
+
       // Update student registrations if there are any students
+      // For lab slots, update ALL lab registrations for this course+faculty
       if (studentCount > 0) {
         let updateFields = [];
         let updateParams = [];
@@ -1611,10 +1688,13 @@ exports.updateFacultyAllocation = async (req, res) => {
           oldAllocation.course_code,
           oldAllocation.slot_year,
           oldAllocation.semester_type,
-          oldAllocation.slot_name,
           oldAllocation.venue,
           oldAllocation.faculty_name
         );
+
+        const regSlotCondition = isLabSlot
+          ? "slot_name LIKE 'L%'"
+          : `slot_name = $${paramIndex + 5}`;
 
         const updateQuery = `
           UPDATE student_registrations
@@ -1622,10 +1702,15 @@ exports.updateFacultyAllocation = async (req, res) => {
           WHERE course_code = $${paramIndex++}
             AND slot_year = $${paramIndex++}
             AND semester_type = $${paramIndex++}
-            AND slot_name = $${paramIndex++}
+            AND ${regSlotCondition}
             AND venue = $${paramIndex++}
             AND faculty_name = $${paramIndex++}
           RETURNING *`;
+
+        // Add slot_name param only for non-lab slots
+        if (!isLabSlot) {
+          updateParams.push(oldAllocation.slot_name);
+        }
 
         const updateResult = await client.query(updateQuery, updateParams);
         console.log(`Updated ${updateResult.rowCount} student registration(s)`);
@@ -1637,6 +1722,7 @@ exports.updateFacultyAllocation = async (req, res) => {
         message: "Faculty allocation updated successfully",
         allocationsUpdated: relatedAllocations.rows.length,
         studentsUpdated: studentCount,
+        attendanceUpdated: attendanceUpdated,
         changes: {
           facultyChanged: facultyChanged
             ? {
