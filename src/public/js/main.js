@@ -173,6 +173,7 @@ function updateNavigationByRole(userRole) {
     timetableCoordinator: document.getElementById("timetable-coordinator-link"),
     projectAllocation: document.getElementById("project-allocation-link"),
     attendance: document.getElementById("attendance-link"),
+    marks: document.getElementById("marks-link"),
     systemConfig: document.getElementById("system-config-link"),
     coursesView: document.getElementById("courses-view-link"),
     changePassword: document.getElementById("change-password-link"),
@@ -198,8 +199,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "timetable_coordinator":
-      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, Logout
-      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.logout].forEach(
+      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, Marks, Logout
+      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.marks, navItems.logout].forEach(
         (item) => {
           if (item && item.parentElement) {
             item.parentElement.style.display = "block";
@@ -215,8 +216,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "faculty":
-      // Faculty sees: Dashboard, Courses (view only), Attendance, TimeTable (VIEW ONLY), Logout
-      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.logout].forEach((item) => {
+      // Faculty sees: Dashboard, Courses (view only), Attendance, Marks, TimeTable (VIEW ONLY), Logout
+      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.marks, navItems.logout].forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
         }
@@ -475,6 +476,30 @@ function setupNavigation() {
                   <h5>❌ Error</h5>
                   <p>Attendance system could not be loaded. Please refresh the page and try again.</p>
                   <p><small>Debug info: initializeAttendance function not found</small></p>
+                  <button class="btn btn-primary" onclick="location.reload()">
+                    <i class="fas fa-refresh me-2"></i>Refresh Page
+                  </button>
+                </div>
+              `;
+            }
+          }
+        } else if (targetPage === "marks-page") {
+          console.log("Navigating to marks-page");
+          // Initialize marks entry system
+          if (typeof window.initializeMarks === "function") {
+            console.log("Calling window.initializeMarks");
+            window.initializeMarks();
+          } else if (typeof initializeMarks === "function") {
+            console.log("Calling initializeMarks");
+            initializeMarks();
+          } else {
+            console.error("initializeMarks is not available.");
+            const content = document.getElementById("marks-content");
+            if (content) {
+              content.innerHTML = `
+                <div class="alert alert-danger text-center">
+                  <h5>Error</h5>
+                  <p>Marks entry system could not be loaded. Please refresh the page and try again.</p>
                   <button class="btn btn-primary" onclick="location.reload()">
                     <i class="fas fa-refresh me-2"></i>Refresh Page
                   </button>
