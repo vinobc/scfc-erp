@@ -86,6 +86,15 @@ function setupStudentNavigation() {
     });
   }
 
+  // Initialize marks navigation
+  const studentMarksLink = document.getElementById("student-marks-link");
+  if (studentMarksLink) {
+    studentMarksLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("marks");
+    });
+  }
+
   // Initialize voluntary password change
   const studentChangePasswordLink = document.getElementById(
     "student-change-password-link"
@@ -469,6 +478,26 @@ function showStudentPage(pageType) {
       // Initialize student attendance functionality
       if (typeof initializeStudentAttendance === "function") {
         initializeStudentAttendance();
+      }
+      break;
+
+    case "marks":
+      const marksContent = document.getElementById("student-marks-content");
+      if (marksContent) {
+        marksContent.style.display = "block";
+      }
+      const marksLink = document.getElementById("student-marks-link");
+      if (marksLink) {
+        marksLink.classList.add("active");
+      }
+      const marksTitleElement = document.getElementById("student-page-title");
+      if (marksTitleElement) {
+        marksTitleElement.textContent = "My Marks";
+      }
+
+      // Initialize student marks view
+      if (typeof initializeStudentMarks === "function") {
+        initializeStudentMarks();
       }
       break;
   }
