@@ -557,18 +557,43 @@ async function openConfigForm(assessmentType, assessmentNumber, componentType) {
 
   document.getElementById("config-entry-step").classList.remove("d-none");
 
+  // Fetch existing config to pre-populate form
+  let existingConfig = null;
+  try {
+    const response = await fetch(
+      `${window.API_URL}/marks/config?slot_year=${slot_year}&semester_type=${semester_type}&course_code=${selectedCourse.course_code}&employee_id=${selectedCourse.employee_id}&slot_name=${encodeURIComponent(selectedCourse.slot_name)}&venue=${encodeURIComponent(selectedCourse.venue)}&component_type=${componentType}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
+    if (response.ok) {
+      existingConfig = await response.json();
+    }
+  } catch (e) {
+    // Ignore - will use defaults
+  }
+
   if (assessmentType.startsWith("CA")) {
-    renderCAConfigForm(assessmentType, assessmentNumber, componentType);
+    renderCAConfigForm(assessmentType, assessmentNumber, componentType, existingConfig);
   } else if (assessmentType === "ASSIGNMENT") {
-    renderAssignmentConfigForm(componentType);
+    renderAssignmentConfigForm(componentType, existingConfig);
   } else if (assessmentType === "LAB_SESSION") {
-    await renderLabConfigForm(slot_year, semester_type, componentType);
+    await renderLabConfigForm(slot_year, semester_type, componentType, existingConfig);
   }
 }
 
 // Render CA configuration form
-function renderCAConfigForm(caType, caNumber, componentType) {
+function renderCAConfigForm(caType, caNumber, componentType, existingConfig) {
   const configContent = document.getElementById("config-entry-content");
+
+  // Find existing CA data if available
+  let caData = null;
+  if (existingConfig?.config_json?.cas) {
+    caData = existingConfig.config_json.cas.find((c) => c.number === caNumber);
+  }
+
+  // Pre-populate form fields with existing data or defaults
+  const dateValue = caData?.date || "";
+  const maxMarksValue = caData?.maxMarks || 50;
+  const durationValue = caData?.duration || "";
 
   configContent.innerHTML = `
     <div class="card">
@@ -580,15 +605,15 @@ function renderCAConfigForm(caType, caNumber, componentType) {
           <div class="row mb-3">
             <div class="col-md-4">
               <label class="form-label">Date Conducted</label>
-              <input type="date" class="form-control" id="ca-date" required>
+              <input type="date" class="form-control" id="ca-date" value="${dateValue}" required>
             </div>
             <div class="col-md-4">
               <label class="form-label">Max Marks (conducted for)</label>
-              <input type="number" class="form-control" id="ca-max-marks" value="50" min="1" required>
+              <input type="number" class="form-control" id="ca-max-marks" value="${maxMarksValue}" min="1" required>
             </div>
             <div class="col-md-4">
               <label class="form-label">Duration (mins)</label>
-              <input type="number" class="form-control" id="ca-duration" placeholder="60" min="1">
+              <input type="number" class="form-control" id="ca-duration" value="${durationValue}" placeholder="60" min="1">
             </div>
           </div>
 
@@ -612,14 +637,23 @@ function renderCAConfigForm(caType, caNumber, componentType) {
             <button type="button" class="btn btn-secondary" onclick="closeConfigForm()">
               Cancel
             </button>
+            ${caData ? `<button type="button" class="btn btn-outline-danger ms-auto" onclick="resetCAConfig(${caNumber}, '${componentType}')">
+              <i class="fas fa-undo me-2"></i>Reset
+            </button>` : ""}
           </div>
         </form>
       </div>
     </div>
   `;
 
-  // Add initial question
-  addQuestion();
+  // Pre-populate questions from existing config or add one empty question
+  if (caData?.questions && caData.questions.length > 0) {
+    caData.questions.forEach((q) => {
+      addQuestionWithData(q.id, q.maxMarks);
+    });
+  } else {
+    addQuestion();
+  }
 
   // Form submit handler
   document.getElementById("ca-config-form").addEventListener("submit", (e) => {
@@ -648,6 +682,47 @@ function addQuestion() {
           <div class="col-md-3">
             <label class="form-label small">Max Marks</label>
             <input type="number" class="form-control form-control-sm question-marks" value="5" min="0.5" step="0.5" required onchange="updateQuestionsTotal()">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small">&nbsp;</label>
+            <button type="button" class="btn btn-outline-danger btn-sm d-block" onclick="removeQuestion(this)">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  container.insertAdjacentHTML("beforeend", questionHtml);
+  updateQuestionsTotal();
+}
+
+// Add question with pre-populated data
+function addQuestionWithData(questionId, maxMarks) {
+  const container = document.getElementById("questions-container");
+  const questionIndex = container.children.length + 1;
+
+  // Parse question ID (e.g., "1a" -> qNum=1, subQ="a", or "2" -> qNum=2, subQ="")
+  const match = String(questionId).match(/^(\d+)(.*)$/);
+  const qNum = match ? match[1] : questionIndex;
+  const subQ = match ? match[2] : "";
+
+  const questionHtml = `
+    <div class="card mb-2 question-card" data-question="${questionIndex}">
+      <div class="card-body py-2">
+        <div class="row align-items-center">
+          <div class="col-md-2">
+            <label class="form-label small">Question</label>
+            <input type="number" class="form-control form-control-sm question-number" value="${qNum}" min="1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Sub-question (optional)</label>
+            <input type="text" class="form-control form-control-sm sub-question" value="${subQ}" placeholder="a, b, c...">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Max Marks</label>
+            <input type="number" class="form-control form-control-sm question-marks" value="${maxMarks}" min="0.5" step="0.5" required onchange="updateQuestionsTotal()">
           </div>
           <div class="col-md-2">
             <label class="form-label small">&nbsp;</label>
@@ -713,6 +788,16 @@ async function saveCAConfig(caType, caNumber, componentType) {
     questions.push({ id: questionId, maxMarks: marks });
   });
 
+  // Validate total question marks equals max marks
+  const totalQuestionMarks = questions.reduce((sum, q) => sum + q.maxMarks, 0);
+  if (totalQuestionMarks !== maxMarks) {
+    showMarksAlert(
+      `Question marks total (${totalQuestionMarks}) must equal max marks (${maxMarks})`,
+      "danger"
+    );
+    return;
+  }
+
   // Get existing config and update (slot-specific)
   try {
     const configResponse = await fetch(
@@ -774,10 +859,79 @@ async function saveCAConfig(caType, caNumber, componentType) {
   }
 }
 
+// Reset CA configuration
+async function resetCAConfig(caNumber, componentType) {
+  if (!confirm(`Are you sure you want to reset CA${caNumber}?\n\nThis will DELETE:\n- The configuration (date, questions, etc.)\n- ALL entered marks for CA${caNumber}\n\nThis action cannot be undone.`)) {
+    return;
+  }
+
+  const semesterSelect = document.getElementById("marks-semester-select");
+  const [slot_year, semester_type] = semesterSelect.value.split("|");
+
+  try {
+    // Fetch existing config
+    const configResponse = await fetch(
+      `${window.API_URL}/marks/config?slot_year=${slot_year}&semester_type=${semester_type}&course_code=${selectedCourse.course_code}&employee_id=${selectedCourse.employee_id}&slot_name=${encodeURIComponent(selectedCourse.slot_name)}&venue=${encodeURIComponent(selectedCourse.venue)}&component_type=${componentType}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
+
+    let existingConfig = await configResponse.json();
+    let configJson = existingConfig.config_json || { cas: [], assignments: [], labSessions: [] };
+
+    // Delete marks for this CA if config exists
+    if (existingConfig.id) {
+      await fetch(
+        `${window.API_URL}/marks/reset-marks?assessment_config_id=${existingConfig.id}&assessment_type=CA${caNumber}`,
+        {
+          method: "DELETE",
+          headers: { "x-access-token": localStorage.getItem("token") },
+        }
+      );
+    }
+
+    // Remove the specific CA from the array
+    configJson.cas = (configJson.cas || []).filter((c) => c.number !== caNumber);
+
+    // Save updated config
+    const saveResponse = await fetch(`${window.API_URL}/marks/config`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({
+        slot_year,
+        semester_type,
+        course_code: selectedCourse.course_code,
+        employee_id: selectedCourse.employee_id,
+        slot_name: selectedCourse.slot_name,
+        venue: selectedCourse.venue,
+        component_type: componentType,
+        config_json: configJson,
+      }),
+    });
+
+    if (!saveResponse.ok) {
+      throw new Error("Failed to reset configuration");
+    }
+
+    showMarksAlert(`CA${caNumber} configuration and marks have been reset`, "success");
+    closeConfigForm();
+    await loadComponentsDashboard(slot_year, semester_type, selectedCourse.course_code, selectedCourse.employee_id, selectedCourse.slot_name, selectedCourse.venue);
+  } catch (error) {
+    console.error("Error resetting CA config:", error);
+    showMarksAlert("Error resetting configuration. Please try again.", "danger");
+  }
+}
+
 // Render Assignment configuration form
-function renderAssignmentConfigForm(componentType) {
+function renderAssignmentConfigForm(componentType, existingConfig) {
   const configContent = document.getElementById("config-entry-content");
   const structure = selectedCourse.assessment_structure;
+
+  // Get existing assignments if available
+  const existingAssignments = existingConfig?.config_json?.assignments || [];
+  const numAssignmentsValue = existingAssignments.length || 1;
 
   configContent.innerHTML = `
     <div class="card">
@@ -788,7 +942,7 @@ function renderAssignmentConfigForm(componentType) {
         <form id="assignment-config-form">
           <div class="mb-3">
             <label class="form-label">Number of Assignments (max ${structure.maxAssignments})</label>
-            <input type="number" class="form-control" id="num-assignments" value="1" min="1" max="${structure.maxAssignments}" onchange="renderAssignmentFields()">
+            <input type="number" class="form-control" id="num-assignments" value="${numAssignmentsValue}" min="1" max="${structure.maxAssignments}" onchange="renderAssignmentFields()">
           </div>
 
           <div id="assignments-container">
@@ -802,12 +956,17 @@ function renderAssignmentConfigForm(componentType) {
             <button type="button" class="btn btn-secondary" onclick="closeConfigForm()">
               Cancel
             </button>
+            ${existingAssignments.length > 0 ? `<button type="button" class="btn btn-outline-danger ms-auto" onclick="resetAssignmentConfig('${componentType}')">
+              <i class="fas fa-undo me-2"></i>Reset
+            </button>` : ""}
           </div>
         </form>
       </div>
     </div>
   `;
 
+  // Store existing assignments for renderAssignmentFields to use
+  window._existingAssignments = existingAssignments;
   renderAssignmentFields();
 
   document.getElementById("assignment-config-form").addEventListener("submit", (e) => {
@@ -823,8 +982,16 @@ function renderAssignmentFields() {
   const structure = selectedCourse.assessment_structure;
   const marksPerAssignment = Math.floor(structure.assignmentTotal / numAssignments);
 
+  // Get existing assignments data
+  const existingAssignments = window._existingAssignments || [];
+
   let html = "";
   for (let i = 1; i <= numAssignments; i++) {
+    // Use existing data if available, otherwise defaults
+    const existing = existingAssignments.find((a) => a.number === i);
+    const typeValue = existing?.type || "";
+    const marksValue = existing?.maxMarks || marksPerAssignment;
+
     html += `
       <div class="card mb-3">
         <div class="card-header py-2">
@@ -834,11 +1001,11 @@ function renderAssignmentFields() {
           <div class="row">
             <div class="col-md-6">
               <label class="form-label small">Type/Description</label>
-              <input type="text" class="form-control form-control-sm assignment-type" placeholder="e.g., Lab Report">
+              <input type="text" class="form-control form-control-sm assignment-type" value="${typeValue}" placeholder="e.g., Lab Report">
             </div>
             <div class="col-md-6">
               <label class="form-label small">Max Marks</label>
-              <input type="number" class="form-control form-control-sm assignment-marks" value="${marksPerAssignment}" min="1">
+              <input type="number" class="form-control form-control-sm assignment-marks" value="${marksValue}" min="1">
             </div>
           </div>
         </div>
@@ -908,8 +1075,73 @@ async function saveAssignmentConfig(componentType) {
   }
 }
 
+// Reset Assignment configuration
+async function resetAssignmentConfig(componentType) {
+  if (!confirm("Are you sure you want to reset all assignments?\n\nThis will DELETE:\n- All assignment configurations\n- ALL entered marks for assignments\n\nThis action cannot be undone.")) {
+    return;
+  }
+
+  const semesterSelect = document.getElementById("marks-semester-select");
+  const [slot_year, semester_type] = semesterSelect.value.split("|");
+
+  try {
+    // Fetch existing config
+    const configResponse = await fetch(
+      `${window.API_URL}/marks/config?slot_year=${slot_year}&semester_type=${semester_type}&course_code=${selectedCourse.course_code}&employee_id=${selectedCourse.employee_id}&slot_name=${encodeURIComponent(selectedCourse.slot_name)}&venue=${encodeURIComponent(selectedCourse.venue)}&component_type=${componentType}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
+
+    let existingConfig = await configResponse.json();
+    let configJson = existingConfig.config_json || { cas: [], assignments: [], labSessions: [] };
+
+    // Delete marks for all assignments if config exists
+    if (existingConfig.id) {
+      await fetch(
+        `${window.API_URL}/marks/reset-marks?assessment_config_id=${existingConfig.id}&assessment_type=ASSIGNMENT`,
+        {
+          method: "DELETE",
+          headers: { "x-access-token": localStorage.getItem("token") },
+        }
+      );
+    }
+
+    // Clear all assignments
+    configJson.assignments = [];
+
+    // Save updated config
+    const saveResponse = await fetch(`${window.API_URL}/marks/config`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({
+        slot_year,
+        semester_type,
+        course_code: selectedCourse.course_code,
+        employee_id: selectedCourse.employee_id,
+        slot_name: selectedCourse.slot_name,
+        venue: selectedCourse.venue,
+        component_type: componentType,
+        config_json: configJson,
+      }),
+    });
+
+    if (!saveResponse.ok) {
+      throw new Error("Failed to reset configuration");
+    }
+
+    showMarksAlert("Assignment configuration and marks have been reset", "success");
+    closeConfigForm();
+    await loadComponentsDashboard(slot_year, semester_type, selectedCourse.course_code, selectedCourse.employee_id, selectedCourse.slot_name, selectedCourse.venue);
+  } catch (error) {
+    console.error("Error resetting assignment config:", error);
+    showMarksAlert("Error resetting configuration. Please try again.", "danger");
+  }
+}
+
 // Render Lab configuration form (slot-specific)
-async function renderLabConfigForm(slot_year, semester_type, componentType) {
+async function renderLabConfigForm(slot_year, semester_type, componentType, existingConfig) {
   const configContent = document.getElementById("config-entry-content");
 
   configContent.innerHTML = `
@@ -942,19 +1174,27 @@ async function renderLabConfigForm(slot_year, semester_type, componentType) {
     const structure = selectedCourse.assessment_structure;
     const marksPerSession = Math.floor(structure.labTotal / labSessions.length);
 
+    // Get existing lab sessions config
+    const existingLabSessions = existingConfig?.config_json?.labSessions || [];
+
     let sessionsHtml = labSessions
-      .map(
-        (session, index) => `
+      .map((session, index) => {
+        // Find existing marks for this session date
+        const sessionDateStr = formatDateForStorage(session.attendance_date);
+        const existingSession = existingLabSessions.find((s) => s.date === sessionDateStr);
+        const marksValue = existingSession?.maxMarks || marksPerSession;
+
+        return `
         <tr>
           <td>${index + 1}</td>
           <td>${formatDateForDisplay(session.attendance_date)}</td>
           <td>${session.slot_name}</td>
           <td>
-            <input type="number" class="form-control form-control-sm session-marks" value="${marksPerSession}" min="1" data-date="${formatDateForStorage(session.attendance_date)}">
+            <input type="number" class="form-control form-control-sm session-marks" value="${marksValue}" min="1" data-date="${sessionDateStr}">
           </td>
         </tr>
-      `
-      )
+      `;
+      })
       .join("");
 
     configContent.innerHTML = `
@@ -986,6 +1226,9 @@ async function renderLabConfigForm(slot_year, semester_type, componentType) {
               <button type="button" class="btn btn-secondary" onclick="closeConfigForm()">
                 Cancel
               </button>
+              ${existingLabSessions.length > 0 ? `<button type="button" class="btn btn-outline-danger ms-auto" onclick="resetLabConfig('${componentType}')">
+                <i class="fas fa-undo me-2"></i>Reset
+              </button>` : ""}
             </div>
           </form>
         </div>
@@ -1056,6 +1299,71 @@ async function saveLabConfig(slot_year, semester_type, componentType) {
   } catch (error) {
     console.error("Error saving lab config:", error);
     showMarksAlert("Error saving configuration. Please try again.", "danger");
+  }
+}
+
+// Reset Lab configuration
+async function resetLabConfig(componentType) {
+  if (!confirm("Are you sure you want to reset lab sessions?\n\nThis will DELETE:\n- All lab session configurations\n- ALL entered marks for lab sessions\n\nThis action cannot be undone.")) {
+    return;
+  }
+
+  const semesterSelect = document.getElementById("marks-semester-select");
+  const [slot_year, semester_type] = semesterSelect.value.split("|");
+
+  try {
+    // Fetch existing config
+    const configResponse = await fetch(
+      `${window.API_URL}/marks/config?slot_year=${slot_year}&semester_type=${semester_type}&course_code=${selectedCourse.course_code}&employee_id=${selectedCourse.employee_id}&slot_name=${encodeURIComponent(selectedCourse.slot_name)}&venue=${encodeURIComponent(selectedCourse.venue)}&component_type=${componentType}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
+
+    let existingConfig = await configResponse.json();
+    let configJson = existingConfig.config_json || { cas: [], assignments: [], labSessions: [] };
+
+    // Delete marks for all lab sessions if config exists
+    if (existingConfig.id) {
+      await fetch(
+        `${window.API_URL}/marks/reset-marks?assessment_config_id=${existingConfig.id}&assessment_type=LAB_SESSION`,
+        {
+          method: "DELETE",
+          headers: { "x-access-token": localStorage.getItem("token") },
+        }
+      );
+    }
+
+    // Clear all lab sessions
+    configJson.labSessions = [];
+
+    // Save updated config
+    const saveResponse = await fetch(`${window.API_URL}/marks/config`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({
+        slot_year,
+        semester_type,
+        course_code: selectedCourse.course_code,
+        employee_id: selectedCourse.employee_id,
+        slot_name: selectedCourse.slot_name,
+        venue: selectedCourse.venue,
+        component_type: componentType,
+        config_json: configJson,
+      }),
+    });
+
+    if (!saveResponse.ok) {
+      throw new Error("Failed to reset configuration");
+    }
+
+    showMarksAlert("Lab configuration and marks have been reset", "success");
+    closeConfigForm();
+    await loadComponentsDashboard(slot_year, semester_type, selectedCourse.course_code, selectedCourse.employee_id, selectedCourse.slot_name, selectedCourse.venue);
+  } catch (error) {
+    console.error("Error resetting lab config:", error);
+    showMarksAlert("Error resetting configuration. Please try again.", "danger");
   }
 }
 
