@@ -1024,3 +1024,37 @@ exports.getMyMarks = async (req, res) => {
     res.status(500).json({ message: "Server error while fetching marks" });
   }
 };
+
+// Reset marks for a specific component (delete marks when resetting config)
+exports.resetMarks = async (req, res) => {
+  try {
+    const { assessment_config_id, assessment_type, assessment_number } = req.query;
+
+    if (!assessment_config_id || !assessment_type) {
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+
+    // Build the delete query
+    let query = `
+      DELETE FROM student_marks
+      WHERE assessment_config_id = $1 AND assessment_type = $2
+    `;
+    let params = [assessment_config_id, assessment_type];
+
+    // If assessment_number is provided (for specific assignment), add it to the query
+    if (assessment_number) {
+      query += ` AND assessment_number = $3`;
+      params.push(assessment_number);
+    }
+
+    const result = await db.query(query, params);
+
+    res.status(200).json({
+      message: `Deleted ${result.rowCount} marks records`,
+      deleted_count: result.rowCount,
+    });
+  } catch (error) {
+    console.error("Reset marks error:", error);
+    res.status(500).json({ message: "Server error while resetting marks" });
+  }
+};

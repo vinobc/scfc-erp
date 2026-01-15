@@ -26,6 +26,7 @@ router.get("/students", isFacultyOrCoordinator, marksController.getEnrolledStude
 router.get("/entry", isFacultyOrCoordinator, marksController.getMarksEntryData);
 router.post("/entry", isFacultyOrCoordinator, marksController.saveMarks);
 router.get("/summary", isFacultyOrCoordinator, marksController.getMarksSummary);
+router.delete("/reset-marks", isFacultyOrCoordinator, marksController.resetMarks);
 
 // ================== ADMIN ROUTES ==================
 // Lock control endpoints
