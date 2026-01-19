@@ -440,8 +440,8 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
       // Not configured - show single row with Configure button
       html += `
         <tr>
-          <td><strong>Assignment</strong></td>
-          <td>${structure.assignmentTotal} marks (max ${structure.maxAssignments})</td>
+          <td><strong>Internal Assessment</strong></td>
+          <td>${structure.assignmentTotal} marks</td>
           <td><span class="badge bg-warning">Not Configured</span></td>
           <td>
             <button class="btn btn-sm btn-warning" onclick="openConfigForm('ASSIGNMENT', 1, 'THEORY')">
@@ -455,10 +455,10 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
       const assignments = theoryConfig.config_json.assignments;
       assignments.forEach((assignment, index) => {
         const assignNum = assignment.number || (index + 1);
-        const assignType = assignment.type || 'Assignment';
+        const assignType = assignment.type || 'Internal Assessment';
         html += `
           <tr>
-            <td><strong>Assignment ${assignNum}</strong><br><small class="text-muted">${assignType}</small></td>
+            <td><strong>Internal Assessment ${assignNum}</strong><br><small class="text-muted">${assignType}</small></td>
             <td>${assignment.maxMarks} marks</td>
             <td>
               <span class="badge bg-success">Configured</span>
@@ -936,12 +936,12 @@ function renderAssignmentConfigForm(componentType, existingConfig) {
   configContent.innerHTML = `
     <div class="card">
       <div class="card-header">
-        <h6 class="mb-0"><i class="fas fa-cog me-2"></i>Configure Assignments</h6>
+        <h6 class="mb-0"><i class="fas fa-cog me-2"></i>Configure Internal Assessment</h6>
       </div>
       <div class="card-body">
         <form id="assignment-config-form">
           <div class="mb-3">
-            <label class="form-label">Number of Assignments (max ${structure.maxAssignments})</label>
+            <label class="form-label">Number of Internal Assessments</label>
             <input type="number" class="form-control" id="num-assignments" value="${numAssignmentsValue}" min="1" max="${structure.maxAssignments}" onchange="renderAssignmentFields()">
           </div>
 
@@ -995,7 +995,7 @@ function renderAssignmentFields() {
     html += `
       <div class="card mb-3">
         <div class="card-header py-2">
-          <strong>Assignment ${i}</strong>
+          <strong>Internal Assessment ${i}</strong>
         </div>
         <div class="card-body py-2">
           <div class="row">
