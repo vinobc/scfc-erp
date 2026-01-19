@@ -926,6 +926,7 @@ exports.unlockComponent = async (req, res) => {
 exports.getMyMarks = async (req, res) => {
   try {
     const userId = req.userId;
+    const { slot_year, semester_type, course_code, slot_name } = req.query;
 
     // Get student enrollment number
     const studentResult = await db.query(
@@ -939,9 +940,8 @@ exports.getMyMarks = async (req, res) => {
 
     const enrollmentNo = studentResult.rows[0].enrollment_no;
 
-    // Get all marks for this student across all courses (including slot_name)
-    const marksResult = await db.query(
-      `SELECT
+    // Build query with optional filters
+    let query = `SELECT
          sm.*,
          ac.course_code,
          ac.slot_year,
@@ -954,10 +954,36 @@ exports.getMyMarks = async (req, res) => {
        FROM student_marks sm
        JOIN assessment_config ac ON sm.assessment_config_id = ac.id
        JOIN course c ON ac.course_code = c.course_code
-       WHERE sm.enrollment_number = $1
-       ORDER BY ac.slot_year DESC, ac.semester_type, ac.course_code, ac.slot_name, sm.assessment_type, sm.assessment_number`,
-      [enrollmentNo]
-    );
+       WHERE sm.enrollment_number = $1`;
+
+    const params = [enrollmentNo];
+    let paramIndex = 2;
+
+    // Add optional filters
+    if (slot_year) {
+      query += ` AND ac.slot_year = $${paramIndex}`;
+      params.push(slot_year);
+      paramIndex++;
+    }
+    if (semester_type) {
+      query += ` AND ac.semester_type = $${paramIndex}`;
+      params.push(semester_type);
+      paramIndex++;
+    }
+    if (course_code) {
+      query += ` AND ac.course_code = $${paramIndex}`;
+      params.push(course_code);
+      paramIndex++;
+    }
+    if (slot_name) {
+      query += ` AND ac.slot_name = $${paramIndex}`;
+      params.push(slot_name);
+    }
+
+    query += ` ORDER BY ac.slot_year DESC, ac.semester_type, ac.course_code, ac.slot_name, sm.assessment_type, sm.assessment_number`;
+
+    // Get marks for this student (with optional filters)
+    const marksResult = await db.query(query, params);
 
     // Group by course, semester, and slot
     const courseMarks = {};
