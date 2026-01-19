@@ -162,8 +162,9 @@ exports.getCourseOfferings = async (req, res) => {
     let employeeCondition = "";
     let params = [slot_year, semester_type];
 
-    // Admin and timetable_coordinator can see all courses
-    if (user.role === "admin" || user.role === "timetable_coordinator") {
+    // Only Admin can see all courses
+    // Coordinators see only their own courses (like faculty)
+    if (user.role === "admin") {
       // No employee filter for admin
     } else if (user.employee_id) {
       employeeCondition = "AND fa.employee_id = $3";
@@ -329,6 +330,23 @@ exports.saveAssessmentConfig = async (req, res) => {
 
     if (!slot_year || !semester_type || !course_code || !employee_id || !slot_name || !venue) {
       return res.status(400).json({ message: "Required parameters missing (including slot_name and venue)" });
+    }
+
+    // Check if user is allowed to configure this course
+    const userResult = await db.query(
+      'SELECT employee_id, role FROM "user" WHERE user_id = $1',
+      [userId]
+    );
+    const user = userResult.rows[0];
+
+    // Admin can configure any course
+    // Faculty/Coordinator can only configure their own courses
+    if (user.role !== 'admin') {
+      if (user.employee_id !== parseInt(employee_id)) {
+        return res.status(403).json({
+          message: "You can only configure marks for courses allocated to you"
+        });
+      }
     }
 
     const compType = component_type || "THEORY";
@@ -649,6 +667,23 @@ exports.saveMarks = async (req, res) => {
     }
 
     const config = configResult.rows[0];
+
+    // Check if user is allowed to enter marks for this course
+    const userResult = await db.query(
+      'SELECT employee_id, role FROM "user" WHERE user_id = $1',
+      [userId]
+    );
+    const user = userResult.rows[0];
+
+    // Admin can enter marks for any course
+    // Faculty/Coordinator can only enter marks for their own courses
+    if (user.role !== 'admin') {
+      if (user.employee_id !== config.employee_id) {
+        return res.status(403).json({
+          message: "You can only enter marks for courses allocated to you"
+        });
+      }
+    }
 
     // Check if locked
     // Map assessment_type to lock component_type (LAB_SESSION -> LAB, CA1/CA2/CA3 stay as is, ASSIGNMENT stays as is)
