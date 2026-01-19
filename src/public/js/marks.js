@@ -1912,130 +1912,289 @@ window.viewMarksSummary = viewMarksSummary;
 
 // ===== STUDENT MARKS VIEW =====
 
-// Initialize student marks view
-function initializeStudentMarks() {
+// Initialize student marks view - load semesters first
+async function initializeStudentMarks() {
   console.log("Initializing student marks view");
-  loadStudentMarks();
+
+  // Reset UI
+  const semesterSelect = document.getElementById("student-marks-semester-select");
+  const coursesList = document.getElementById("student-marks-courses-list");
+  const marksDetail = document.getElementById("student-marks-detail");
+
+  if (semesterSelect) semesterSelect.value = "";
+  if (coursesList) coursesList.style.display = "none";
+  if (marksDetail) marksDetail.style.display = "none";
+
+  // Load semesters
+  await loadStudentSemesters();
 }
 
-// Load student's marks
-async function loadStudentMarks() {
-  const container = document.getElementById("student-marks-container");
-  if (!container) return;
-
-  container.innerHTML = `
-    <div class="text-center py-4">
-      <div class="spinner-border text-primary" role="status"></div>
-      <p class="mt-2">Loading your marks...</p>
-    </div>
-  `;
+// Load semesters where student has registrations
+async function loadStudentSemesters() {
+  const semesterSelect = document.getElementById("student-marks-semester-select");
+  if (!semesterSelect) return;
 
   try {
-    const response = await fetch(`${window.API_URL}/marks/student/my-marks`, {
+    const response = await fetch(`${window.API_URL}/course-registration/my-semesters`, {
       headers: { "x-access-token": localStorage.getItem("token") }
     });
+
+    if (!response.ok) {
+      throw new Error("Failed to load semesters");
+    }
+
+    const semesters = await response.json();
+
+    // Populate dropdown
+    semesterSelect.innerHTML = '<option value="">-- Select Semester --</option>';
+    semesters.forEach(sem => {
+      semesterSelect.innerHTML += `<option value="${sem.slot_year}|${sem.semester_type}">${sem.semester_type} ${sem.slot_year}</option>`;
+    });
+  } catch (error) {
+    console.error("Error loading semesters:", error);
+    semesterSelect.innerHTML = '<option value="">Error loading semesters</option>';
+  }
+}
+
+// Load courses for selected semester
+async function loadStudentCoursesForMarks() {
+  const semesterSelect = document.getElementById("student-marks-semester-select");
+  const coursesList = document.getElementById("student-marks-courses-list");
+  const marksDetail = document.getElementById("student-marks-detail");
+
+  if (!semesterSelect || !coursesList) return;
+
+  // Hide marks detail
+  if (marksDetail) marksDetail.style.display = "none";
+
+  const selectedValue = semesterSelect.value;
+  if (!selectedValue) {
+    coursesList.style.display = "none";
+    return;
+  }
+
+  const [slot_year, semester_type] = selectedValue.split("|");
+
+  coursesList.innerHTML = `
+    <div class="text-center py-4">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p class="mt-2">Loading courses...</p>
+    </div>
+  `;
+  coursesList.style.display = "block";
+
+  try {
+    const response = await fetch(
+      `${window.API_URL}/course-registration/my-timetable?slot_year=${slot_year}&semester_type=${semester_type}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to load courses");
+    }
+
+    const data = await response.json();
+    // API returns { registrations: [...], allRegistrations: [...], ... }
+    const courses = data.allRegistrations || data.registrations || [];
+    renderStudentCoursesList(courses, slot_year, semester_type);
+  } catch (error) {
+    console.error("Error loading courses:", error);
+    coursesList.innerHTML = `
+      <div class="alert alert-danger">
+        <h6>Error loading courses</h6>
+        <p>${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+// Render list of registered courses
+function renderStudentCoursesList(courses, slot_year, semester_type) {
+  const coursesList = document.getElementById("student-marks-courses-list");
+
+  if (!courses || courses.length === 0) {
+    coursesList.innerHTML = `
+      <div class="alert alert-info">
+        <h6>No Courses Found</h6>
+        <p>You don't have any registered courses for this semester.</p>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <h6 class="mb-3">Registered Courses</h6>
+    <div class="list-group">
+  `;
+
+  courses.forEach(course => {
+    html += `
+      <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+         onclick="showCourseMarks('${course.course_code}', '${course.slot_name}', '${course.venue || ''}', '${slot_year}', '${semester_type}'); return false;">
+        <div>
+          <strong>${course.course_code}</strong> - ${course.course_name}
+          <br>
+          <small class="text-muted">
+            ${course.slot_name} | ${course.venue || 'TBA'} | ${course.faculty_name || 'TBA'}
+          </small>
+        </div>
+        <span class="badge bg-primary">View Marks</span>
+      </a>
+    `;
+  });
+
+  html += '</div>';
+  coursesList.innerHTML = html;
+}
+
+// Show marks for a specific course
+async function showCourseMarks(courseCode, slotName, venue, slotYear, semesterType) {
+  const coursesList = document.getElementById("student-marks-courses-list");
+  const marksDetail = document.getElementById("student-marks-detail");
+
+  if (!marksDetail) return;
+
+  // Hide courses list, show marks detail
+  if (coursesList) coursesList.style.display = "none";
+
+  marksDetail.innerHTML = `
+    <div class="text-center py-4">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p class="mt-2">Loading marks...</p>
+    </div>
+  `;
+  marksDetail.style.display = "block";
+
+  try {
+    // Fetch marks for this specific course
+    const response = await fetch(
+      `${window.API_URL}/marks/student/my-marks?slot_year=${slotYear}&semester_type=${semesterType}&course_code=${courseCode}&slot_name=${encodeURIComponent(slotName)}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
 
     if (!response.ok) {
       throw new Error("Failed to load marks");
     }
 
     const data = await response.json();
-    renderStudentMarks(container, data);
+    renderCourseMarksDetail(data, courseCode, slotName, slotYear, semesterType);
   } catch (error) {
-    console.error("Error loading student marks:", error);
-    container.innerHTML = `
+    console.error("Error loading course marks:", error);
+    marksDetail.innerHTML = `
       <div class="alert alert-danger">
         <h6>Error loading marks</h6>
         <p>${error.message}</p>
-        <button class="btn btn-primary btn-sm" onclick="loadStudentMarks()">Try Again</button>
+        <button class="btn btn-secondary btn-sm" onclick="backToCoursesList()">Back to Courses</button>
       </div>
     `;
   }
 }
 
-// Render student marks view
-function renderStudentMarks(container, data) {
-  if (!data.courses || data.courses.length === 0) {
-    container.innerHTML = `
+// Render marks detail for a course
+function renderCourseMarksDetail(data, courseCode, slotName, slotYear, semesterType) {
+  const marksDetail = document.getElementById("student-marks-detail");
+
+  let html = `
+    <div class="mb-3">
+      <button class="btn btn-secondary btn-sm" onclick="backToCoursesList()">
+        <i class="fas fa-arrow-left"></i> Back to Courses
+      </button>
+    </div>
+  `;
+
+  // Find the course in the data
+  const course = data.courses && data.courses.find(c => c.course_code === courseCode && c.slot_name === slotName);
+
+  if (!course) {
+    html += `
       <div class="alert alert-info">
         <h6>No Marks Available</h6>
-        <p>No marks have been entered for your courses yet.</p>
+        <p>No marks have been entered for <strong>${courseCode}</strong> (${slotName}) yet.</p>
       </div>
     `;
+    marksDetail.innerHTML = html;
     return;
   }
 
-  let html = '';
+  html += `
+    <div class="card">
+      <div class="card-header">
+        <strong>${course.course_code}</strong> - ${course.course_name}
+        <span class="badge bg-secondary ms-2">${course.slot_name}</span>
+      </div>
+      <div class="card-body">
+  `;
 
-  data.courses.forEach(course => {
+  if (course.marks && course.marks.length > 0) {
     html += `
-      <div class="card mb-3">
-        <div class="card-header">
-          <strong>${course.course_code}</strong> - ${course.course_name}
-          <span class="badge bg-secondary ms-2">${course.slot_name}</span>
-        </div>
-        <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead class="table-light">
+            <tr>
+              <th>Component</th>
+              <th>Marks Obtained</th>
+              <th>Max Marks</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
     `;
 
-    if (course.marks && course.marks.length > 0) {
+    let totalObtained = 0;
+    let totalMax = 0;
+
+    course.marks.forEach(mark => {
+      const percentage = mark.max_marks > 0 ? ((mark.marks_obtained / mark.max_marks) * 100).toFixed(1) : 0;
+      totalObtained += mark.marks_obtained || 0;
+      totalMax += mark.max_marks || 0;
+
       html += `
-        <div class="table-responsive">
-          <table class="table table-bordered table-sm">
-            <thead class="table-light">
-              <tr>
-                <th>Component</th>
-                <th>Marks Obtained</th>
-                <th>Max Marks</th>
-                <th>Percentage</th>
-              </tr>
-            </thead>
-            <tbody>
+        <tr>
+          <td>${mark.component}</td>
+          <td>${mark.marks_obtained !== null ? mark.marks_obtained.toFixed(2) : '-'}</td>
+          <td>${mark.max_marks}</td>
+          <td>${mark.marks_obtained !== null ? percentage + '%' : '-'}</td>
+        </tr>
       `;
+    });
 
-      let totalObtained = 0;
-      let totalMax = 0;
-
-      course.marks.forEach(mark => {
-        const percentage = mark.max_marks > 0 ? ((mark.marks_obtained / mark.max_marks) * 100).toFixed(1) : 0;
-        totalObtained += mark.marks_obtained || 0;
-        totalMax += mark.max_marks || 0;
-
-        html += `
-          <tr>
-            <td>${mark.component}</td>
-            <td>${mark.marks_obtained !== null ? mark.marks_obtained.toFixed(2) : '-'}</td>
-            <td>${mark.max_marks}</td>
-            <td>${mark.marks_obtained !== null ? percentage + '%' : '-'}</td>
-          </tr>
-        `;
-      });
-
-      // Total row
-      const totalPercentage = totalMax > 0 ? ((totalObtained / totalMax) * 100).toFixed(1) : 0;
-      html += `
-              <tr class="table-info fw-bold">
-                <td>Total</td>
-                <td>${totalObtained.toFixed(2)}</td>
-                <td>${totalMax}</td>
-                <td>${totalPercentage}%</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      `;
-    } else {
-      html += `<p class="text-muted">No marks entered yet for this course.</p>`;
-    }
-
+    // Total row
+    const totalPercentage = totalMax > 0 ? ((totalObtained / totalMax) * 100).toFixed(1) : 0;
     html += `
-        </div>
+            <tr class="table-info fw-bold">
+              <td>Total</td>
+              <td>${totalObtained.toFixed(2)}</td>
+              <td>${totalMax}</td>
+              <td>${totalPercentage}%</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     `;
-  });
+  } else {
+    html += `<p class="text-muted">No marks entered yet for this course.</p>`;
+  }
 
-  container.innerHTML = html;
+  html += `
+      </div>
+    </div>
+  `;
+
+  marksDetail.innerHTML = html;
+}
+
+// Back to courses list
+function backToCoursesList() {
+  const coursesList = document.getElementById("student-marks-courses-list");
+  const marksDetail = document.getElementById("student-marks-detail");
+
+  if (marksDetail) marksDetail.style.display = "none";
+  if (coursesList) coursesList.style.display = "block";
 }
 
 // Export student marks functions
 window.initializeStudentMarks = initializeStudentMarks;
-window.loadStudentMarks = loadStudentMarks;
+window.loadStudentSemesters = loadStudentSemesters;
+window.loadStudentCoursesForMarks = loadStudentCoursesForMarks;
+window.showCourseMarks = showCourseMarks;
+window.backToCoursesList = backToCoursesList;

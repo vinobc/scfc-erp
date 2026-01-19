@@ -2335,8 +2335,20 @@
                             </h6>
                           </div>
                           <div class="card-body">
-                            <div id="student-marks-container">
-                              <p class="text-muted">Loading marks...</p>
+                            <!-- Semester Selection -->
+                            <div id="student-marks-semester-section" class="mb-4">
+                              <label class="form-label fw-bold">Select Semester</label>
+                              <select class="form-select" id="student-marks-semester-select" onchange="loadStudentCoursesForMarks()">
+                                <option value="">-- Select Semester --</option>
+                              </select>
+                            </div>
+
+                            <!-- Courses List -->
+                            <div id="student-marks-courses-list" style="display: none;">
+                            </div>
+
+                            <!-- Course Marks Detail -->
+                            <div id="student-marks-detail" style="display: none;">
                             </div>
                           </div>
                         </div>
