@@ -26,6 +26,7 @@ const systemConfigRoutes = require("./routes/system-config.routes");
 const attendanceRoutes = require("./routes/attendance.routes");
 const projectAllocationRoutes = require("./routes/project-allocation.routes");
 const marksRoutes = require("./routes/marks.routes");
+const reportsRoutes = require("./routes/reports.routes");
 
 // Initialize express app
 const app = express();
@@ -106,6 +107,8 @@ console.log("Registering project allocation routes at /api/project-allocations")
 app.use("/api/project-allocations", projectAllocationRoutes);
 console.log("Registering marks routes at /api/marks");
 app.use("/api/marks", marksRoutes);
+console.log("Registering reports routes at /api/reports");
+app.use("/api/reports", reportsRoutes);
 
 // Root route
 app.get("/", (req, res) => {
