@@ -1560,12 +1560,15 @@ function updateRowTotal(input) {
 
 // Save marks entry
 async function saveMarksEntry(assessmentType, assessmentNumber) {
-  const inputs = document.querySelectorAll(".marks-input:not(:disabled)");
+  // Include all marks inputs (including disabled ones for absent students)
+  const inputs = document.querySelectorAll(".marks-input");
   const marksRecords = [];
 
   inputs.forEach((input) => {
     const value = input.value.trim();
-    if (value !== "") {
+    // Include if has a numeric value (even disabled absent students with 0)
+    // Skip inputs with "?" placeholder (no attendance marked)
+    if (value !== "" && value !== "?" && !isNaN(parseFloat(value))) {
       marksRecords.push({
         enrollment_number: input.dataset.enrollment,
         student_id: parseInt(input.dataset.studentId),
@@ -1650,6 +1653,17 @@ async function viewMarksSummary() {
 function renderMarksSummary(data) {
   const configContent = document.getElementById("config-entry-content");
   const students = data.students;
+  const configs = data.configs || [];
+
+  // Build a map of lab session dates from configs
+  const labSessionDates = {};
+  configs.forEach((config) => {
+    if (config.component_type === "LAB" && config.config_json?.labSessions) {
+      config.config_json.labSessions.forEach((session, idx) => {
+        labSessionDates[`LAB_SESSION_${idx + 1}`] = session.date;
+      });
+    }
+  });
 
   // Collect all unique component keys across all students
   const componentKeys = new Set();
@@ -1669,12 +1683,18 @@ function renderMarksSummary(data) {
     return a.localeCompare(b);
   });
 
-  // Build component header labels
+  // Build component header labels with lab session dates
   const getComponentLabel = (key) => {
-    const [type, num] = key.split("_");
-    if (type.startsWith("CA")) return type; // CA1, CA2, CA3
-    if (type === "ASSIGNMENT") return `Assign ${num}`;
-    if (type === "LAB") return `Lab ${num}`;
+    if (key.startsWith("CA")) return key; // CA1, CA2, CA3
+    if (key.startsWith("ASSIGNMENT_")) {
+      const num = key.split("_")[1];
+      return `Assign ${num}`;
+    }
+    if (key.startsWith("LAB_SESSION_")) {
+      const num = key.split("_")[2];
+      const date = labSessionDates[key] || "";
+      return date ? `Lab Session ${num} (${date})` : `Lab Session ${num}`;
+    }
     return key;
   };
 
