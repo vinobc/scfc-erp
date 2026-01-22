@@ -175,6 +175,7 @@ function updateNavigationByRole(userRole) {
     attendance: document.getElementById("attendance-link"),
     marks: document.getElementById("marks-link"),
     systemConfig: document.getElementById("system-config-link"),
+    downloadReports: document.getElementById("download-reports-link"),
     coursesView: document.getElementById("courses-view-link"),
     changePassword: document.getElementById("change-password-link"),
     logout: document.getElementById("logout-link"),
@@ -423,6 +424,12 @@ function setupNavigation() {
         } else if (targetPage === "system-config-page") {
           if (typeof initializeSystemConfig === "function") {
             initializeSystemConfig();
+          }
+        } else if (targetPage === "download-reports-page") {
+          if (typeof window.initializeDownloadReports === "function") {
+            window.initializeDownloadReports();
+          } else if (typeof initializeDownloadReports === "function") {
+            initializeDownloadReports();
           }
         } else if (targetPage === "view-student-timetable-page") {
           console.log("🎯 Navigating to view-student-timetable-page");
