@@ -1680,10 +1680,13 @@ function renderMarksSummary(data) {
     const orderA = order[typeA] || order[typeA.replace(/\d+$/, "")] || 99;
     const orderB = order[typeB] || order[typeB.replace(/\d+$/, "")] || 99;
     if (orderA !== orderB) return orderA - orderB;
-    return a.localeCompare(b);
+    // Extract numeric part and sort numerically (fixes 1,10,11,2,3 ordering)
+    const numA = parseInt(a.match(/\d+$/)?.[0] || "0", 10);
+    const numB = parseInt(b.match(/\d+$/)?.[0] || "0", 10);
+    return numA - numB;
   });
 
-  // Build component header labels with lab session dates
+  // Build component header labels (short format for compact columns)
   const getComponentLabel = (key) => {
     if (key.startsWith("CA")) return key; // CA1, CA2, CA3
     if (key.startsWith("ASSIGNMENT_")) {
@@ -1692,16 +1695,19 @@ function renderMarksSummary(data) {
     }
     if (key.startsWith("LAB_SESSION_")) {
       const num = key.split("_")[2];
-      const date = labSessionDates[key] || "";
-      return date ? `Lab Session ${num} (${date})` : `Lab Session ${num}`;
+      return `Lab${num}`; // Short label: Lab1, Lab2, Lab3...
     }
     return key;
   };
 
-  // Build header row
+  // Build header row (with date tooltip for lab sessions)
   let headerRow = `<th>Enrollment</th><th>Name</th>`;
   sortedKeys.forEach((key) => {
-    headerRow += `<th>${getComponentLabel(key)}</th>`;
+    const label = getComponentLabel(key);
+    const tooltip = key.startsWith("LAB_SESSION_") ? labSessionDates[key] || "" : "";
+    headerRow += tooltip
+      ? `<th title="${tooltip}">${label}</th>`
+      : `<th>${label}</th>`;
   });
   headerRow += `<th>Total</th><th>% (so far)</th>`;
 
