@@ -4,7 +4,7 @@ const db = require("../config/db");
 exports.getAllSlots = async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT * FROM slot ORDER BY slot_year, semester_type, slot_day, slot_time`,
+      `SELECT * FROM slot ORDER BY slot_year DESC, semester_type, slot_day, slot_time`,
       []
     );
 

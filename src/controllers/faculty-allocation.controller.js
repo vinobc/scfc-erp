@@ -58,7 +58,7 @@ exports.getAllFacultyAllocations = async (req, res) => {
       query += ` AND fa.venue = $${params.length}`;
     }
 
-    query += ` ORDER BY fa.slot_year, fa.semester_type, fa.slot_day, fa.slot_time`;
+    query += ` ORDER BY fa.slot_year DESC, fa.semester_type DESC, fa.slot_day, fa.slot_time`;
 
     const result = await db.query(query, params);
     res.status(200).json(result.rows);
