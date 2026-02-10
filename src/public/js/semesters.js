@@ -126,8 +126,8 @@ function populateAcademicYearDropdown() {
     academicYearInput.appendChild(firstOption);
   }
 
-  // Generate academic year options (e.g., 2023-24, 2024-25, etc.)
-  for (let year = startYear; year <= endYear; year++) {
+  // Generate academic year options (e.g., 2030-31, 2029-30, etc.) - newest first
+  for (let year = endYear; year >= startYear; year--) {
     const nextYear = (year + 1).toString().slice(-2); // Get last 2 digits
     const academicYear = `${year}-${nextYear}`;
 

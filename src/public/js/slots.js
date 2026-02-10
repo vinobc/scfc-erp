@@ -85,6 +85,20 @@ document.addEventListener("DOMContentLoaded", () => {
   slotTimeInput = document.getElementById("slot-time-field");
   slotIsActiveInput = document.getElementById("slot-is-active-field");
 
+  // Dynamically populate slot year dropdown (newest first)
+  if (slotYearInput) {
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 2;
+    const endYear = currentYear + 5;
+    for (let year = endYear; year >= startYear; year--) {
+      const nextYear = (year + 1).toString().slice(-2);
+      const option = document.createElement("option");
+      option.value = `${year}-${nextYear}`;
+      option.textContent = `${year}-${nextYear}`;
+      slotYearInput.appendChild(option);
+    }
+  }
+
   // Initialize modal elements
   slotModalLabel = document.getElementById("slotModalLabel");
   slotDeleteYear = document.getElementById("slot-delete-year");
@@ -283,10 +297,10 @@ document.addEventListener("DOMContentLoaded", () => {
           .then((slots) => {
             console.log("Fetched slots for years:", slots);
 
-            // Get unique years
+            // Get unique years (newest first)
             const years = [
               ...new Set(slots.map((slot) => slot.slot_year)),
-            ].sort();
+            ].sort().reverse();
             console.log("Unique years:", years);
 
             // Clear and populate dropdown
@@ -330,8 +344,8 @@ function populateAcademicYears() {
         years.add(slot.slot_year);
       });
 
-      // Get sorted array of years
-      const sortedYears = Array.from(years).sort();
+      // Get sorted array of years (newest first)
+      const sortedYears = Array.from(years).sort().reverse();
 
       // Populate filter dropdown
       if (slotYearFilter) {
@@ -379,7 +393,7 @@ function populateAcademicYears() {
         });
 
         // Restore selection if possible
-        if (sortedYears.includes(currentSelection)) {
+        if (currentSelection && sortedYears.includes(currentSelection)) {
           viewSlotYearSelect.value = currentSelection;
         }
       }

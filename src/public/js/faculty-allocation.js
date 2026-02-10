@@ -226,6 +226,8 @@ document.addEventListener("DOMContentLoaded", () => {
       handleVenueChange(event);
       checkConflictsRealTime();
     });
+    // Add searchable overlay to venue dropdown
+    setupSearchableSelect(allocationVenueInput, "Type venue name to search...");
   }
   if (allocationYearInput) {
     allocationYearInput.addEventListener("change", checkConflictsRealTime);
@@ -752,43 +754,39 @@ function populateAcademicYears() {
       const years = new Set();
       slots.forEach((slot) => years.add(slot.slot_year));
 
+      const sortedYears = Array.from(years).sort().reverse();
+
       // Populate create form dropdown
       if (allocationYearInput) {
         allocationYearInput.innerHTML = '<option value="">Select Year</option>';
-        Array.from(years)
-          .sort()
-          .forEach((year) => {
-            const option = document.createElement("option");
-            option.value = year;
-            option.textContent = year;
-            allocationYearInput.appendChild(option);
-          });
+        sortedYears.forEach((year) => {
+          const option = document.createElement("option");
+          option.value = year;
+          option.textContent = year;
+          allocationYearInput.appendChild(option);
+        });
       }
 
       // Populate view form dropdowns
       if (viewFacultyYearSelect) {
         viewFacultyYearSelect.innerHTML =
           '<option value="">Select Year</option>';
-        Array.from(years)
-          .sort()
-          .forEach((year) => {
-            const option = document.createElement("option");
-            option.value = year;
-            option.textContent = year;
-            viewFacultyYearSelect.appendChild(option);
-          });
+        sortedYears.forEach((year) => {
+          const option = document.createElement("option");
+          option.value = year;
+          option.textContent = year;
+          viewFacultyYearSelect.appendChild(option);
+        });
       }
 
       if (viewClassYearSelect) {
         viewClassYearSelect.innerHTML = '<option value="">Select Year</option>';
-        Array.from(years)
-          .sort()
-          .forEach((year) => {
-            const option = document.createElement("option");
-            option.value = year;
-            option.textContent = year;
-            viewClassYearSelect.appendChild(option);
-          });
+        sortedYears.forEach((year) => {
+          const option = document.createElement("option");
+          option.value = year;
+          option.textContent = year;
+          viewClassYearSelect.appendChild(option);
+        });
       }
     })
     .catch((error) => {
@@ -1570,6 +1568,10 @@ function handleVenueTypeChange(event) {
 
   if (!venueType) {
     allocationVenueInput.innerHTML = '<option value="">Select Venue</option>';
+    // Clear searchable input if present
+    if (allocationVenueInput._searchableRefresh) {
+      allocationVenueInput._searchableRefresh();
+    }
     return;
   }
 
@@ -1590,6 +1592,10 @@ function handleVenueTypeChange(event) {
         option.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         allocationVenueInput.appendChild(option);
       });
+      // Clear searchable input after repopulating
+      if (allocationVenueInput._searchableRefresh) {
+        allocationVenueInput._searchableRefresh();
+      }
     })
     .catch((error) => {
       console.error("Error fetching venues:", error);
@@ -1674,6 +1680,10 @@ function handleAddFacultyAllocation() {
     allocationVenueInput.disabled = false;
     allocationVenueInput.style.backgroundColor = "";
     allocationVenueInput.style.cursor = "";
+    // Clear searchable input
+    if (allocationVenueInput._searchableRefresh) {
+      allocationVenueInput._searchableRefresh();
+    }
   }
 
   // Update modal title
@@ -3504,6 +3514,10 @@ function populateViewDropdowns() {
           option.textContent = `${f.name} (${f.employee_id})`;
           viewFacultySelect.appendChild(option);
         });
+        // Add searchable overlay if not already set up
+        if (!viewFacultySelect._searchableRefresh) {
+          setupSearchableSelect(viewFacultySelect, "Type faculty name to search...");
+        }
       }
     })
     .catch((error) => {
@@ -3527,6 +3541,10 @@ function populateViewDropdowns() {
           option.textContent = `${v.venue} (${v.infra_type})`;
           viewClassVenueSelect.appendChild(option);
         });
+        // Add searchable overlay if not already set up
+        if (!viewClassVenueSelect._searchableRefresh) {
+          setupSearchableSelect(viewClassVenueSelect, "Type venue name to search...");
+        }
       }
     })
     .catch((error) => {
@@ -3877,6 +3895,133 @@ function setupFacultyNameAutocomplete() {
       dropdown.style.display = "none";
     }
   });
+}
+
+// Reusable searchable select utility
+// Converts a plain <select> into a searchable dropdown
+function setupSearchableSelect(selectElement, placeholder) {
+  if (!selectElement) return;
+
+  const container = selectElement.parentNode;
+
+  // Create search input
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.className = "form-control";
+  searchInput.placeholder = placeholder || "Type to search...";
+
+  // Hide the original select
+  selectElement.style.display = "none";
+
+  // Insert search input before the hidden select
+  container.insertBefore(searchInput, selectElement);
+
+  // Create dropdown container
+  const dropdown = document.createElement("div");
+  dropdown.className = "autocomplete-dropdown";
+  dropdown.style.display = "none";
+  dropdown.style.position = "absolute";
+  dropdown.style.zIndex = "1000";
+  dropdown.style.backgroundColor = "#fff";
+  dropdown.style.border = "1px solid #ddd";
+  dropdown.style.maxHeight = "200px";
+  dropdown.style.overflowY = "auto";
+  dropdown.style.width = "100%";
+
+  container.style.position = "relative";
+  container.appendChild(dropdown);
+
+  // Build options list from current select options
+  function getOptions() {
+    return Array.from(selectElement.options)
+      .filter((opt) => opt.value) // skip placeholder options
+      .map((opt) => ({ value: opt.value, text: opt.textContent }));
+  }
+
+  // Show filtered dropdown
+  function showDropdown(searchTerm) {
+    const options = getOptions();
+    const filtered = searchTerm
+      ? options.filter((o) => o.text.toLowerCase().includes(searchTerm.toLowerCase()))
+      : options;
+
+    if (filtered.length === 0) {
+      dropdown.style.display = "none";
+      return;
+    }
+
+    dropdown.style.display = "block";
+    dropdown.innerHTML = "";
+
+    filtered.forEach((opt) => {
+      const item = document.createElement("div");
+      item.className = "autocomplete-item";
+      item.style.padding = "8px 12px";
+      item.style.cursor = "pointer";
+      item.style.borderBottom = "1px solid #eee";
+      item.textContent = opt.text;
+
+      item.addEventListener("mouseover", () => {
+        item.style.backgroundColor = "#f1f1f1";
+      });
+      item.addEventListener("mouseout", () => {
+        item.style.backgroundColor = "transparent";
+      });
+      item.addEventListener("click", () => {
+        searchInput.value = opt.text;
+        selectElement.value = opt.value;
+        // Trigger change event on the original select
+        selectElement.dispatchEvent(new Event("change"));
+        dropdown.style.display = "none";
+      });
+
+      dropdown.appendChild(item);
+    });
+  }
+
+  // Input event — filter as user types, or show all if empty
+  searchInput.addEventListener("input", function () {
+    const searchTerm = this.value.trim();
+    if (searchTerm.length === 0) {
+      showDropdown(""); // show all options
+    } else if (searchTerm.length >= 2) {
+      showDropdown(searchTerm);
+    } else {
+      dropdown.style.display = "none";
+    }
+  });
+
+  // Focus/click event — show all options like a dropdown
+  searchInput.addEventListener("focus", function () {
+    showDropdown(this.value.trim().length >= 2 ? this.value.trim() : "");
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", function (event) {
+    if (!searchInput.contains(event.target) && !dropdown.contains(event.target)) {
+      dropdown.style.display = "none";
+    }
+  });
+
+  // Allow clearing — if user clears the input, reset the select
+  searchInput.addEventListener("input", function () {
+    if (this.value.trim() === "") {
+      selectElement.value = "";
+      selectElement.dispatchEvent(new Event("change"));
+    }
+  });
+
+  // Expose a refresh method to sync search input with select value
+  selectElement._searchableRefresh = function () {
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    if (selectedOption && selectedOption.value) {
+      searchInput.value = selectedOption.textContent;
+    } else {
+      searchInput.value = "";
+    }
+  };
+
+  return searchInput;
 }
 
 // Real-time conflict checking with visual feedback
