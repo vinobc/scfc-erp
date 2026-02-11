@@ -200,8 +200,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "timetable_coordinator":
-      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, Marks, Logout
-      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.marks, navItems.logout].forEach(
+      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, Marks, Change Password, Logout
+      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.marks, navItems.changePassword, navItems.logout].forEach(
         (item) => {
           if (item && item.parentElement) {
             item.parentElement.style.display = "block";
@@ -217,8 +217,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "faculty":
-      // Faculty sees: Dashboard, Courses (view only), Attendance, Marks, TimeTable (VIEW ONLY), Logout
-      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.marks, navItems.logout].forEach((item) => {
+      // Faculty sees: Dashboard, Courses (view only), Attendance, Marks, TimeTable (VIEW ONLY), Change Password, Logout
+      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.marks, navItems.changePassword, navItems.logout].forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
         }
