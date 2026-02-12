@@ -8,7 +8,7 @@ CREATE TABLE course (
     course_name VARCHAR(150) NOT NULL,
     theory INTEGER NOT NULL CHECK (theory >= 0 AND theory <= 10),
     practical INTEGER NOT NULL CHECK (practical >= 0 AND practical <= 10),
-    credits INTEGER NOT NULL CHECK (credits >= 0 AND credits <= 10),
+    credits INTEGER NOT NULL CHECK (credits >= 0 AND credits <= 20),
     course_type VARCHAR(5) NOT NULL,
     prerequisite VARCHAR(200),
     antirequisite VARCHAR(200),
