@@ -815,46 +815,68 @@ exports.getFacultyTimetable = async (req, res) => {
       [employeeId, year, semesterType]
     );
 
-    // For the summary, group course allocations by course+venue to combine slot pairs
-    // - P=4 lab courses (T=0, P=4): Group by course+venue
-    // - Theory courses (T>0): Group by course+venue to prevent duplicates
-    // - Other courses: Keep as individual entries
+    // For the summary, group course allocations to combine slot pairs
+    // - Theory slots: Group by course+venue to prevent duplicates
+    // - P=4 lab slots: Group by course+venue, then split into sections of 2 by created_at
+    // - Other: Keep as individual entries
     // But keep individual allocations for the timetable grid display
     const summaryAllocations = [];
-    const courseGroups = new Map();
+    const theoryGroups = new Map();
+    const p4LabGroups = new Map();
 
     allocationsResult.rows.forEach((allocation) => {
-      const isP4LabCourse = allocation.theory === 0 && allocation.practical === 4;
-      const isTheoryCourse = allocation.theory > 0;
-      
-      if (isP4LabCourse || isTheoryCourse) {
-        // Group P=4 lab courses and theory courses by course_code + venue for summary
+      const isLabSlot = allocation.slot_name.startsWith("L");
+      const isP4Course = allocation.practical === 4;
+
+      if (isLabSlot && isP4Course) {
+        // P=4 lab allocations: collect for section-based splitting
         const groupKey = `${allocation.course_code}-${allocation.venue}`;
-        
-        if (!courseGroups.has(groupKey)) {
-          courseGroups.set(groupKey, {
+        if (!p4LabGroups.has(groupKey)) {
+          p4LabGroups.set(groupKey, []);
+        }
+        p4LabGroups.get(groupKey).push(allocation);
+      } else if (!isLabSlot && allocation.theory > 0) {
+        // Theory slots: group by course+venue
+        const groupKey = `${allocation.course_code}-${allocation.venue}`;
+        if (!theoryGroups.has(groupKey)) {
+          theoryGroups.set(groupKey, {
             ...allocation,
             slot_names: [],
             combined_allocation: true
           });
         }
-        
-        // Add this slot name to the group
-        courseGroups.get(groupKey).slot_names.push(allocation.slot_name);
+        theoryGroups.get(groupKey).slot_names.push(allocation.slot_name);
       } else {
-        // Keep other allocations as individual entries (e.g., P=2 lab courses)
+        // Other allocations: keep as individual entries (e.g., P=2 lab courses)
         summaryAllocations.push(allocation);
       }
     });
 
-    // Convert grouped courses to final allocations with combined slot names for summary
-    courseGroups.forEach((group) => {
-      // Remove duplicates and sort slot names
+    // Convert theory groups to summary entries
+    theoryGroups.forEach((group) => {
       const uniqueSlots = [...new Set(group.slot_names)];
       const sortedSlots = uniqueSlots.sort();
       group.slot_name = sortedSlots.join(', ');
       delete group.slot_names;
       summaryAllocations.push(group);
+    });
+
+    // Convert P=4 lab groups to summary entries, splitting into sections of 2
+    p4LabGroups.forEach((allocations) => {
+      // Sort by created_at to determine section pairing
+      allocations.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      const slotsPerSection = 2; // P/2 = 4/2
+
+      for (let i = 0; i < allocations.length; i += slotsPerSection) {
+        const section = allocations.slice(i, i + slotsPerSection);
+        const slotNames = section.map(a => a.slot_name).sort();
+
+        summaryAllocations.push({
+          ...section[0],
+          slot_name: slotNames.join(', '),
+          combined_allocation: true
+        });
+      }
     });
 
     res.status(200).json({
