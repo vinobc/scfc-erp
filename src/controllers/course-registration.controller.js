@@ -224,11 +224,12 @@ exports.getCourseOfferings = async (req, res) => {
 
     // Get all faculty allocations for this course with actual seat availability
     const allocationsResult = await db.query(
-      `SELECT 
+      `SELECT
      fa.slot_name,
      fa.venue,
      fa.slot_day,
      fa.slot_time,
+     fa.created_at,
      f.name as faculty_name,
      v.seats as total_seats,
      (
@@ -319,8 +320,8 @@ exports.getCourseOfferings = async (req, res) => {
         );
 
         if (practical === 4) {
-          // For P=4 TEL courses, group by faculty+venue and combine all slots
-          // This matches the behavior of P-only courses with P=4
+          // For P=4 TEL courses, group by faculty+venue, then split into
+          // sections of 2 slots each based on creation order
           console.log(`Processing TEL P=4 course: ${courseData.course_code}`);
 
           const p4Groups = new Map();
@@ -333,33 +334,43 @@ exports.getCourseOfferings = async (req, res) => {
                 venue: allocation.venue,
                 faculty_name: allocation.faculty_name,
                 available_seats: allocation.available_seats,
-                slot_names: []
+                allocations: []
               });
             }
 
-            p4Groups.get(key).slot_names.push(allocation.slot_name);
+            p4Groups.get(key).allocations.push(allocation);
           });
 
-          // Create combined offerings for P=4 TEL courses
+          // Create offerings - split into sections of 2 (P/2) by created_at
+          const slotsPerSection = practical / 2; // 2 slot pairs per section
           p4Groups.forEach((group) => {
-            // Sort slot names for consistent display (morning slots first, then afternoon)
-            const sortedSlots = group.slot_names.sort((a, b) => {
-              // Extract first slot number for sorting (L1+L2 -> 1, L21+L22 -> 21)
-              const aNum = parseInt(a.match(/L(\d+)/)?.[1] || '0');
-              const bNum = parseInt(b.match(/L(\d+)/)?.[1] || '0');
-              return aNum - bNum;
-            });
+            // Sort by created_at to determine section pairing
+            group.allocations.sort((a, b) =>
+              new Date(a.created_at) - new Date(b.created_at)
+            );
 
-            offerings.push({
-              course_code: courseData.course_code,
-              course_title: courseData.course_name,
-              course_type: "P",
-              slots_offered: sortedSlots.join(', '),
-              venue: group.venue,
-              faculty_name: group.faculty_name,
-              available_seats: group.available_seats,
-              schedule: [],
-            });
+            // Split into sections of slotsPerSection
+            for (let i = 0; i < group.allocations.length; i += slotsPerSection) {
+              const sectionAllocations = group.allocations.slice(i, i + slotsPerSection);
+              const slotNames = sectionAllocations
+                .map((a) => a.slot_name)
+                .sort((a, b) => {
+                  const aNum = parseInt(a.match(/L(\d+)/)?.[1] || '0');
+                  const bNum = parseInt(b.match(/L(\d+)/)?.[1] || '0');
+                  return aNum - bNum;
+                });
+
+              offerings.push({
+                course_code: courseData.course_code,
+                course_title: courseData.course_name,
+                course_type: "P",
+                slots_offered: slotNames.join(', '),
+                venue: group.venue,
+                faculty_name: group.faculty_name,
+                available_seats: group.available_seats,
+                schedule: [],
+              });
+            }
           });
         } else {
           // For P=2 TEL courses, use semester_slot_config
@@ -555,46 +566,57 @@ exports.getCourseOfferings = async (req, res) => {
     } else if (courseType === "P") {
       // For Practical-only courses, handle P=4 differently from P=2
       if (practical === 4) {
-        // For P=4 courses, group allocations by faculty+venue and combine slot names
+        // For P=4 courses, group by faculty+venue, then split into
+        // sections of 2 slots each based on creation order
         console.log(`Processing P=4 course: ${courseData.course_code}`);
-        
+
         const p4Groups = new Map();
-        
+
         allocationsResult.rows.forEach((allocation) => {
           const key = `${allocation.venue}-${allocation.faculty_name}`;
-          
+
           if (!p4Groups.has(key)) {
             p4Groups.set(key, {
               venue: allocation.venue,
               faculty_name: allocation.faculty_name,
               available_seats: allocation.available_seats,
-              slot_names: []
+              allocations: []
             });
           }
-          
-          p4Groups.get(key).slot_names.push(allocation.slot_name);
+
+          p4Groups.get(key).allocations.push(allocation);
         });
-        
-        // Create combined offerings for P=4 courses
+
+        // Create offerings - split into sections of 2 (P/2) by created_at
+        const slotsPerSection = practical / 2; // 2 slot pairs per section
         p4Groups.forEach((group) => {
-          // Sort slot names for consistent display (morning slots first, then afternoon)
-          const sortedSlots = group.slot_names.sort((a, b) => {
-            // Extract first slot number for sorting (L1+L2 -> 1, L21+L22 -> 21)
-            const aNum = parseInt(a.match(/L(\d+)/)?.[1] || '0');
-            const bNum = parseInt(b.match(/L(\d+)/)?.[1] || '0');
-            return aNum - bNum;
-          });
-          
-          offerings.push({
-            course_code: courseData.course_code,
-            course_title: courseData.course_name,
-            course_type: "P",
-            slots_offered: sortedSlots.join(', '),
-            venue: group.venue,
-            faculty_name: group.faculty_name,
-            available_seats: group.available_seats,
-            schedule: [],
-          });
+          // Sort by created_at to determine section pairing
+          group.allocations.sort((a, b) =>
+            new Date(a.created_at) - new Date(b.created_at)
+          );
+
+          // Split into sections of slotsPerSection
+          for (let i = 0; i < group.allocations.length; i += slotsPerSection) {
+            const sectionAllocations = group.allocations.slice(i, i + slotsPerSection);
+            const slotNames = sectionAllocations
+              .map((a) => a.slot_name)
+              .sort((a, b) => {
+                const aNum = parseInt(a.match(/L(\d+)/)?.[1] || '0');
+                const bNum = parseInt(b.match(/L(\d+)/)?.[1] || '0');
+                return aNum - bNum;
+              });
+
+            offerings.push({
+              course_code: courseData.course_code,
+              course_title: courseData.course_name,
+              course_type: "P",
+              slots_offered: slotNames.join(', '),
+              venue: group.venue,
+              faculty_name: group.faculty_name,
+              available_seats: group.available_seats,
+              schedule: [],
+            });
+          }
         });
       } else {
         // For P=2 courses, use the existing logic with semester_slot_config
