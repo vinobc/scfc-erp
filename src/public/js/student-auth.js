@@ -573,11 +573,19 @@ function checkExistingStudentSession() {
     })
       .then((response) => {
         if (!response.ok) {
-          throw new Error("Token invalid");
+          // Only clear token on auth failures, not server errors
+          if (response.status === 401 || response.status === 403) {
+            console.log("Token invalid (auth failure), clearing token");
+            localStorage.removeItem("token");
+          } else {
+            console.log("Server error during session check, keeping token");
+          }
+          return null;
         }
         return response.json();
       })
       .then((user) => {
+        if (!user) return;
         console.log("Existing session found for:", user);
 
         if (user.role === "student") {
@@ -634,16 +642,12 @@ function checkExistingStudentSession() {
             })
             .catch((err) => {
               console.error("Error getting student data:", err);
-              // If we can't get student data, force login
-              localStorage.removeItem("token");
-              window.location.reload();
             });
         }
       })
       .catch((error) => {
-        console.log("No valid session found:", error);
-        // Clear invalid token
-        localStorage.removeItem("token");
+        // Network error — do NOT remove token (server might just be busy)
+        console.log("Session check network error:", error);
       });
   }
 }

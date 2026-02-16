@@ -126,7 +126,11 @@ function checkAuthStatus() {
   })
     .then((response) => {
       if (!response.ok) {
-        throw new Error("Authentication failed");
+        // Only treat 401/403 as auth failures — server errors should not log user out
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("AUTH_FAILED");
+        }
+        throw new Error("SERVER_ERROR");
       }
       return response.json();
     })
@@ -148,8 +152,13 @@ function checkAuthStatus() {
     })
     .catch((error) => {
       console.error("Auth check error:", error);
-      localStorage.removeItem("token");
-      showLoginModal();
+      if (error.message === "AUTH_FAILED") {
+        localStorage.removeItem("token");
+        showLoginModal();
+      } else {
+        // Server error or network issue — keep token, show message
+        showAlert("Server is busy. Please refresh the page.", "warning");
+      }
     });
 }
 
