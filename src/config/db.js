@@ -18,7 +18,7 @@ const pool = new Pool({
   // Optimized connection limits for 1000+ students
   max: 80, // Maximum 80 connections (4x previous capacity)
   idleTimeoutMillis: 10000, // Close idle connections after 10 seconds (faster recycling)
-  connectionTimeoutMillis: 2000, // 2 second timeout for new connections
+  connectionTimeoutMillis: 10000, // 10 second timeout for new connections (handles peak load)
 });
 
 pool.on("connect", () => {
