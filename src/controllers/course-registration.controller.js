@@ -243,8 +243,8 @@ exports.getCourseOfferings = async (req, res) => {
            -- Case 1: Exact match (for 4-hour labs)
            sr.slot_name = fa.slot_name
            OR
-           -- Case 2: Component match (for theory like E,F -> E or F)
-           (',' || sr.slot_name || ',') LIKE ('%,' || fa.slot_name || ',%')
+           -- Case 2: Component match (normalize spaces for compound slots like "L3+L4, L27+L28")
+           (',' || REPLACE(sr.slot_name, ' ', '') || ',') LIKE ('%,' || REPLACE(fa.slot_name, ' ', '') || ',%')
          )
      ) as current_registrations,
      (
@@ -258,7 +258,7 @@ exports.getCourseOfferings = async (req, res) => {
            AND (
              sr.slot_name = fa.slot_name
              OR
-             (',' || sr.slot_name || ',') LIKE ('%,' || fa.slot_name || ',%')
+             (',' || REPLACE(sr.slot_name, ' ', '') || ',') LIKE ('%,' || REPLACE(fa.slot_name, ' ', '') || ',%')
            )
        )
      ) as available_seats
@@ -1449,7 +1449,7 @@ exports.registerCourseOffering = async (req, res) => {
          AND (
            sr.slot_name = $5
            OR
-           (',' || sr.slot_name || ',') LIKE ('%,' || $5 || ',%')
+           (',' || REPLACE(sr.slot_name, ' ', '') || ',') LIKE ('%,' || REPLACE($5, ' ', '') || ',%')
          )
      ) as current_registrations
    FROM venue v
@@ -2690,7 +2690,7 @@ exports.registerTELCourseAtomic = async (req, res) => {
       `SELECT v.seats as total_seats,
         (SELECT COUNT(*) FROM student_registrations sr
          WHERE sr.course_code = $1 AND sr.slot_year = $2 AND sr.semester_type = $3
-         AND sr.venue = $4 AND (sr.slot_name = $5 OR (',' || sr.slot_name || ',') LIKE ('%,' || $5 || ',%'))
+         AND sr.venue = $4 AND (sr.slot_name = $5 OR (',' || REPLACE(sr.slot_name, ' ', '') || ',') LIKE ('%,' || REPLACE($5, ' ', '') || ',%'))
         ) as current_registrations
        FROM venue v WHERE v.venue = $4`,
       [course_code, slot_year, semester_type, theory_venue, theory_slot]
@@ -2710,7 +2710,7 @@ exports.registerTELCourseAtomic = async (req, res) => {
       `SELECT v.seats as total_seats,
         (SELECT COUNT(*) FROM student_registrations sr
          WHERE sr.course_code = $1 AND sr.slot_year = $2 AND sr.semester_type = $3
-         AND sr.venue = $4 AND (sr.slot_name = $5 OR (',' || sr.slot_name || ',') LIKE ('%,' || $5 || ',%'))
+         AND sr.venue = $4 AND (sr.slot_name = $5 OR (',' || REPLACE(sr.slot_name, ' ', '') || ',') LIKE ('%,' || REPLACE($5, ' ', '') || ',%'))
         ) as current_registrations
        FROM venue v WHERE v.venue = $4`,
       [course_code, slot_year, semester_type, practical_venue, practical_slot]
