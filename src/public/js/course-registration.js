@@ -774,12 +774,7 @@ async function registerCourseOffering(
     console.log("✅ Registration successful:", result);
 
     // Show success message
-    showAlert(
-      `✅ Successfully registered for ${courseCode} - ${slotOffered}!<br>` +
-        `Faculty: ${facultyName}, Venue: ${venue}<br>` +
-        `Credits: ${result.registration.credits}, Total Credits: ${result.registration.new_total_credits}`,
-      "success"
-    );
+    alert(`✅ Successfully registered for ${courseCode} - ${slotOffered}!\nFaculty: ${facultyName}, Venue: ${venue}\nCredits: ${result.registration.credits}, Total Credits: ${result.registration.new_total_credits}`);
 
     // Refresh displays
     await loadCreditSummary();
@@ -787,7 +782,7 @@ async function registerCourseOffering(
     await loadCourseOfferings(courseCode);
   } catch (error) {
     console.error("Registration error:", error);
-    showAlert(`❌ Registration failed: ${error.message}`, "danger");
+    alert(`❌ Registration failed: ${error.message}`);
   }
 }
 
@@ -847,11 +842,7 @@ async function deleteCourseOffering(courseCode, slotOffered, courseType) {
     console.log("✅ Deletion successful:", result);
 
     // Show success message
-    showAlert(
-      `✅ Successfully deleted registration for ${courseCode}! ` +
-        `(${result.deleted_registrations} registration(s) removed)`,
-      "success"
-    );
+    alert(`✅ Successfully deleted registration for ${courseCode}! (${result.deleted_registrations} registration(s) removed)`);
 
     // Refresh timetable if it's currently displayed
     await refreshTimetableIfVisible();
@@ -860,7 +851,7 @@ async function deleteCourseOffering(courseCode, slotOffered, courseType) {
     await loadCourseOfferings(courseCode);
   } catch (error) {
     console.error("Deletion error:", error);
-    showAlert(`❌ Deletion failed: ${error.message}`, "danger");
+    alert(`❌ Deletion failed: ${error.message}`);
   }
 }
 
@@ -868,7 +859,8 @@ async function deleteCourseOffering(courseCode, slotOffered, courseType) {
 function showAlert(message, type = "info") {
   const alertContainer = document.getElementById("student-alert-container");
   if (!alertContainer) {
-    console.log(`Alert: ${message}`);
+    // Fallback: show browser alert so the student always sees the message
+    alert(message.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, ""));
     return;
   }
 
@@ -999,21 +991,18 @@ async function registerForProjectCourse(courseCode, allocationId, facultyName) {
     const result = await response.json();
 
     if (response.ok) {
-      showAlert(
-        `✅ Successfully registered for ${courseCode} under ${facultyName}`,
-        "success"
-      );
-      
+      alert(`✅ Successfully registered for ${courseCode} under ${facultyName}`);
+
       // Reload the page to show updated registrations
       setTimeout(() => {
         loadWorkingSemesterData(semesterSelect.value);
       }, 1500);
     } else {
-      showAlert(result.message || "Registration failed", "danger");
+      alert(`❌ Registration failed: ${result.message || "Registration failed"}`);
     }
   } catch (error) {
     console.error("Project registration error:", error);
-    showAlert("Error during project registration", "danger");
+    alert(`❌ Registration failed: ${error.message || "Error during project registration"}`);
   }
 }
 
@@ -1082,12 +1071,7 @@ async function registerTELCourse(courseCode) {
     console.log("✅ Atomic TEL registration successful");
 
     // Show success message
-    showAlert(
-      `✅ Successfully registered for ${courseCode}!<br>` +
-        `Theory: ${theorySelection.value} | Practical: ${practicalSelection.value}<br>` +
-        `Total Credits: ${result.registration.credits}`,
-      "success"
-    );
+    alert(`✅ Successfully registered for ${courseCode}!\nTheory: ${theorySelection.value} | Practical: ${practicalSelection.value}\nCredits: ${result.registration.credits}`);
 
     // Refresh displays
     await loadCreditSummary();
@@ -1095,7 +1079,8 @@ async function registerTELCourse(courseCode) {
     await loadCourseOfferings(courseCode);
   } catch (error) {
     console.error("TEL registration error:", error);
-    showAlert(`❌ Registration failed: ${error.message}`, "danger");
+    const errorMsg = error.message || "Unknown error during registration";
+    alert(`❌ Registration failed: ${errorMsg}`);
   }
 }
 
@@ -1818,18 +1803,18 @@ async function deleteProjectCourse(courseCode) {
     const result = await response.json();
 
     if (response.ok) {
-      showAlert(`✅ Successfully deleted registration for ${courseCode}`, "success");
-      
+      alert(`✅ Successfully deleted registration for ${courseCode}`);
+
       // Reload the page to show updated registrations
       setTimeout(() => {
         loadWorkingSemesterData(semesterSelect.value);
       }, 1500);
     } else {
-      showAlert(result.message || "Failed to delete registration", "danger");
+      alert(`❌ Deletion failed: ${result.message || "Failed to delete registration"}`);
     }
   } catch (error) {
     console.error("Error deleting project registration:", error);
-    showAlert("Error during deletion", "danger");
+    alert(`❌ Deletion failed: ${error.message || "Error during deletion"}`);
   }
 }
 
