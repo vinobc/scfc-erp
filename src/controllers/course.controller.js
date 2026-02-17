@@ -251,12 +251,12 @@ exports.updateCourse = async (req, res) => {
       ]
     );
 
-    // Cascade credit/theory/practical/name changes to existing student registrations
+    // Cascade course changes to existing student registrations
     await db.query(
       `UPDATE student_registrations
-       SET credits = $1, theory = $2, practical = $3, course_name = $4, updated_at = CURRENT_TIMESTAMP
-       WHERE course_code = $5`,
-      [credits, theory, practical, course_name, courseCode]
+       SET credits = $1, theory = $2, practical = $3, course_name = $4, course_type = $5, updated_at = CURRENT_TIMESTAMP
+       WHERE course_code = $6`,
+      [credits, theory, practical, course_name, course_type, courseCode]
     );
 
     res.status(200).json({
