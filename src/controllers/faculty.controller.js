@@ -157,14 +157,21 @@ exports.updateFaculty = async (req, res) => {
       });
     }
 
+    // Get old faculty name before updating
+    const oldFaculty = await db.query(
+      `SELECT name FROM faculty WHERE faculty_id = $1`,
+      [facultyId]
+    );
+    const oldName = oldFaculty.rows[0].name;
+
     // Update faculty
     const result = await db.query(
-      `UPDATE faculty 
-       SET name = $1, 
-           designation = $2, 
-           employee_id = $3, 
-           school_id = $4, 
-           email = $5, 
+      `UPDATE faculty
+       SET name = $1,
+           designation = $2,
+           employee_id = $3,
+           school_id = $4,
+           email = $5,
            is_active = $6,
            updated_at = CURRENT_TIMESTAMP
        WHERE faculty_id = $7
@@ -179,6 +186,16 @@ exports.updateFaculty = async (req, res) => {
         facultyId,
       ]
     );
+
+    // Cascade faculty name change to existing student registrations
+    if (oldName !== name) {
+      await db.query(
+        `UPDATE student_registrations
+         SET faculty_name = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE faculty_name = $2`,
+        [name, oldName]
+      );
+    }
 
     res.status(200).json({
       message: "Faculty updated successfully",
