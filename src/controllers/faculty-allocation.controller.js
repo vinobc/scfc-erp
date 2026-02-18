@@ -1560,20 +1560,21 @@ exports.updateFacultyAllocation = async (req, res) => {
         }
       }
 
-      // Get all related allocations (same course and faculty)
-      // For theory slots (A, B, C, etc.): get all days for that slot
-      // For lab slots (L1+L2, L17+L18, etc.): get ALL lab slots for that course+faculty
+      // Get all related allocations (same course, faculty, and venue)
+      // For theory slots (A, B, C, etc.): get all days for that slot at the same venue
+      // For lab slots (L1+L2, L17+L18, etc.): get all lab slots for that course+faculty at the same venue
       const isLabSlot = oldAllocation.slot_name.startsWith("L");
       const relatedAllocations = await client.query(
         `SELECT * FROM faculty_allocation
          WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
-         AND employee_id = $4 AND ${isLabSlot ? "slot_name LIKE 'L%'" : "slot_name = $5"}`,
+         AND employee_id = $4 AND ${isLabSlot ? "slot_name LIKE 'L%'" : "slot_name = $5"} AND venue = ${isLabSlot ? "$5" : "$6"}`,
         isLabSlot
           ? [
               oldAllocation.slot_year,
               oldAllocation.semester_type,
               oldAllocation.course_code,
               oldAllocation.employee_id,
+              oldAllocation.venue,
             ]
           : [
               oldAllocation.slot_year,
@@ -1581,6 +1582,7 @@ exports.updateFacultyAllocation = async (req, res) => {
               oldAllocation.course_code,
               oldAllocation.employee_id,
               oldAllocation.slot_name,
+              oldAllocation.venue,
             ]
       );
 
