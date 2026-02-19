@@ -1506,6 +1506,29 @@ exports.updateFacultyAllocation = async (req, res) => {
             conflict: conflict,
           });
         }
+
+        // Check if the new faculty already has this course+slot at a different venue
+        const existingAllocation = await client.query(
+          `SELECT venue FROM faculty_allocation
+           WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+             AND employee_id = $4 AND slot_name = $5 AND venue != $6
+           LIMIT 1`,
+          [
+            oldAllocation.slot_year,
+            oldAllocation.semester_type,
+            oldAllocation.course_code,
+            newAllocation.employee_id,
+            oldAllocation.slot_name,
+            venueChanged ? newAllocation.venue : oldAllocation.venue,
+          ]
+        );
+
+        if (existingAllocation.rows.length > 0) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            message: `Cannot reassign: ${newAllocation.faculty_name} already teaches ${oldAllocation.course_code} in venue ${existingAllocation.rows[0].venue} for slot ${oldAllocation.slot_name}. Please change the venue to ${existingAllocation.rows[0].venue} to consolidate, or remove the existing allocation first.`,
+          });
+        }
       }
 
       // If venue changed, check capacity and conflicts
