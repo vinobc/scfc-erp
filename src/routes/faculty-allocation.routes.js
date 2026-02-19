@@ -23,6 +23,11 @@ router.post(
   canManageFacultyAllocations,
   facultyAllocationController.createFacultyAllocation
 );
+router.post(
+  "/batch",
+  canManageFacultyAllocations,
+  facultyAllocationController.createFacultyAllocationBatch
+);
 router.put(
   "/",
   canManageFacultyAllocations,
