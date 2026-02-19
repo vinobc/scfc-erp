@@ -1988,20 +1988,18 @@ function handleSaveFacultyAllocation() {
 
       console.log("Pre-check passed, proceeding with allocations...");
 
-      // Create promises array for all allocations
-      const promises = [];
+      // Build allocations array for atomic batch request
+      const batchAllocations = [];
 
       // For each individual slot that needs to be allocated
       for (const individualSlot of allIndividualSlots) {
         // Parse slot name for T=4 combined slots (e.g., "B1+TB1" -> use "B1" for lookup)
         let slotToSearch = individualSlot;
         if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
-          // For T=4 theory slots like "B1+TB1", "A1+TA1", extract the primary slot for lookup
           slotToSearch = individualSlot.split('+')[0];
           console.log(`T=4 slot detected: ${individualSlot}, searching for: ${slotToSearch}`);
         }
-        
-        // Find the slot details using the parsed slot name
+
         const matchingSlots = slots.filter(
           (s) => s.slot_name === slotToSearch
         );
@@ -2013,27 +2011,19 @@ function handleSaveFacultyAllocation() {
           return;
         }
 
-        // For compound primary slots, we need to create just one allocation with the compound name
-        // For individual slots, create allocation with individual slot name
         matchingSlots.forEach((slot) => {
           let slotNameToUse;
 
           if (is4HourLab && individualSlot === allIndividualSlots[0]) {
-            // For the first slot of a 4-hour lab, use the compound name
             slotNameToUse = primarySlot;
           } else if (is4HourLab) {
-            // For subsequent slots of a 4-hour lab, skip individual allocations
-            // The backend will handle creating all related allocations
             return;
           } else if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
-            // For T=4 theory slots like "B1+TB1", use the original combined name
             slotNameToUse = individualSlot;
           } else {
-            // For regular slots, use the individual slot name
             slotNameToUse = slot.slot_name;
           }
 
-          // Create allocation with the appropriate slot name
           const completeAllocation = {
             ...allocationData,
             slot_day: slot.slot_day,
@@ -2042,59 +2032,41 @@ function handleSaveFacultyAllocation() {
           };
 
           console.log(
-            `Saving allocation for ${slotNameToUse}:`,
+            `Adding to batch for ${slotNameToUse}:`,
             completeAllocation
           );
 
-          promises.push(
-            fetch(`${window.API_URL}/faculty-allocations`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: localStorage.getItem("token"),
-              },
-              body: JSON.stringify(completeAllocation),
-            })
-          );
+          batchAllocations.push(completeAllocation);
         });
       }
 
-      // Execute all allocation promises
-      if (promises.length === 0) {
+      if (batchAllocations.length === 0) {
         localShowAlert("No valid slots found for allocation", "danger");
         return;
       }
 
-      // Execute all allocation promises with improved error handling
-      Promise.all(promises)
-        .then(async (responses) => {
-          console.log("Save responses:", responses);
-
-          // Check for failed responses
-          const failedResponses = responses.filter((r) => !r.ok);
-
-          if (failedResponses.length > 0) {
-            console.log("Failed responses found:", failedResponses);
-
-            // Extract error from the first failed response
-            const errorData = await failedResponses[0].json();
-            console.log("Error data from backend:", errorData);
-
-            // Throw error with the backend message
-            const errorMessage =
-              errorData.message || "Failed to save faculty allocation";
-            const error = new Error(errorMessage);
-            error.conflictType = errorData.type; // Preserve conflict type
+      // Send single atomic batch request — all succeed or none
+      fetch(`${window.API_URL}/faculty-allocations/batch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: localStorage.getItem("token"),
+        },
+        body: JSON.stringify({ allocations: batchAllocations }),
+      })
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok) {
+            const error = new Error(data.message || "Failed to save faculty allocation");
+            error.conflicts = data.conflicts;
+            error.conflictType = data.conflicts && data.conflicts.length > 0 ? data.conflicts[0].type : undefined;
             throw error;
           }
-
-          // All responses successful - parse them
-          return Promise.all(responses.map((r) => r.json()));
+          return data;
         })
-        .then((results) => {
-          console.log("Save results:", results);
+        .then((result) => {
+          console.log("Batch save result:", result);
 
-          // Provide appropriate success message based on allocation type
           if (is4HourLab) {
             const morningSlots = primarySlot.split(", ");
             const linkedAfternoonSlots =
@@ -2121,45 +2093,41 @@ function handleSaveFacultyAllocation() {
           if (facultyAllocationModal) facultyAllocationModal.hide();
           loadFacultyAllocations();
 
-          // Check if TEL course needs other component
           if (courseData && courseData.course_type === "TEL") {
             checkTELCourseCompletion(allocationData);
           }
         })
         .catch((error) => {
           console.error("Save faculty allocation error:", error);
-          console.log("Error message:", error.message);
 
-          // Enhanced error message handling with better pattern matching
           let displayMessage = "";
 
-          if (error.message) {
+          // Handle batch conflict details
+          if (error.conflicts && error.conflicts.length > 0) {
+            const conflictMsg = error.conflicts
+              .map(c => `${c.day} ${c.time} (${c.slot}): ${c.error}`)
+              .join('\n\n');
+            displayMessage = `❌ Conflicts found — no allocations were created:\n\n${conflictMsg}\n\nPlease choose a different venue that is available for ALL required time slots.`;
+          } else if (error.message) {
             const errorMsg = error.message.toLowerCase();
 
-            // Check for specific conflict types and provide user-friendly messages
             if (
               errorMsg.includes("venue clash") ||
-              (errorMsg.includes("venue") &&
-                errorMsg.includes("already booked"))
+              (errorMsg.includes("venue") && errorMsg.includes("already booked"))
             ) {
               displayMessage = `❌ Venue Conflict!\n\n${error.message}\n\nPlease select a different venue or time slot.`;
             } else if (
               errorMsg.includes("faculty clash") ||
-              (errorMsg.includes("faculty") &&
-                errorMsg.includes("already assigned"))
+              (errorMsg.includes("faculty") && errorMsg.includes("already assigned"))
             ) {
               displayMessage = `❌ Faculty Conflict!\n\n${error.message}\n\nThis faculty member is already teaching another course at this time.`;
             } else if (errorMsg.includes("slot conflict")) {
               displayMessage = `❌ Slot Conflict!\n\n${error.message}\n\nThis slot conflicts with another slot already allocated to this faculty.`;
             } else if (errorMsg.includes("linked slot clash")) {
               displayMessage = `❌ Linked Slot Conflict!\n\n${error.message}\n\nThe afternoon session for this lab is already occupied.`;
-            } else if (
-              errorMsg.includes("4-hour lab") &&
-              errorMsg.includes("clash")
-            ) {
+            } else if (errorMsg.includes("4-hour lab") && errorMsg.includes("clash")) {
               displayMessage = `❌ 4-Hour Lab Conflict!\n\n${error.message}\n\nOne or more required time slots are unavailable.`;
             } else {
-              // For any other backend error message, show it directly
               displayMessage = `❌ Allocation Failed!\n\n${error.message}`;
             }
           } else {
@@ -2167,8 +2135,7 @@ function handleSaveFacultyAllocation() {
               "❌ Unknown error occurred while saving faculty allocation. Please try again.";
           }
 
-          // Show the error message to user
-          localShowAlert(displayMessage, "danger", 10000); // Show for 8 seconds for longer error messages
+          localShowAlert(displayMessage, "danger", 10000);
         });
     })
     .catch((error) => {

@@ -780,6 +780,212 @@ exports.createFacultyAllocation = async (req, res) => {
   }
 };
 
+// Atomic batch creation of faculty allocations (all-or-nothing)
+exports.createFacultyAllocationBatch = async (req, res) => {
+  const { allocations } = req.body;
+
+  if (!Array.isArray(allocations) || allocations.length === 0) {
+    return res.status(400).json({ message: "allocations array is required" });
+  }
+
+  // Validate all items have required fields
+  for (const alloc of allocations) {
+    if (!alloc.slot_year || !alloc.semester_type || !alloc.course_code ||
+        !alloc.employee_id || !alloc.venue || !alloc.slot_day ||
+        !alloc.slot_name || !alloc.slot_time) {
+      return res.status(400).json({ message: `All fields are required for each allocation (missing in ${alloc.slot_day || 'unknown'} entry)` });
+    }
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Phase 1: Run conflict checks for ALL allocations
+    const conflicts = [];
+
+    for (const alloc of allocations) {
+      const { slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time } = alloc;
+
+      // 1. Venue clash (different faculty, same venue/day/time)
+      const venueClashCheck = await client.query(
+        `SELECT fa.*, c.course_name, f.name as faculty_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2
+         AND fa.venue = $3 AND fa.slot_day = $4
+         AND fa.slot_time = $5 AND fa.employee_id != $6`,
+        [slot_year, semester_type, venue, slot_day, slot_time, employee_id]
+      );
+      if (venueClashCheck.rows.length > 0) {
+        const clash = venueClashCheck.rows[0];
+        conflicts.push({
+          day: slot_day, time: slot_time, slot: slot_name,
+          type: "venue_clash",
+          error: `Venue clash: ${venue} is already booked on ${slot_day} at ${slot_time} for ${clash.course_name} by ${clash.faculty_name}`
+        });
+        continue;
+      }
+
+      // 2. Time-based overlap at same venue+day
+      const venueTimeOverlapCheck = await client.query(
+        `SELECT fa.*, c.course_name, f.name as faculty_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN faculty f ON fa.employee_id = f.employee_id
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2
+         AND fa.venue = $3 AND fa.slot_day = $4
+         AND fa.course_code != $5`,
+        [slot_year, semester_type, venue, slot_day, course_code]
+      );
+      const newSlotTimes = parseSlotTimeRange(slot_time);
+      for (const existing of venueTimeOverlapCheck.rows) {
+        const existingTimes = parseSlotTimeRange(existing.slot_time);
+        if (timesOverlap(newSlotTimes, existingTimes)) {
+          conflicts.push({
+            day: slot_day, time: slot_time, slot: slot_name,
+            type: "time_overlap_conflict",
+            error: `Time overlap: ${venue} on ${slot_day} already has ${existing.slot_name} (${existing.slot_time}) for ${existing.course_name}, which overlaps with ${slot_name} (${slot_time})`
+          });
+          break;
+        }
+      }
+      if (conflicts.length > 0 && conflicts[conflicts.length - 1].day === slot_day && conflicts[conflicts.length - 1].type === "time_overlap_conflict") {
+        continue;
+      }
+
+      // 3. Faculty clash (same faculty, different course, same time)
+      const facultyClashCheck = await client.query(
+        `SELECT fa.*, c.course_name, v.venue as venue_name
+         FROM faculty_allocation fa
+         JOIN course c ON fa.course_code = c.course_code
+         JOIN venue v ON fa.venue = v.venue
+         WHERE fa.slot_year = $1 AND fa.semester_type = $2
+         AND fa.employee_id = $3 AND fa.slot_day = $4
+         AND fa.slot_time = $5 AND fa.course_code != $6`,
+        [slot_year, semester_type, employee_id, slot_day, slot_time, course_code]
+      );
+      if (facultyClashCheck.rows.length > 0) {
+        const clash = facultyClashCheck.rows[0];
+        conflicts.push({
+          day: slot_day, time: slot_time, slot: slot_name,
+          type: "faculty_clash",
+          error: `Faculty clash: Faculty is already assigned to ${clash.course_name} in ${clash.venue_name} on ${slot_day} at ${slot_time}`
+        });
+        continue;
+      }
+
+      // 4. Slot conflicts (from slot_conflict table)
+      const conflictingSlots = await client.query(
+        `SELECT conflicting_slot_name FROM slot_conflict
+         WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+        [slot_year, semester_type, slot_name]
+      );
+      if (conflictingSlots.rows.length > 0) {
+        const conflictingSlotNames = conflictingSlots.rows.map(r => r.conflicting_slot_name);
+
+        const slotConflictCheck = await client.query(
+          `SELECT fa.*, c.course_name, v.venue as venue_name
+           FROM faculty_allocation fa
+           JOIN course c ON fa.course_code = c.course_code
+           JOIN venue v ON fa.venue = v.venue
+           WHERE fa.slot_year = $1 AND fa.semester_type = $2
+           AND fa.employee_id = $3 AND fa.slot_name = ANY($4)`,
+          [slot_year, semester_type, employee_id, conflictingSlotNames]
+        );
+        if (slotConflictCheck.rows.length > 0) {
+          const conflict = slotConflictCheck.rows[0];
+          conflicts.push({
+            day: slot_day, time: slot_time, slot: slot_name,
+            type: "slot_conflict",
+            error: `Slot conflict: Faculty is already assigned to conflicting slot ${conflict.slot_name} for ${conflict.course_name} in ${conflict.venue_name}`
+          });
+          continue;
+        }
+
+        const venueDaySlotConflictCheck = await client.query(
+          `SELECT fa.*, c.course_name, f.name as faculty_name
+           FROM faculty_allocation fa
+           JOIN course c ON fa.course_code = c.course_code
+           JOIN faculty f ON fa.employee_id = f.employee_id
+           WHERE fa.slot_year = $1 AND fa.semester_type = $2
+           AND fa.venue = $3 AND fa.slot_day = $4
+           AND fa.slot_name = ANY($5)`,
+          [slot_year, semester_type, venue, slot_day, conflictingSlotNames]
+        );
+        if (venueDaySlotConflictCheck.rows.length > 0) {
+          const conflict = venueDaySlotConflictCheck.rows[0];
+          conflicts.push({
+            day: slot_day, time: slot_time, slot: slot_name,
+            type: "venue_day_slot_conflict",
+            error: `Venue-day slot conflict: ${venue} on ${slot_day} already has ${conflict.slot_name} allocated to ${conflict.faculty_name} for ${conflict.course_name}`
+          });
+          continue;
+        }
+      }
+    }
+
+    // If any conflicts found, rollback and return all conflict details
+    if (conflicts.length > 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(409).json({
+        message: "Conflicts found - no allocations were created",
+        conflicts
+      });
+    }
+
+    // Phase 2: Insert all allocations
+    const results = [];
+    let insertedCount = 0;
+
+    for (const alloc of allocations) {
+      const { slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time } = alloc;
+
+      // Check if already exists (idempotent)
+      const existingCheck = await client.query(
+        `SELECT * FROM faculty_allocation
+         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+         AND employee_id = $4 AND venue = $5 AND slot_day = $6
+         AND slot_name = $7 AND slot_time = $8`,
+        [slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time]
+      );
+
+      if (existingCheck.rows.length > 0) {
+        results.push(existingCheck.rows[0]);
+      } else {
+        const insertResult = await client.query(
+          `INSERT INTO faculty_allocation
+           (slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING *`,
+          [slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time]
+        );
+        results.push(insertResult.rows[0]);
+        insertedCount++;
+      }
+    }
+
+    await client.query("COMMIT");
+    client.release();
+
+    res.status(201).json({
+      message: `${insertedCount} faculty allocation(s) created successfully`,
+      allocations: results,
+      totalInserted: insertedCount
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    client.release();
+    console.error("Batch faculty allocation error:", error);
+    res.status(500).json({
+      message: "Server error while creating faculty allocations",
+      error: error.message
+    });
+  }
+};
+
 // Get faculty timetable
 exports.getFacultyTimetable = async (req, res) => {
   try {
