@@ -5,10 +5,11 @@ const { verifyToken } = require("../middleware/auth.middleware");
 
 const router = express.Router();
 
-// Rate limiter for login endpoint: max 10 attempts per IP per 15 minutes
+// Rate limiter for login endpoint: max 3 attempts per worker per 15 minutes
+// (PM2 cluster mode runs 4 workers, so effective limit is ~12 total attempts)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 3,
   message: {
     message: "Too many login attempts. Please try again after 15 minutes.",
   },
