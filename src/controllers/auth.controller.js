@@ -9,7 +9,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1h";
 // Login controller
 exports.login = async (req, res) => {
   try {
-    console.log("Login attempt:", req.body);
+    console.log("Login attempt:", { username: req.body.username });
     const { username, password } = req.body;
 
     // Validate input
