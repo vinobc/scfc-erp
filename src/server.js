@@ -58,56 +58,31 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/api/auth", authRoutes);
 app.use("/api/student-auth", studentAuthRoutes);
 app.use("/api/schools", schoolRoutes);
-console.log("Registering semesters routes at /api/semesters");
 app.use("/api/semesters", semesterRoutes);
-console.log("Registering programs routes at /api/programs");
 app.use("/api/programs", programRoutes);
-console.log("Registering venues routes at /api/venues");
 app.use("/api/venues", venueRoutes);
-console.log("Registering faculty routes at /api/faculty");
 app.use("/api/faculty", facultyRoutes);
-console.log("Registering staff routes at /api/staff");
 app.use("/api/staff", staffRoutes);
-console.log("Registering course routes at /api/courses");
 app.use("/api/courses", courseRoutes);
-console.log("Registering student routes at /api/students");
 app.use("/api/students", studentRoutes);
-console.log("Registering slot routes at /api/slots");
 app.use("/api/slots", slotRoutes);
-console.log(
-  "Registering faculty allocation routes at /api/faculty-allocations"
-);
 app.use("/api/faculty-allocations", facultyAllocationRoutes);
-console.log(
-  "Registering semester slot config routes at /api/semester-slot-configs"
-);
 app.use("/api/semester-slot-configs", semesterSlotConfigRoutes);
-console.log("Registering slot conflict routes at /api/slot-conflicts");
 app.use("/api/slot-conflicts", require("./routes/slot-conflict.routes"));
-console.log(
-  "Registering timetable coordinator routes at /api/timetable-coordinators"
-);
 app.use("/api/timetable-coordinators", timetableCoordinatorRoutes);
-console.log("Registering user routes at /api/users");
 app.use("/api/users", userRoutes);
-// Course Registration Routes
 app.use(
   "/api/course-registration",
   require("./routes/course-registration.routes")
 );
-// Course Withdrawal Routes
 app.use(
   "/api/course-withdrawal",
   require("./routes/course-withdrawal.routes")
 );
 app.use("/api/system-config", systemConfigRoutes);
-console.log("Registering attendance routes at /api/attendance");
 app.use("/api/attendance", attendanceRoutes);
-console.log("Registering project allocation routes at /api/project-allocations");
 app.use("/api/project-allocations", projectAllocationRoutes);
-console.log("Registering marks routes at /api/marks");
 app.use("/api/marks", marksRoutes);
-console.log("Registering reports routes at /api/reports");
 app.use("/api/reports", reportsRoutes);
 
 // Root route

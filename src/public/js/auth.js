@@ -157,8 +157,13 @@ function handleLogin() {
     },
     body: JSON.stringify({ username, password }),
   })
-    .then((response) => {
+    .then(async (response) => {
       if (!response.ok) {
+        // If rate limited, show the server's message immediately
+        if (response.status === 429) {
+          const data = await response.json();
+          throw new Error(data.message || "Too many login attempts. Please try again later.");
+        }
         // If regular login fails, try student login for @blr.amity.edu addresses
         if (username.endsWith("@blr.amity.edu")) {
           console.log("DEBUG - Regular login failed, trying student endpoint");
@@ -174,8 +179,12 @@ function handleLogin() {
       }
       return response;
     })
-    .then((response) => {
+    .then(async (response) => {
       if (!response.ok) {
+        if (response.status === 429) {
+          const data = await response.json();
+          throw new Error(data.message || "Too many login attempts. Please try again later.");
+        }
         throw new Error("Login failed");
       }
       return response.json();
@@ -244,7 +253,11 @@ function handleLogin() {
     })
     .catch((error) => {
       console.error("Login error:", error);
-      showLoginError("Invalid username or password. Please try again.");
+      if (error.message && error.message !== "Login failed") {
+        showLoginError(error.message);
+      } else {
+        showLoginError("Invalid username or password. Please try again.");
+      }
     })
     .finally(() => {
       // Reset button state
