@@ -578,12 +578,47 @@ exports.getStudentCourses = async (req, res) => {
 
     const result = await db.query(query, params);
 
-    // Process results to add component labels
-    const processedResults = result.rows.map(row => ({
-      ...row,
-      component_label: row.component_type === 'T' ? 'Theory' :
-                       row.component_type === 'P' ? 'Lab' : null
-    }));
+    // Process results: split comma-separated lab slots into individual rows
+    const processedResults = [];
+    for (const row of result.rows) {
+      const componentLabel = row.component_type === 'T' ? 'Theory' :
+                             row.component_type === 'P' ? 'Lab' : null;
+
+      // Check if slot_name has commas (e.g., "L1+L2, L27+L28")
+      if (row.slot_name && row.slot_name.includes(',')) {
+        const individualSlots = row.slot_name.split(',').map(s => s.trim());
+        for (const slot of individualSlots) {
+          // Query attendance for each individual slot
+          const attResult = await db.query(`
+            SELECT
+              CASE WHEN COUNT(a.id) = 0 THEN 0
+                ELSE ROUND((COUNT(CASE WHEN a.status IN ('present', 'OD') THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
+              END as attendance_percentage,
+              COUNT(a.id) as total_classes,
+              COUNT(CASE WHEN a.status IN ('present', 'OD') THEN 1 END) as present_classes
+            FROM attendance a
+            WHERE a.student_id = $1
+              AND a.course_code = $2
+              AND a.slot_year = $3
+              AND a.semester_type = $4
+              AND a.slot_name = $5
+          `, [studentId, row.course_code, row.slot_year, row.semester_type, slot]);
+
+          const att = attResult.rows[0];
+          processedResults.push({
+            ...row,
+            slot_name: slot,
+            original_slot_name: row.slot_name,
+            attendance_percentage: att.attendance_percentage,
+            total_classes: parseInt(att.total_classes),
+            present_classes: parseInt(att.present_classes),
+            component_label: componentLabel
+          });
+        }
+      } else {
+        processedResults.push({ ...row, component_label: componentLabel });
+      }
+    }
 
     res.status(200).json(processedResults);
   } catch (error) {
