@@ -1789,30 +1789,21 @@ exports.updateFacultyAllocation = async (req, res) => {
         }
       }
 
-      // Get all related allocations (same course, faculty, and venue)
-      // For theory slots (A, B, C, etc.): get all days for that slot at the same venue
-      // For lab slots (L1+L2, L17+L18, etc.): get all lab slots for that course+faculty at the same venue
+      // Get all related allocations (same course, faculty, slot_name, and venue)
+      // This gets all days for that specific slot at the same venue
       const isLabSlot = oldAllocation.slot_name.startsWith("L");
       const relatedAllocations = await client.query(
         `SELECT * FROM faculty_allocation
          WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
-         AND employee_id = $4 AND ${isLabSlot ? "slot_name LIKE 'L%'" : "slot_name = $5"} AND venue = ${isLabSlot ? "$5" : "$6"}`,
-        isLabSlot
-          ? [
-              oldAllocation.slot_year,
-              oldAllocation.semester_type,
-              oldAllocation.course_code,
-              oldAllocation.employee_id,
-              oldAllocation.venue,
-            ]
-          : [
-              oldAllocation.slot_year,
-              oldAllocation.semester_type,
-              oldAllocation.course_code,
-              oldAllocation.employee_id,
-              oldAllocation.slot_name,
-              oldAllocation.venue,
-            ]
+         AND employee_id = $4 AND slot_name = $5 AND venue = $6`,
+        [
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.course_code,
+          oldAllocation.employee_id,
+          oldAllocation.slot_name,
+          oldAllocation.venue,
+        ]
       );
 
       console.log(`Found ${relatedAllocations.rows.length} related allocation(s) to update`);
@@ -1866,9 +1857,7 @@ exports.updateFacultyAllocation = async (req, res) => {
           oldAllocation.venue
         );
 
-        const slotCondition = isLabSlot
-          ? "slot_name LIKE 'L%'"
-          : `slot_name = $${attendanceParamIndex + 5}`;
+        const slotCondition = `slot_name = $${attendanceParamIndex + 5}`;
 
         const attendanceUpdateQuery = `
           UPDATE attendance
@@ -1880,10 +1869,7 @@ exports.updateFacultyAllocation = async (req, res) => {
             AND venue = $${attendanceParamIndex++}
             AND ${slotCondition}`;
 
-        // Add slot_name param only for non-lab slots
-        if (!isLabSlot) {
-          attendanceParams.push(oldAllocation.slot_name);
-        }
+        attendanceParams.push(oldAllocation.slot_name);
 
         const attendanceUpdateResult = await client.query(
           attendanceUpdateQuery,
@@ -1898,23 +1884,15 @@ exports.updateFacultyAllocation = async (req, res) => {
       await client.query(
         `DELETE FROM faculty_allocation
          WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
-         AND employee_id = $4 AND ${isLabSlot ? "slot_name LIKE 'L%'" : "slot_name = $5"} AND venue = ${isLabSlot ? "$5" : "$6"}`,
-        isLabSlot
-          ? [
-              oldAllocation.slot_year,
-              oldAllocation.semester_type,
-              oldAllocation.course_code,
-              oldAllocation.employee_id,
-              oldAllocation.venue,
-            ]
-          : [
-              oldAllocation.slot_year,
-              oldAllocation.semester_type,
-              oldAllocation.course_code,
-              oldAllocation.employee_id,
-              oldAllocation.slot_name,
-              oldAllocation.venue,
-            ]
+         AND employee_id = $4 AND slot_name = $5 AND venue = $6`,
+        [
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.course_code,
+          oldAllocation.employee_id,
+          oldAllocation.slot_name,
+          oldAllocation.venue,
+        ]
       )
 
       // Update student registrations if there are any students
@@ -1945,9 +1923,7 @@ exports.updateFacultyAllocation = async (req, res) => {
           oldAllocation.faculty_name
         );
 
-        const regSlotCondition = isLabSlot
-          ? "slot_name LIKE 'L%'"
-          : `slot_name = $${paramIndex + 5}`;
+        const regSlotCondition = `slot_name = $${paramIndex + 5}`;
 
         const updateQuery = `
           UPDATE student_registrations
@@ -1960,10 +1936,7 @@ exports.updateFacultyAllocation = async (req, res) => {
             AND faculty_name = $${paramIndex++}
           RETURNING *`;
 
-        // Add slot_name param only for non-lab slots
-        if (!isLabSlot) {
-          updateParams.push(oldAllocation.slot_name);
-        }
+        updateParams.push(oldAllocation.slot_name);
 
         const updateResult = await client.query(updateQuery, updateParams);
         console.log(`Updated ${updateResult.rowCount} student registration(s)`);
