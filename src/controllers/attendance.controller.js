@@ -129,9 +129,15 @@ exports.getEnrolledStudents = async (req, res) => {
          AND a.slot_time = $8
          AND a.attendance_date = $9
        WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
-       AND sr.faculty_name = (SELECT name FROM faculty WHERE employee_id = $4)
-       AND sr.venue = $5 
+       AND sr.venue = $5
        AND (sr.slot_name = $7 OR sr.slot_name LIKE '%' || $7 || '%')
+       AND EXISTS (
+         SELECT 1 FROM faculty_allocation fa
+         WHERE fa.course_code = sr.course_code
+         AND fa.slot_year = sr.slot_year AND fa.semester_type = sr.semester_type
+         AND fa.employee_id = $4 AND fa.venue = sr.venue
+         AND sr.slot_name LIKE '%' || fa.slot_name || '%'
+       )
        AND sr.withdrawn = false
        ORDER BY sr.enrollment_number`,
       [slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time, targetDate]
