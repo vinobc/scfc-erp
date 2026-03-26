@@ -342,8 +342,9 @@ async function loadAttendanceInterface(course_code, employee_id, venue, slot_day
     });
 
     if (!response.ok) throw new Error("Failed to load enrolled students");
-    
-    enrolledStudents = await response.json();
+
+    const data = await response.json();
+    enrolledStudents = data.students || data;
     renderAttendanceInterface();
 
   } catch (error) {
@@ -414,19 +415,25 @@ function renderAttendanceInterface() {
   `;
 
   enrolledStudents.forEach((student, index) => {
+    const isOD = student.current_status === 'OD';
     interfaceHtml += `
-      <tr>
+      <tr ${isOD ? 'class="table-info"' : ''}>
         <td>${index + 1}</td>
         <td>${student.enrollment_number}</td>
         <td>${student.student_name}</td>
         <td>
-          <div class="btn-group" role="group" aria-label="Attendance options">
-            <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present">
-            <label class="btn btn-outline-success" for="present_${student.student_id}">Present</label>
+          ${isOD ? `
+            <span class="badge bg-info fs-6">OD (On Duty)</span>
+            <input type="hidden" name="attendance_${student.student_id}" value="OD">
+          ` : `
+            <div class="btn-group" role="group" aria-label="Attendance options">
+              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present">
+              <label class="btn btn-outline-success" for="present_${student.student_id}">Present</label>
 
-            <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent">
-            <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
-          </div>
+              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent">
+              <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
+            </div>
+          `}
         </td>
       </tr>
     `;
@@ -469,13 +476,14 @@ function renderAttendanceInterface() {
   });
 }
 
-// Bulk mark attendance
+// Bulk mark attendance (skips OD students)
 function bulkMarkAttendance(status) {
   enrolledStudents.forEach(student => {
+    if (student.current_status === 'OD') return;
     const radio = document.getElementById(`${status}_${student.student_id}`);
     if (radio) radio.checked = true;
   });
-  showAttendanceAlert(`All students marked as ${status}`, "success");
+  showAttendanceAlert(`All students marked as ${status} (OD students excluded)`, "success");
 }
 
 // Save attendance
@@ -487,11 +495,11 @@ async function saveAttendance() {
     return;
   }
 
-  // Collect attendance data
+  // Collect attendance data (skip OD students - they are read-only)
   const attendanceRecords = [];
   enrolledStudents.forEach(student => {
     const checkedRadio = document.querySelector(`input[name="attendance_${student.student_id}"]:checked`);
-    if (checkedRadio) {
+    if (checkedRadio && checkedRadio.value !== 'OD') {
       attendanceRecords.push({
         student_id: student.student_id,
         ...selectedAllocation,
