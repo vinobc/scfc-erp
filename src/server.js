@@ -27,6 +27,7 @@ const attendanceRoutes = require("./routes/attendance.routes");
 const projectAllocationRoutes = require("./routes/project-allocation.routes");
 const marksRoutes = require("./routes/marks.routes");
 const reportsRoutes = require("./routes/reports.routes");
+const odRoutes = require("./routes/od.routes");
 
 // Initialize express app
 const app = express();
@@ -84,6 +85,7 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/project-allocations", projectAllocationRoutes);
 app.use("/api/marks", marksRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/od", odRoutes);
 
 // Root route
 app.get("/", (req, res) => {

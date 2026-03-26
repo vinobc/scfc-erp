@@ -183,6 +183,7 @@ function updateNavigationByRole(userRole) {
     projectAllocation: document.getElementById("project-allocation-link"),
     attendance: document.getElementById("attendance-link"),
     marks: document.getElementById("marks-link"),
+    od: document.getElementById("od-link"),
     systemConfig: document.getElementById("system-config-link"),
     downloadReports: document.getElementById("download-reports-link"),
     coursesView: document.getElementById("courses-view-link"),
@@ -226,8 +227,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "faculty":
-      // Faculty sees: Dashboard, Courses (view only), Attendance, Marks, TimeTable (VIEW ONLY), Change Password, Logout
-      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.marks, navItems.changePassword, navItems.logout].forEach((item) => {
+      // Faculty sees: Dashboard, Courses (view only), Attendance, OD, Marks, TimeTable (VIEW ONLY), Change Password, Logout
+      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.od, navItems.marks, navItems.changePassword, navItems.logout].forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
         }
@@ -242,7 +243,12 @@ function updateNavigationByRole(userRole) {
 
     case "staff":
       // Staff sees: Timetable (View Student Slot TimeTable only), Change Password, Logout
-      [navItems.timetable, navItems.changePassword, navItems.logout].forEach((item) => {
+      // Only DSW (Maria Rose Kurian - 316690) also sees OD Management
+      const staffItems = [navItems.timetable, navItems.changePassword, navItems.logout];
+      if (currentUser && currentUser.username === "316690@blr.amity.edu") {
+        staffItems.unshift(navItems.od);
+      }
+      staffItems.forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
         }
@@ -526,6 +532,12 @@ function setupNavigation() {
         } else if (targetPage === "semesters-page") {
           if (typeof loadSemesters === "function") {
             loadSemesters();
+          }
+        } else if (targetPage === "od-page") {
+          if (typeof window.initializeOD === "function") {
+            window.initializeOD();
+          } else if (typeof initializeOD === "function") {
+            initializeOD();
           }
         }
         // Add other page data loading as needed
@@ -1662,12 +1674,17 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
   students.forEach((student, index) => {
     // Only pre-select attendance if a specific date is selected
     const currentStatus = attendanceDate ? (student.current_status || null) : null;
+    const isOD = currentStatus === 'OD';
     interfaceHtml += `
-      <tr>
+      <tr ${isOD ? 'class="table-info"' : ''}>
         <td>${index + 1}</td>
         <td>${student.enrollment_number}</td>
         <td>${student.student_name}</td>
         <td>
+          ${isOD ? `
+            <span class="badge bg-info fs-6">OD (On Duty)</span>
+            <input type="hidden" name="attendance_${student.student_id}" value="OD">
+          ` : `
           <div class="btn-group" role="group" aria-label="Attendance options">
             <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}>
             <label class="btn btn-outline-success" for="present_${student.student_id}">Present</label>
@@ -1675,6 +1692,7 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
             <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}>
             <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
           </div>
+          `}
         </td>
       </tr>
     `;

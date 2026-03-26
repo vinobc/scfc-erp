@@ -111,6 +111,38 @@ exports.canManageFacultyAllocations = (req, res, next) => {
   next();
 };
 
+// Check if user is DSW (Director of Student Welfare) or admin
+// DSW is identified by username '316690@blr.amity.edu' (staff user)
+exports.isDSWOrAdmin = async (req, res, next) => {
+  if (req.userRole === "admin") return next();
+  if (req.userRole !== "staff") {
+    return res.status(403).json({ message: "Require DSW or Admin Role" });
+  }
+  try {
+    const db = require("../config/db");
+    const result = await db.query(
+      'SELECT username FROM "user" WHERE user_id = $1',
+      [req.userId]
+    );
+    if (!result.rows.length || result.rows[0].username !== "316690@blr.amity.edu") {
+      return res.status(403).json({ message: "Require DSW or Admin Role" });
+    }
+    next();
+  } catch (error) {
+    return res.status(500).json({ message: "Server error checking DSW role" });
+  }
+};
+
+// Check if user has faculty, staff, or admin role
+exports.isFacultyOrStaffOrAdmin = (req, res, next) => {
+  if (!["admin", "faculty", "staff"].includes(req.userRole)) {
+    return res
+      .status(403)
+      .json({ message: "Require Faculty, Staff, or Admin Role" });
+  }
+  next();
+};
+
 // Check if user can view timetables (faculty, coordinators, and admins)
 exports.canViewTimetables = (req, res, next) => {
   if (
