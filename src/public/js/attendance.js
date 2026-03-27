@@ -415,25 +415,24 @@ function renderAttendanceInterface() {
   `;
 
   enrolledStudents.forEach((student, index) => {
-    const isOD = student.current_status === 'OD';
+    const currentStatus = student.current_status || null;
+    const isOD = student.is_od === true;
     interfaceHtml += `
-      <tr ${isOD ? 'class="table-info"' : ''}>
+      <tr>
         <td>${index + 1}</td>
         <td>${student.enrollment_number}</td>
         <td>${student.student_name}</td>
         <td>
-          ${isOD ? `
-            <span class="badge bg-info fs-6">OD (On Duty)</span>
-            <input type="hidden" name="attendance_${student.student_id}" value="OD">
-          ` : `
+          <div class="d-flex align-items-center">
             <div class="btn-group" role="group" aria-label="Attendance options">
-              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present">
+              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}>
               <label class="btn btn-outline-success" for="present_${student.student_id}">Present</label>
 
-              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent">
+              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}>
               <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
             </div>
-          `}
+            ${isOD ? '<span class="badge bg-info ms-2 fs-6">OD</span>' : ''}
+          </div>
         </td>
       </tr>
     `;
@@ -476,30 +475,29 @@ function renderAttendanceInterface() {
   });
 }
 
-// Bulk mark attendance (skips OD students)
+// Bulk mark attendance (includes all students, OD is a separate indicator)
 function bulkMarkAttendance(status) {
   enrolledStudents.forEach(student => {
-    if (student.current_status === 'OD') return;
     const radio = document.getElementById(`${status}_${student.student_id}`);
     if (radio) radio.checked = true;
   });
-  showAttendanceAlert(`All students marked as ${status} (OD students excluded)`, "success");
+  showAttendanceAlert(`All students marked as ${status}`, "success");
 }
 
 // Save attendance
 async function saveAttendance() {
   const attendanceDate = document.getElementById("attendance-date").value;
-  
+
   if (!attendanceDate) {
     showAttendanceAlert("Please select attendance date", "warning");
     return;
   }
 
-  // Collect attendance data (skip OD students - they are read-only)
+  // Collect attendance data (all students including OD — OD is a separate flag)
   const attendanceRecords = [];
   enrolledStudents.forEach(student => {
     const checkedRadio = document.querySelector(`input[name="attendance_${student.student_id}"]:checked`);
-    if (checkedRadio && checkedRadio.value !== 'OD') {
+    if (checkedRadio) {
       attendanceRecords.push({
         student_id: student.student_id,
         ...selectedAllocation,

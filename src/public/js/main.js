@@ -1674,25 +1674,23 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
   students.forEach((student, index) => {
     // Only pre-select attendance if a specific date is selected
     const currentStatus = attendanceDate ? (student.current_status || null) : null;
-    const isOD = currentStatus === 'OD';
+    const isOD = student.is_od === true;
     interfaceHtml += `
-      <tr ${isOD ? 'class="table-info"' : ''}>
+      <tr>
         <td>${index + 1}</td>
         <td>${student.enrollment_number}</td>
         <td>${student.student_name}</td>
         <td>
-          ${isOD ? `
-            <span class="badge bg-info fs-6">OD (On Duty)</span>
-            <input type="hidden" name="attendance_${student.student_id}" value="OD">
-          ` : `
-          <div class="btn-group" role="group" aria-label="Attendance options">
-            <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}>
-            <label class="btn btn-outline-success" for="present_${student.student_id}">Present</label>
+          <div class="d-flex align-items-center">
+            <div class="btn-group" role="group" aria-label="Attendance options">
+              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="present_${student.student_id}" value="present" ${currentStatus === 'present' ? 'checked' : ''}>
+              <label class="btn btn-outline-success" for="present_${student.student_id}">Present</label>
 
-            <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}>
-            <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
+              <input type="radio" class="btn-check" name="attendance_${student.student_id}" id="absent_${student.student_id}" value="absent" ${currentStatus === 'absent' ? 'checked' : ''}>
+              <label class="btn btn-outline-danger" for="absent_${student.student_id}">Absent</label>
+            </div>
+            ${isOD ? '<span class="badge bg-info ms-2 fs-6">OD</span>' : ''}
           </div>
-          `}
         </td>
       </tr>
     `;
@@ -2437,23 +2435,21 @@ async function viewStudentAttendanceDetails(courseCode, slotYear, semesterType, 
                   </tr>
                 </thead>
                 <tbody>
-                  ${attendance_records.map(record => `
+                  ${attendance_records.map(record => {
+                    const statusBadge = record.status
+                      ? `<span class="badge bg-${record.status === 'present' ? 'success' : 'danger'}">${record.status.toUpperCase()}</span>`
+                      : '<span class="badge bg-secondary">NOT MARKED</span>';
+                    const odBadge = record.is_od ? '<span class="badge bg-info ms-1">OD</span>' : '';
+                    return `
                     <tr>
                       <td>${new Date(record.attendance_date).toLocaleDateString()}</td>
                       <td>${record.slot_day}</td>
                       <td>${record.slot_name} - ${record.slot_time}</td>
                       <td>${record.venue}</td>
                       <td>${record.faculty_name}</td>
-                      <td>
-                        <span class="badge bg-${
-                          record.status === 'present' ? 'success' : 
-                          record.status === 'absent' ? 'danger' : 'info'
-                        }">
-                          ${record.status.toUpperCase()}
-                        </span>
-                      </td>
+                      <td>${statusBadge}${odBadge}</td>
                     </tr>
-                  `).join('')}
+                  `}).join('')}
                 </tbody>
               </table>
             </div>
