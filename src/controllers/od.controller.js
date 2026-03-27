@@ -87,10 +87,10 @@ async function autoMarkOD(
       await db.query(
         `INSERT INTO attendance
          (student_id, slot_year, semester_type, course_code, employee_id, venue,
-          slot_day, slot_name, slot_time, attendance_date, status, recorded_by, od_activity_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'OD', $11, $12)
+          slot_day, slot_name, slot_time, attendance_date, status, is_od, recorded_by, od_activity_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, true, $11, $12)
          ON CONFLICT (student_id, slot_year, semester_type, course_code, employee_id, venue, slot_day, slot_name, slot_time, attendance_date)
-         DO UPDATE SET status = 'OD', recorded_by = $11, od_activity_id = $12, updated_at = CURRENT_TIMESTAMP`,
+         DO UPDATE SET is_od = true, od_activity_id = $12, updated_at = CURRENT_TIMESTAMP`,
         [
           studentId,
           slot.slot_year,
@@ -118,17 +118,30 @@ async function removeODRecords(activityId, enrollmentNumber) {
   );
   if (!studentResult.rows.length) return;
 
+  const studentId = studentResult.rows[0].user_id;
+  // If faculty already marked attendance, just clear OD flag; otherwise delete the record
   await db.query(
-    "DELETE FROM attendance WHERE od_activity_id = $1 AND student_id = $2",
-    [activityId, studentResult.rows[0].user_id]
+    "UPDATE attendance SET is_od = false, od_activity_id = NULL WHERE od_activity_id = $1 AND student_id = $2 AND status IS NOT NULL",
+    [activityId, studentId]
+  );
+  await db.query(
+    "DELETE FROM attendance WHERE od_activity_id = $1 AND student_id = $2 AND status IS NULL",
+    [activityId, studentId]
   );
 }
 
 // Helper: remove all OD records for an activity
 async function removeAllODRecordsForActivity(activityId) {
-  await db.query("DELETE FROM attendance WHERE od_activity_id = $1", [
-    activityId,
-  ]);
+  // Preserve faculty-marked records, just clear OD flag
+  await db.query(
+    "UPDATE attendance SET is_od = false, od_activity_id = NULL WHERE od_activity_id = $1 AND status IS NOT NULL",
+    [activityId]
+  );
+  // Delete auto-created records where faculty never marked
+  await db.query(
+    "DELETE FROM attendance WHERE od_activity_id = $1 AND status IS NULL",
+    [activityId]
+  );
 }
 
 // ==================== DSW Event Management ====================
@@ -598,6 +611,17 @@ exports.addStudentToActivity = async (req, res) => {
     );
     if (!activityResult.rows.length) {
       return res.status(404).json({ message: "Activity not found" });
+    }
+
+    // Block adding students to future-dated activities
+    const activityDate = new Date(activityResult.rows[0].activity_date);
+    const today = new Date();
+    activityDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    if (activityDate > today) {
+      return res.status(400).json({
+        message: "Cannot add students to future-dated activities. Students can only be added on or after the activity date.",
+      });
     }
 
     // Verify access
