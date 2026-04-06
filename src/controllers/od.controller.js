@@ -214,8 +214,8 @@ exports.getEvents = async (req, res) => {
     const params = [];
     const conditions = [];
 
-    // If faculty role, only show their events
-    if (req.userRole === "faculty") {
+    // If faculty or timetable_coordinator role, only show their events
+    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
         [req.userId]
