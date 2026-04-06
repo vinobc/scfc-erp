@@ -16,7 +16,7 @@ function initializeOD() {
 
   if (userRole === "admin" || isDSW) {
     showDSWInterface();
-  } else if (userRole === "faculty" || userRole === "staff") {
+  } else if (userRole === "faculty" || userRole === "staff" || userRole === "timetable_coordinator") {
     showCoordinatorInterface();
   } else {
     odContent.innerHTML = '<div class="alert alert-warning">You do not have access to OD Management.</div>';

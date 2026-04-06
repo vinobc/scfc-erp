@@ -135,7 +135,7 @@ exports.isDSWOrAdmin = async (req, res, next) => {
 
 // Check if user has faculty, staff, or admin role
 exports.isFacultyOrStaffOrAdmin = (req, res, next) => {
-  if (!["admin", "faculty", "staff"].includes(req.userRole)) {
+  if (!["admin", "faculty", "staff", "timetable_coordinator"].includes(req.userRole)) {
     return res
       .status(403)
       .json({ message: "Require Faculty, Staff, or Admin Role" });
