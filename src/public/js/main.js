@@ -210,8 +210,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "timetable_coordinator":
-      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, OD, Marks, Change Password, Logout
-      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.od, navItems.marks, navItems.changePassword, navItems.logout].forEach(
+      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, OD, Marks, Download Reports, Change Password, Logout
+      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.od, navItems.marks, navItems.downloadReports, navItems.changePassword, navItems.logout].forEach(
         (item) => {
           if (item && item.parentElement) {
             item.parentElement.style.display = "block";
@@ -227,8 +227,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "faculty":
-      // Faculty sees: Dashboard, Courses (view only), Attendance, OD, Marks, TimeTable (VIEW ONLY), Change Password, Logout
-      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.od, navItems.marks, navItems.changePassword, navItems.logout].forEach((item) => {
+      // Faculty sees: Dashboard, Courses (view only), Attendance, OD, Marks, Download Reports, TimeTable (VIEW ONLY), Change Password, Logout
+      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.od, navItems.marks, navItems.downloadReports, navItems.changePassword, navItems.logout].forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
         }
@@ -244,7 +244,7 @@ function updateNavigationByRole(userRole) {
     case "staff":
       // Staff sees: Timetable (View Student Slot TimeTable only), Change Password, Logout
       // Only DSW (Maria Rose Kurian - 316690) also sees OD Management
-      const staffItems = [navItems.timetable, navItems.changePassword, navItems.logout];
+      const staffItems = [navItems.timetable, navItems.downloadReports, navItems.changePassword, navItems.logout];
       if (currentUser && currentUser.username === "316690@blr.amity.edu") {
         staffItems.unshift(navItems.od);
       }
