@@ -15,10 +15,12 @@ async function loadFilterOptions() {
 
   try {
     // Load distinct slot_years and semester_types from available data
-    const [schoolsRes, programsRes, coursesRes] = await Promise.all([
+    const [schoolsRes, programsRes, coursesRes, slotsRes, venuesRes] = await Promise.all([
       fetch(`${window.API_URL}/schools`, { headers }),
       fetch(`${window.API_URL}/programs`, { headers }),
-      fetch(`${window.API_URL}/courses`, { headers })
+      fetch(`${window.API_URL}/courses`, { headers }),
+      fetch(`${window.API_URL}/slots`, { headers }),
+      fetch(`${window.API_URL}/venues`, { headers })
     ]);
 
     if (schoolsRes.ok) {
@@ -59,6 +61,35 @@ async function loadFilterOptions() {
           opt.value = c.course_code;
           opt.textContent = `${c.course_code} - ${c.course_name}`;
           courseSelect.appendChild(opt);
+        });
+      }
+    }
+
+    if (slotsRes.ok) {
+      const slots = await slotsRes.json();
+      const slotSelect = document.getElementById("report-filter-slot");
+      if (slotSelect) {
+        const uniqueSlotNames = [...new Set(slots.map(s => s.slot_name))].sort();
+        uniqueSlotNames.forEach(name => {
+          const opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          slotSelect.appendChild(opt);
+        });
+      }
+    }
+
+    if (venuesRes.ok) {
+      const venues = await venuesRes.json();
+      const venueSelect = document.getElementById("report-filter-venue");
+      if (venueSelect) {
+        venues.sort((a, b) => (a.venue || '').localeCompare(b.venue || ''));
+        venues.forEach(v => {
+          if (!v.venue) return;
+          const opt = document.createElement("option");
+          opt.value = v.venue;
+          opt.textContent = v.venue;
+          venueSelect.appendChild(opt);
         });
       }
     }
@@ -141,6 +172,18 @@ function displayDownloadReportsInterface() {
                         <option value="">All Courses</option>
                       </select>
                     </div>
+                    <div class="col-md-3">
+                      <label for="report-filter-slot" class="form-label">Slot</label>
+                      <select id="report-filter-slot" class="form-select">
+                        <option value="">All Slots</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="report-filter-venue" class="form-label">Venue</label>
+                      <select id="report-filter-venue" class="form-select">
+                        <option value="">All Venues</option>
+                      </select>
+                    </div>
                     <div class="col-md-3 d-flex align-items-end">
                       <button class="btn btn-outline-secondary" onclick="clearReportFilters()">
                         <i class="fas fa-times me-1"></i>Clear Filters
@@ -189,6 +232,8 @@ function clearReportFilters() {
   document.getElementById("report-filter-school").value = "";
   document.getElementById("report-filter-program").value = "";
   document.getElementById("report-filter-course").value = "";
+  document.getElementById("report-filter-slot").value = "";
+  document.getElementById("report-filter-venue").value = "";
 }
 
 // Build query string from filters
@@ -201,12 +246,16 @@ function buildFilterParams(format) {
   const school = document.getElementById("report-filter-school").value;
   const program = document.getElementById("report-filter-program").value;
   const course = document.getElementById("report-filter-course").value;
+  const slot = document.getElementById("report-filter-slot").value;
+  const venue = document.getElementById("report-filter-venue").value;
 
   if (year) params.append("slot_year", year);
   if (semester) params.append("semester_type", semester);
   if (school) params.append("school", school);
   if (program) params.append("program_code", program);
   if (course) params.append("course_code", course);
+  if (slot) params.append("slot_name", slot);
+  if (venue) params.append("venue", venue);
 
   return params.toString();
 }

@@ -5,7 +5,7 @@ const XLSX = require("xlsx");
 exports.getStudentRegistrations = async (req, res) => {
   try {
     const format = req.query.format || "excel";
-    const { slot_year, semester_type, school, program_code, course_code } = req.query;
+    const { slot_year, semester_type, school, program_code, course_code, slot_name, venue } = req.query;
 
     // Build dynamic query
     let query = `
@@ -62,6 +62,14 @@ exports.getStudentRegistrations = async (req, res) => {
     if (course_code) {
       params.push(course_code);
       conditions.push(`sr.course_code = $${params.length}`);
+    }
+    if (slot_name) {
+      params.push(slot_name);
+      conditions.push(`sr.slot_name = $${params.length}`);
+    }
+    if (venue) {
+      params.push(venue);
+      conditions.push(`sr.venue = $${params.length}`);
     }
 
     // Faculty can only see their own courses
