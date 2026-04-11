@@ -115,6 +115,21 @@ const SYNC_TABLES = [
     ],
   },
   {
+    name: "od_event",
+    primaryKey: "event_id",
+    dependencies: ["faculty", "user"],
+  },
+  {
+    name: "od_activity",
+    primaryKey: "activity_id",
+    dependencies: ["od_event"],
+  },
+  {
+    name: "od_activity_student",
+    primaryKey: "id",
+    dependencies: ["od_activity"],
+  },
+  {
     name: "student_registrations",
     primaryKey: "id",
     dependencies: [
@@ -137,6 +152,21 @@ const SYNC_TABLES = [
       "allowed_slot_names",
       "allowed_slot_times",
     ],
+  },
+  {
+    name: "marks_entry_lock",
+    primaryKey: "id",
+    dependencies: [],
+  },
+  {
+    name: "assessment_config",
+    primaryKey: "id",
+    dependencies: ["course", "faculty", "user"],
+  },
+  {
+    name: "student_marks",
+    primaryKey: "id",
+    dependencies: ["assessment_config", "student", "user"],
   },
 ];
 

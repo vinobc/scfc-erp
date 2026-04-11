@@ -1,9 +1,26 @@
 // Download Reports Management
 console.log("Loading download-reports.js file...");
 
+// Store user role for conditional UI
+let currentUserRole = null;
+
+// Helper: get user role from JWT token
+function getUserRoleFromToken() {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.role || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // Initialize download reports functionality
 function initializeDownloadReports() {
   console.log("Initializing download reports...");
+  currentUserRole = getUserRoleFromToken();
+  console.log("Detected user role:", currentUserRole);
   displayDownloadReportsInterface();
   loadFilterOptions();
 }
@@ -219,6 +236,132 @@ function displayDownloadReportsInterface() {
               <div id="download-status" class="mt-3"></div>
             </div>
           </div>
+
+          <!-- Student Marks Report - Faculty View -->
+          ${currentUserRole === "faculty" ? `
+          <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+              <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Student Marks Report</h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Download student marks report. Select academic year, semester, course, slot, and assessment component.</p>
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-md-3">
+                      <label for="marks-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                      <select id="marks-filter-year" class="form-select" onchange="onMarksYearSemesterChange()">
+                        ${yearOptions}
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="marks-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                      <select id="marks-filter-semester" class="form-select" onchange="onMarksYearSemesterChange()">
+                        <option value="">Select Semester</option>
+                        <option value="FALL">FALL</option>
+                        <option value="WINTER">WINTER</option>
+                        <option value="SUMMER">SUMMER</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="marks-filter-course" class="form-label">Course <span class="text-danger">*</span></label>
+                      <select id="marks-filter-course" class="form-select" onchange="onMarksCourseChange()">
+                        <option value="">Select Year & Semester first</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="marks-filter-slot" class="form-label">Slot</label>
+                      <select id="marks-filter-slot" class="form-select" onchange="onMarksSlotChange()">
+                        <option value="">All Slots</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row g-3 mt-1">
+                    <div class="col-md-3">
+                      <label for="marks-filter-component" class="form-label">Component <span class="text-danger">*</span></label>
+                      <select id="marks-filter-component" class="form-select">
+                        <option value="">Select Course first</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                      <button class="btn btn-outline-secondary" onclick="clearMarksFilters()">
+                        <i class="fas fa-times me-1"></i>Clear Filters
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <button type="button" class="btn btn-success" onclick="downloadMarksReport()">
+                    <i class="fas fa-file-excel me-2"></i>Download Marks Report (.xlsx)
+                  </button>
+                </div>
+              </div>
+              <div id="marks-download-status" class="mt-3"></div>
+            </div>
+          </div>
+          ` : ""}
+
+          <!-- Student Marks Report - Admin View -->
+          ${currentUserRole === "admin" ? `
+          <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+              <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Student Marks Report</h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">View marks entry status and download marks reports for all faculty.</p>
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Select Semester & Component</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-md-3">
+                      <label for="admin-marks-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                      <select id="admin-marks-year" class="form-select">
+                        ${yearOptions}
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="admin-marks-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                      <select id="admin-marks-semester" class="form-select">
+                        <option value="">Select Semester</option>
+                        <option value="FALL">FALL</option>
+                        <option value="WINTER">WINTER</option>
+                        <option value="SUMMER">SUMMER</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="admin-marks-component" class="form-label">Component <span class="text-danger">*</span></label>
+                      <select id="admin-marks-component" class="form-select">
+                        <option value="">Select Component</option>
+                        <option value="CA1">CA1</option>
+                        <option value="CA2">CA2</option>
+                        <option value="CA3">CA3</option>
+                        <option value="IM">IM (Internal Marks)</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                      <button class="btn btn-primary" onclick="loadMarksSummary()">
+                        <i class="fas fa-search me-2"></i>View Summary
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Summary Table -->
+              <div id="marks-summary-container"></div>
+
+              <div id="marks-download-status" class="mt-3"></div>
+            </div>
+          </div>
+          ` : ""}
+
         </div>
       </div>
     </div>
@@ -376,9 +519,686 @@ function downloadBase64File(base64Data, filename, mimeType) {
   URL.revokeObjectURL(url);
 }
 
+// ============ Student Marks Report Functions ============
+
+// Cache for courses data
+let marksReportCoursesCache = [];
+
+// When year or semester changes, load available courses
+async function onMarksYearSemesterChange() {
+  const year = document.getElementById("marks-filter-year").value;
+  const semester = document.getElementById("marks-filter-semester").value;
+
+  const courseSelect = document.getElementById("marks-filter-course");
+  const slotSelect = document.getElementById("marks-filter-slot");
+  const componentSelect = document.getElementById("marks-filter-component");
+  const facultySelect = document.getElementById("marks-filter-faculty");
+
+  // Reset dependent dropdowns
+  courseSelect.innerHTML = '<option value="">Loading courses...</option>';
+  slotSelect.innerHTML = '<option value="">All Slots</option>';
+  componentSelect.innerHTML = '<option value="">Select Course first</option>';
+  if (facultySelect) facultySelect.innerHTML = '<option value="">All Faculty</option>';
+
+  if (!year || !semester) {
+    courseSelect.innerHTML = '<option value="">Select Year & Semester first</option>';
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(
+      `${window.API_URL}/reports/student-marks/courses?slot_year=${year}&semester_type=${semester}`,
+      { headers: { "x-access-token": token } }
+    );
+
+    if (!res.ok) throw new Error("Failed to load courses");
+
+    marksReportCoursesCache = await res.json();
+
+    courseSelect.innerHTML = '<option value="">Select Course</option>';
+
+    // Get unique courses
+    const uniqueCourses = [];
+    const seen = new Set();
+    for (const c of marksReportCoursesCache) {
+      if (!seen.has(c.course_code)) {
+        seen.add(c.course_code);
+        uniqueCourses.push(c);
+      }
+    }
+
+    uniqueCourses.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.course_code;
+      opt.textContent = `${c.course_code} - ${c.course_name}`;
+      courseSelect.appendChild(opt);
+    });
+
+    // Populate faculty dropdown for admin
+    if (facultySelect && currentUserRole === "admin") {
+      const uniqueFaculty = [];
+      const seenFac = new Set();
+      for (const c of marksReportCoursesCache) {
+        if (!seenFac.has(c.employee_id)) {
+          seenFac.add(c.employee_id);
+          uniqueFaculty.push({ employee_id: c.employee_id, faculty_name: c.faculty_name });
+        }
+      }
+      uniqueFaculty.sort((a, b) => a.faculty_name.localeCompare(b.faculty_name));
+      uniqueFaculty.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.employee_id;
+        opt.textContent = f.faculty_name;
+        facultySelect.appendChild(opt);
+      });
+    }
+  } catch (error) {
+    console.error("Error loading marks report courses:", error);
+    courseSelect.innerHTML = '<option value="">Error loading courses</option>';
+  }
+}
+
+// Cache for slots data (with component_types)
+let marksReportSlotsCache = [];
+
+// When course changes, load slots and update component dropdown
+async function onMarksCourseChange() {
+  const year = document.getElementById("marks-filter-year").value;
+  const semester = document.getElementById("marks-filter-semester").value;
+  const courseCode = document.getElementById("marks-filter-course").value;
+
+  const slotSelect = document.getElementById("marks-filter-slot");
+  const componentSelect = document.getElementById("marks-filter-component");
+
+  slotSelect.innerHTML = '<option value="">All Slots</option>';
+  marksReportSlotsCache = [];
+  componentSelect.innerHTML = '<option value="">Select Component</option>';
+
+  if (!courseCode) {
+    componentSelect.innerHTML = '<option value="">Select Course first</option>';
+    return;
+  }
+
+  // Show all valid components for the course initially (before slot selection)
+  const courseEntry = marksReportCoursesCache.find(c => c.course_code === courseCode);
+  if (courseEntry && courseEntry.valid_components) {
+    courseEntry.valid_components.forEach(comp => {
+      const opt = document.createElement("option");
+      opt.value = comp;
+      opt.textContent = comp === "IM" ? "IM (Internal Marks)" : comp;
+      componentSelect.appendChild(opt);
+    });
+  }
+
+  // Load slots for this course
+  try {
+    const token = localStorage.getItem("token");
+    const facultySelect = document.getElementById("marks-filter-faculty");
+    const empId = facultySelect ? facultySelect.value : "";
+    let url = `${window.API_URL}/reports/student-marks/slots?slot_year=${year}&semester_type=${semester}&course_code=${courseCode}`;
+    if (empId) url += `&employee_id=${empId}`;
+
+    const res = await fetch(url, { headers: { "x-access-token": token } });
+    if (res.ok) {
+      marksReportSlotsCache = await res.json();
+      marksReportSlotsCache.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.slot_name;
+        opt.textContent = `${s.slot_name} (${s.venue})`;
+        slotSelect.appendChild(opt);
+      });
+    }
+  } catch (error) {
+    console.error("Error loading slots:", error);
+  }
+}
+
+// When slot changes, update component dropdown based on slot's component_types
+function onMarksSlotChange() {
+  const slotName = document.getElementById("marks-filter-slot").value;
+  const courseCode = document.getElementById("marks-filter-course").value;
+  const componentSelect = document.getElementById("marks-filter-component");
+  componentSelect.innerHTML = '<option value="">Select Component</option>';
+
+  if (!slotName) {
+    // "All Slots" selected — show all valid components for the course
+    const courseEntry = marksReportCoursesCache.find(c => c.course_code === courseCode);
+    if (courseEntry && courseEntry.valid_components) {
+      courseEntry.valid_components.forEach(comp => {
+        const opt = document.createElement("option");
+        opt.value = comp;
+        opt.textContent = comp === "IM" ? "IM (Internal Marks)" : comp;
+        componentSelect.appendChild(opt);
+      });
+    }
+    return;
+  }
+
+  // Find the slot's component_types
+  const slotData = marksReportSlotsCache.find(s => s.slot_name === slotName);
+  if (!slotData) return;
+
+  const compTypes = slotData.component_types || [];
+  const hasTheory = compTypes.includes("THEORY");
+  const hasLab = compTypes.includes("LAB");
+
+  if (hasTheory) {
+    // Theory slot: show CAs + IM
+    const courseEntry = marksReportCoursesCache.find(c => c.course_code === courseCode);
+    if (courseEntry && courseEntry.valid_components) {
+      courseEntry.valid_components.forEach(comp => {
+        // For theory-only slot, CA and IM (assignment only) are valid
+        const opt = document.createElement("option");
+        opt.value = comp;
+        opt.textContent = comp === "IM" ? "IM (Internal Marks)" : comp;
+        componentSelect.appendChild(opt);
+      });
+    }
+  }
+
+  if (hasLab && !hasTheory) {
+    // Lab-only slot: only IM (lab marks)
+    const opt = document.createElement("option");
+    opt.value = "IM";
+    opt.textContent = "IM (Internal Marks)";
+    componentSelect.appendChild(opt);
+  }
+}
+
+// Clear marks filters
+function clearMarksFilters() {
+  document.getElementById("marks-filter-year").value = "";
+  document.getElementById("marks-filter-semester").value = "";
+  const courseSelect = document.getElementById("marks-filter-course");
+  courseSelect.innerHTML = '<option value="">Select Year & Semester first</option>';
+  document.getElementById("marks-filter-slot").innerHTML = '<option value="">All Slots</option>';
+  const componentSelect = document.getElementById("marks-filter-component");
+  componentSelect.innerHTML = '<option value="">Select Course first</option>';
+  const facultySelect = document.getElementById("marks-filter-faculty");
+  if (facultySelect) facultySelect.innerHTML = '<option value="">All Faculty</option>';
+  marksReportCoursesCache = [];
+  marksReportSlotsCache = [];
+}
+
+// Download marks report
+async function downloadMarksReport() {
+  const year = document.getElementById("marks-filter-year").value;
+  const semester = document.getElementById("marks-filter-semester").value;
+  const course = document.getElementById("marks-filter-course").value;
+  const slot = document.getElementById("marks-filter-slot").value;
+  const component = document.getElementById("marks-filter-component").value;
+  const facultySelect = document.getElementById("marks-filter-faculty");
+  const empId = facultySelect ? facultySelect.value : "";
+
+  const statusDiv = document.getElementById("marks-download-status");
+
+  // Validate required fields
+  if (!year || !semester || !component) {
+    statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select Academic Year, Semester, and Component.
+      </div>
+    `;
+    return;
+  }
+
+  statusDiv.innerHTML = `
+    <div class="alert alert-info">
+      <i class="fas fa-spinner fa-spin me-2"></i>Preparing marks report...
+    </div>
+  `;
+
+  try {
+    const params = new URLSearchParams();
+    params.append("slot_year", year);
+    params.append("semester_type", semester);
+    params.append("component", component);
+    if (course) params.append("course_code", course);
+    if (slot) params.append("slot_name", slot);
+    if (empId) params.append("employee_id", empId);
+
+    const url = `${window.API_URL}/reports/student-marks?${params.toString()}`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "x-access-token": localStorage.getItem("token"),
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to download marks report");
+    }
+
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = "student_marks_report.xlsx";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
+
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+
+    statusDiv.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Marks report downloaded successfully!
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error downloading marks report:", error);
+    statusDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}
+      </div>
+    `;
+  }
+}
+
+// ============ Admin Marks Summary Functions ============
+
+let marksSummaryData = [];
+
+// Load marks entry summary for admin
+async function loadMarksSummary() {
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+  const component = document.getElementById("admin-marks-component").value;
+  const container = document.getElementById("marks-summary-container");
+  const statusDiv = document.getElementById("marks-download-status");
+
+  if (!year || !semester || !component) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select Academic Year, Semester, and Component.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="text-center py-3">
+      <i class="fas fa-spinner fa-spin me-2"></i>Loading summary...
+    </div>
+  `;
+  if (statusDiv) statusDiv.innerHTML = "";
+
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(
+      `${window.API_URL}/reports/student-marks/summary?slot_year=${year}&semester_type=${semester}&component=${component}`,
+      { headers: { "x-access-token": token } }
+    );
+
+    if (!res.ok) throw new Error("Failed to load summary");
+
+    marksSummaryData = await res.json();
+
+    if (marksSummaryData.length === 0) {
+      container.innerHTML = `
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle me-2"></i>No faculty allocations found for ${component} in ${semester} ${year}.
+        </div>
+      `;
+      return;
+    }
+
+    // Count stats
+    const total = marksSummaryData.length;
+    const complete = marksSummaryData.filter(r => r.status === "Complete").length;
+    const partial = marksSummaryData.filter(r => r.status === "Partial").length;
+    const notEntered = marksSummaryData.filter(r => r.status === "Not Entered").length;
+    const notConfigured = marksSummaryData.filter(r => r.status === "Not Configured").length;
+
+    let html = `
+      <!-- Stats -->
+      <div class="row mb-3 g-2">
+        <div class="col">
+          <div class="card bg-light">
+            <div class="card-body text-center py-2">
+              <h5 class="mb-0">${total}</h5>
+              <small class="text-muted">Total</small>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card bg-success bg-opacity-10 border-success">
+            <div class="card-body text-center py-2">
+              <h5 class="mb-0 text-success">${complete}</h5>
+              <small class="text-muted">Complete</small>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card bg-warning bg-opacity-10 border-warning">
+            <div class="card-body text-center py-2">
+              <h5 class="mb-0 text-warning">${partial}</h5>
+              <small class="text-muted">Partial</small>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card bg-danger bg-opacity-10 border-danger">
+            <div class="card-body text-center py-2">
+              <h5 class="mb-0 text-danger">${notEntered}</h5>
+              <small class="text-muted">Not Entered</small>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card bg-secondary bg-opacity-10 border-secondary">
+            <div class="card-body text-center py-2">
+              <h5 class="mb-0 text-secondary">${notConfigured}</h5>
+              <small class="text-muted">Not Configured</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter by Status -->
+      <div class="mb-2">
+        <span class="me-2 text-muted small">Filter:</span>
+        <button class="btn btn-sm btn-outline-dark me-1 active" onclick="filterSummaryByStatus('All', this)">All</button>
+        <button class="btn btn-sm btn-outline-success me-1" onclick="filterSummaryByStatus('Complete', this)">Complete</button>
+        <button class="btn btn-sm btn-outline-warning me-1" onclick="filterSummaryByStatus('Partial', this)">Partial</button>
+        <button class="btn btn-sm btn-outline-danger me-1" onclick="filterSummaryByStatus('Not Entered', this)">Not Entered</button>
+        <button class="btn btn-sm btn-outline-secondary me-1" onclick="filterSummaryByStatus('Not Configured', this)">Not Configured</button>
+      </div>
+
+      <!-- Actions -->
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <button class="btn btn-sm btn-outline-primary me-2" onclick="toggleAllSummaryRows(true)">Select All</button>
+          <button class="btn btn-sm btn-outline-secondary me-2" onclick="toggleAllSummaryRows(false)">Deselect All</button>
+          <button class="btn btn-sm btn-info text-white" onclick="downloadStatusReport()">
+            <i class="fas fa-file-excel me-1"></i>Download Status Report
+          </button>
+        </div>
+        <button class="btn btn-success" onclick="downloadSelectedMarks()">
+          <i class="fas fa-download me-2"></i>Download Selected Marks
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover table-sm">
+          <thead class="table-dark">
+            <tr>
+              <th style="width:40px"><input type="checkbox" id="summary-select-all" onchange="toggleAllSummaryRows(this.checked)"></th>
+              <th>Course</th>
+              <th>Slot</th>
+              <th>Faculty</th>
+              <th>Type</th>
+              <th>Entered</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    marksSummaryData.forEach((row, idx) => {
+      let statusBadge;
+      if (row.status === "Complete") {
+        statusBadge = '<span class="badge bg-success">Complete</span>';
+      } else if (row.status === "Partial") {
+        statusBadge = '<span class="badge bg-warning text-dark">Partial</span>';
+      } else if (row.status === "Not Configured") {
+        statusBadge = '<span class="badge bg-secondary">Not Configured</span>';
+      } else {
+        statusBadge = '<span class="badge bg-danger">Not Entered</span>';
+      }
+
+      const canDownload = row.status !== "Not Configured";
+
+      html += `
+        <tr>
+          <td><input type="checkbox" class="summary-row-check" data-idx="${idx}" ${canDownload ? "" : "disabled"}></td>
+          <td>${row.course_code} - ${row.course_name}</td>
+          <td>${row.slot_name}</td>
+          <td>${row.faculty_name}</td>
+          <td><small>${row.assessment_type}</small></td>
+          <td>${row.students_with_marks}/${row.total_students}</td>
+          <td>${statusBadge}</td>
+          <td>
+            ${canDownload ? `<button class="btn btn-sm btn-outline-success" onclick="downloadSingleMarks(${idx})" title="Download">
+              <i class="fas fa-download"></i>
+            </button>` : `<button class="btn btn-sm btn-outline-secondary" disabled title="Not configured">
+              <i class="fas fa-download"></i>
+            </button>`}
+          </td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    container.innerHTML = html;
+
+  } catch (error) {
+    console.error("Error loading marks summary:", error);
+    container.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}
+      </div>
+    `;
+  }
+}
+
+// Filter summary table by status
+function filterSummaryByStatus(status, btn) {
+  // Update active button
+  if (btn) {
+    btn.closest("div").querySelectorAll("button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+  }
+
+  const rows = document.querySelectorAll(".summary-row-check");
+  rows.forEach(cb => {
+    const idx = parseInt(cb.dataset.idx);
+    const row = marksSummaryData[idx];
+    const tr = cb.closest("tr");
+    if (status === "All" || row.status === status) {
+      tr.style.display = "";
+    } else {
+      tr.style.display = "none";
+    }
+  });
+}
+
+// Download status report as CSV
+function downloadStatusReport() {
+  if (!marksSummaryData.length) return;
+
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+  const component = document.getElementById("admin-marks-component").value;
+
+  const headers = ["Course Code", "Course Name", "Slot", "Faculty", "Assessment Type", "Students Entered", "Total Students", "Status"];
+
+  // Sort by status: Not Configured, Not Entered, Partial, Complete
+  const statusOrder = { "Not Configured": 0, "Not Entered": 1, "Partial": 2, "Complete": 3 };
+  const sorted = [...marksSummaryData].sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+  let csv = headers.join(",") + "\n";
+  sorted.forEach(r => {
+    csv += [
+      `"${r.course_code}"`, `"${r.course_name}"`, `"${r.slot_name}"`, `"${r.faculty_name}"`,
+      `"${r.assessment_type}"`, r.students_with_marks, r.total_students, `"${r.status}"`
+    ].join(",") + "\n";
+  });
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const semPrefix = semester === "WINTER" ? "WS" : semester === "FALL" ? "FS" : "SS";
+  const cleanYear = year.replace(/-/g, "_");
+  const filename = `${semPrefix}${cleanYear}_${component}_Status_Report.csv`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// Toggle all checkboxes (only visible rows)
+function toggleAllSummaryRows(checked) {
+  document.querySelectorAll(".summary-row-check").forEach(cb => {
+    if (!cb.disabled && cb.closest("tr").style.display !== "none") cb.checked = checked;
+  });
+  const selectAll = document.getElementById("summary-select-all");
+  if (selectAll) selectAll.checked = checked;
+}
+
+// Download marks for a single row
+async function downloadSingleMarks(idx) {
+  const row = marksSummaryData[idx];
+  if (!row) return;
+
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+  const component = document.getElementById("admin-marks-component").value;
+
+  await doMarksDownload(year, semester, component, row.course_code, row.slot_name, row.employee_id);
+}
+
+// Download marks for all selected rows
+async function downloadSelectedMarks() {
+  const checkboxes = document.querySelectorAll(".summary-row-check:checked");
+  if (checkboxes.length === 0) {
+    const statusDiv = document.getElementById("marks-download-status");
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select at least one row to download.
+      </div>
+    `;
+    return;
+  }
+
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+  const component = document.getElementById("admin-marks-component").value;
+
+  if (checkboxes.length === 1) {
+    // Single selection — download individual file
+    const idx = parseInt(checkboxes[0].dataset.idx);
+    const row = marksSummaryData[idx];
+    await doMarksDownload(year, semester, component, row.course_code, row.slot_name, row.employee_id);
+  } else {
+    // Multiple selection — download as one Excel with multiple sheets
+    const params = new URLSearchParams();
+    params.append("slot_year", year);
+    params.append("semester_type", semester);
+    params.append("component", component);
+
+    // Pass selected items as comma-separated course_code:slot_name:employee_id
+    const items = [];
+    checkboxes.forEach(cb => {
+      const row = marksSummaryData[parseInt(cb.dataset.idx)];
+      items.push(`${row.course_code}:${row.slot_name}:${row.employee_id}`);
+    });
+    params.append("items", items.join(","));
+
+    await doMarksDownload(year, semester, component, null, null, null, params.toString());
+  }
+}
+
+// Core download helper for admin
+async function doMarksDownload(year, semester, component, courseCode, slotName, employeeId, customParams) {
+  const statusDiv = document.getElementById("marks-download-status");
+  statusDiv.innerHTML = `
+    <div class="alert alert-info">
+      <i class="fas fa-spinner fa-spin me-2"></i>Preparing download...
+    </div>
+  `;
+
+  try {
+    let url;
+    if (customParams) {
+      url = `${window.API_URL}/reports/student-marks?${customParams}`;
+    } else {
+      const params = new URLSearchParams();
+      params.append("slot_year", year);
+      params.append("semester_type", semester);
+      params.append("component", component);
+      if (courseCode) params.append("course_code", courseCode);
+      if (slotName) params.append("slot_name", slotName);
+      if (employeeId) params.append("employee_id", employeeId);
+      url = `${window.API_URL}/reports/student-marks?${params.toString()}`;
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "x-access-token": localStorage.getItem("token"),
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to download marks report");
+    }
+
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = "student_marks_report.xlsx";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
+
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+
+    statusDiv.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Marks report downloaded successfully!
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error downloading marks report:", error);
+    statusDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}
+      </div>
+    `;
+  }
+}
+
 // Make functions available globally
 window.initializeDownloadReports = initializeDownloadReports;
 window.downloadRegistrations = downloadRegistrations;
 window.downloadAllRegistrations = downloadAllRegistrations;
 window.clearReportFilters = clearReportFilters;
+window.onMarksYearSemesterChange = onMarksYearSemesterChange;
+window.onMarksCourseChange = onMarksCourseChange;
+window.onMarksSlotChange = onMarksSlotChange;
+window.clearMarksFilters = clearMarksFilters;
+window.downloadMarksReport = downloadMarksReport;
+window.loadMarksSummary = loadMarksSummary;
+window.filterSummaryByStatus = filterSummaryByStatus;
+window.downloadStatusReport = downloadStatusReport;
+window.toggleAllSummaryRows = toggleAllSummaryRows;
+window.downloadSingleMarks = downloadSingleMarks;
+window.downloadSelectedMarks = downloadSelectedMarks;
 console.log("download-reports.js loaded successfully");
