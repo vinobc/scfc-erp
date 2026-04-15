@@ -39,12 +39,16 @@ function getValidComponents(assessmentType) {
 
 // Helper: Parse program_code from student_registrations into program and branch
 function parseProgramBranch(programCode) {
+  // Match known degree patterns at the start, everything after is branch
+  // e.g. "B.Tech. CSE (AI & ML)" → program="B.Tech.", branch="CSE (AI & ML)"
   // e.g. "B.Tech. (CSE)" → program="B.Tech.", branch="(CSE)"
-  // e.g. "B.Tech. (AI & ML)" → program="B.Tech.", branch="(AI & ML)"
   // e.g. "BCA" → program="BCA", branch=""
-  const match = programCode.match(/^(.+?)\s*(\(.+\))$/);
+  const degreePattern = /^(B\.Tech\.|M\.Tech\.|B\.Sc\.|M\.Sc\.|B\.A\.|B\.Des\.|B\.Com\.|Ph\.D\.|B\.A\.,\s*LL\.B\.\s*\(Hons\.\)|LL\.M\.|BBA|BCA|MBA|MCA|LLM)\s*/i;
+  const match = programCode.match(degreePattern);
   if (match) {
-    return { program: match[1].trim(), branch: match[2].trim() };
+    const program = match[1].trim();
+    const branch = programCode.slice(match[0].length).trim();
+    return { program, branch };
   }
   return { program: programCode, branch: "" };
 }
@@ -123,7 +127,8 @@ function buildCoEWorksheet(headerInfo, students, component) {
   // Student data rows
   students.forEach((s, idx) => {
     const { program, branch } = parseProgramBranch(s.program_code);
-    const row = [idx + 1, s.enrollment_number, s.student_name, s.school || "ASET", program, branch];
+    const cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
+    const row = [idx + 1, s.enrollment_number, cleanName, s.school || "ASET", program, branch];
 
     if (component === "IM") {
       if (hasTheoryConfig && hasLabConfig) {
@@ -556,7 +561,23 @@ exports.getMarksReportSlots = async (req, res) => {
       }
     }
 
-    res.json(Object.values(slotMap));
+    // Filter out slots with 0 registered students (handles stale configs)
+    const slots = Object.values(slotMap);
+    const validSlots = [];
+    for (const slot of slots) {
+      const countResult = await db.query(`
+        SELECT COUNT(DISTINCT sr.enrollment_number) as total
+        FROM student_registrations sr
+        WHERE sr.slot_year = $1 AND sr.semester_type = $2
+          AND sr.course_code = $3 AND sr.slot_name = $4
+          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+      `, [slot_year, semester_type, course_code, slot.slot_name]);
+      if (parseInt(countResult.rows[0].total) > 0) {
+        validSlots.push(slot);
+      }
+    }
+
+    res.json(validSlots);
   } catch (error) {
     console.error("Error fetching marks report slots:", error);
     res.status(500).json({ message: "Error fetching slots", error: error.message });
