@@ -127,7 +127,14 @@ function buildCoEWorksheet(headerInfo, students, component) {
   // Student data rows
   students.forEach((s, idx) => {
     const { program, branch } = parseProgramBranch(s.program_code);
-    const cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
+    // Strip prefix, uppercase, then move leading single-char initials to end
+    // e.g. "Mr S R JEEVIKA" → "S R JEEVIKA" → "JEEVIKA S R"
+    let cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
+    const tokens = cleanName.split(/\s+/);
+    const firstMulti = tokens.findIndex(t => t.length > 1);
+    if (firstMulti > 0) {
+      cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
+    }
     const row = [idx + 1, s.enrollment_number, cleanName, s.school || "ASET", program, branch];
 
     if (component === "IM") {
