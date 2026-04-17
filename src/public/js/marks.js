@@ -369,12 +369,28 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
 
   // Determine which components to show based on course type and slot type
   const courseType = selectedCourse.course_type;
+  const theory = Number(selectedCourse.theory) || 0;
+  const practical = Number(selectedCourse.practical) || 0;
   const isLabSlot = /^L\d/.test(selectedCourse.slot_name);
+
+  // NC (non-credit) courses are shaped by theory/practical hours
+  const isNcTheory = courseType === 'NC' && theory > 0 && practical === 0;
+  const isNcLab = courseType === 'NC' && theory === 0 && practical > 0;
+  const isNcIntegrated = courseType === 'NC' && theory > 0 && practical > 0;
 
   // T (Theory) or TEL with theory slot → show CAs and Assignment
   // P (Lab) or TEL with lab slot → show Lab only
-  const showTheoryComponents = (courseType === 'T') || (courseType === 'TEL' && !isLabSlot);
-  const showLabComponent = (courseType === 'P') || (courseType === 'TEL' && isLabSlot);
+  // NC inherits the same split via its theory/practical hours
+  const showTheoryComponents =
+    (courseType === 'T') ||
+    (courseType === 'TEL' && !isLabSlot) ||
+    isNcTheory ||
+    (isNcIntegrated && !isLabSlot);
+  const showLabComponent =
+    (courseType === 'P') ||
+    (courseType === 'TEL' && isLabSlot) ||
+    isNcLab ||
+    (isNcIntegrated && isLabSlot);
 
   let html = `
     <div class="card mb-3">

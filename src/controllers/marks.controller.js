@@ -3,7 +3,7 @@ const db = require("../config/db");
 // ================== HELPER FUNCTIONS ==================
 
 // Derive assessment type from course code and course type
-function deriveAssessmentType(courseCode, courseType) {
+function deriveAssessmentType(courseCode, courseType, theory = 0, practical = 0) {
   // Course code format: ABC1234 (e.g., CSE2008)
   // First digit after prefix (position 3) determines level
   // 1-4 = UG, 5-6 = PG, 7 = Research
@@ -22,6 +22,16 @@ function deriveAssessmentType(courseCode, courseType) {
   if (courseType === "T") return `${level}_THEORY`;
   if (courseType === "P") return `${level}_LAB`;
   if (courseType === "TEL") return `${level}_INTEGRATED`;
+
+  // NC (non-credit) — shape by theory/practical hours
+  if (courseType === "NC") {
+    const t = Number(theory) || 0;
+    const p = Number(practical) || 0;
+    if (t > 0 && p === 0) return `${level}_THEORY`;
+    if (t === 0 && p > 0) return `${level}_LAB`;
+    if (t > 0 && p > 0) return `${level}_INTEGRATED`;
+    return `${level}_THEORY`;
+  }
 
   return `${level}_THEORY`; // Default fallback
 }
@@ -199,16 +209,19 @@ exports.getCourseOfferings = async (req, res) => {
     );
 
     // Add assessment type to each course
-    const coursesWithType = result.rows.map((course) => ({
-      ...course,
-      assessment_type: deriveAssessmentType(
+    const coursesWithType = result.rows.map((course) => {
+      const assessmentType = deriveAssessmentType(
         course.course_code,
-        course.course_type
-      ),
-      assessment_structure: getDefaultAssessmentStructure(
-        deriveAssessmentType(course.course_code, course.course_type)
-      ),
-    }));
+        course.course_type,
+        course.theory,
+        course.practical
+      );
+      return {
+        ...course,
+        assessment_type: assessmentType,
+        assessment_structure: getDefaultAssessmentStructure(assessmentType),
+      };
+    });
 
     res.status(200).json(coursesWithType);
   } catch (error) {
@@ -225,7 +238,7 @@ exports.getAssessmentType = async (req, res) => {
     const { course_code } = req.params;
 
     const courseResult = await db.query(
-      "SELECT course_code, course_name, course_type FROM course WHERE course_code = $1",
+      "SELECT course_code, course_name, course_type, theory, practical FROM course WHERE course_code = $1",
       [course_code]
     );
 
@@ -236,7 +249,9 @@ exports.getAssessmentType = async (req, res) => {
     const course = courseResult.rows[0];
     const assessmentType = deriveAssessmentType(
       course.course_code,
-      course.course_type
+      course.course_type,
+      course.theory,
+      course.practical
     );
 
     res.status(200).json({
@@ -279,7 +294,7 @@ exports.getAssessmentConfig = async (req, res) => {
     if (!result.rows.length) {
       // Return default structure if no config exists
       const courseResult = await db.query(
-        "SELECT course_type FROM course WHERE course_code = $1",
+        "SELECT course_type, theory, practical FROM course WHERE course_code = $1",
         [course_code]
       );
 
@@ -289,7 +304,9 @@ exports.getAssessmentConfig = async (req, res) => {
 
       const assessmentType = deriveAssessmentType(
         course_code,
-        courseResult.rows[0].course_type
+        courseResult.rows[0].course_type,
+        courseResult.rows[0].theory,
+        courseResult.rows[0].practical
       );
 
       return res.status(200).json({
@@ -353,7 +370,7 @@ exports.saveAssessmentConfig = async (req, res) => {
 
     // Get course type to derive assessment type
     const courseResult = await db.query(
-      "SELECT course_type FROM course WHERE course_code = $1",
+      "SELECT course_type, theory, practical FROM course WHERE course_code = $1",
       [course_code]
     );
 
@@ -363,7 +380,9 @@ exports.saveAssessmentConfig = async (req, res) => {
 
     const assessmentType = deriveAssessmentType(
       course_code,
-      courseResult.rows[0].course_type
+      courseResult.rows[0].course_type,
+      courseResult.rows[0].theory,
+      courseResult.rows[0].practical
     );
 
     // Upsert the configuration (slot-specific)
