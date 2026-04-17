@@ -2,7 +2,7 @@ const db = require("../config/db");
 const XLSX = require("xlsx");
 
 // Helper: Derive assessment type from course code and course type
-function deriveAssessmentType(courseCode, courseType) {
+function deriveAssessmentType(courseCode, courseType, theory = 0, practical = 0) {
   const levelDigit = parseInt(courseCode.charAt(3));
   let level;
   if (levelDigit >= 1 && levelDigit <= 4) {
@@ -15,6 +15,14 @@ function deriveAssessmentType(courseCode, courseType) {
   if (courseType === "T") return `${level}_THEORY`;
   if (courseType === "P") return `${level}_LAB`;
   if (courseType === "TEL") return `${level}_INTEGRATED`;
+  if (courseType === "NC") {
+    const t = Number(theory) || 0;
+    const p = Number(practical) || 0;
+    if (t > 0 && p === 0) return `${level}_THEORY`;
+    if (t === 0 && p > 0) return `${level}_LAB`;
+    if (t > 0 && p > 0) return `${level}_INTEGRATED`;
+    return `${level}_THEORY`;
+  }
   return `${level}_THEORY`;
 }
 
@@ -418,7 +426,7 @@ exports.getMarksEntrySummary = async (req, res) => {
       processedKeys.add(groupKey);
 
       // Derive assessment type
-      const assessmentType = deriveAssessmentType(alloc.course_code, alloc.course_type);
+      const assessmentType = deriveAssessmentType(alloc.course_code, alloc.course_type, alloc.theory, alloc.practical);
 
       // Check if component is valid for this course type
       const validComponents = getValidComponents(assessmentType);
