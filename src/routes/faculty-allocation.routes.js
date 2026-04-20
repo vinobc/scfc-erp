@@ -5,6 +5,7 @@ const {
   isAdmin,
   canManageFacultyAllocations,
   canViewTimetables,
+  attachCoordinatorSchools,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -16,26 +17,31 @@ router.use(verifyToken);
 router.get(
   "/",
   canViewTimetables,
+  attachCoordinatorSchools,
   facultyAllocationController.getAllFacultyAllocations
 );
 router.post(
   "/",
   canManageFacultyAllocations,
+  attachCoordinatorSchools,
   facultyAllocationController.createFacultyAllocation
 );
 router.post(
   "/batch",
   canManageFacultyAllocations,
+  attachCoordinatorSchools,
   facultyAllocationController.createFacultyAllocationBatch
 );
 router.put(
   "/",
   canManageFacultyAllocations,
+  attachCoordinatorSchools,
   facultyAllocationController.updateFacultyAllocation
 );
 router.delete(
   "/",
   canManageFacultyAllocations,
+  attachCoordinatorSchools,
   facultyAllocationController.deleteFacultyAllocation
 );
 
@@ -91,6 +97,7 @@ router.get(
 router.post(
   "/p4-allocation",
   canManageFacultyAllocations,
+  attachCoordinatorSchools,
   facultyAllocationController.createFacultyAllocationP4
 );
 

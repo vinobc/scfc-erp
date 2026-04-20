@@ -143,6 +143,32 @@ exports.isFacultyOrStaffOrAdmin = (req, res, next) => {
   next();
 };
 
+// Attach coordinator's assigned school IDs to the request
+// Sets req.coordinatorSchoolIds = [ids] for coordinators, null for admins/others (no restriction)
+exports.attachCoordinatorSchools = async (req, res, next) => {
+  if (req.userRole !== "timetable_coordinator") {
+    req.coordinatorSchoolIds = null;
+    return next();
+  }
+  try {
+    const db = require("../config/db");
+    const result = await db.query(
+      "SELECT school_id FROM timetable_coordinators WHERE user_id = $1",
+      [req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(403).json({
+        message: "No school assignments found for your coordinator account",
+      });
+    }
+    req.coordinatorSchoolIds = result.rows.map((r) => r.school_id);
+    next();
+  } catch (error) {
+    console.error("Error fetching coordinator schools:", error);
+    return res.status(500).json({ message: "Server error checking school assignments" });
+  }
+};
+
 // Check if user can view timetables (faculty, coordinators, and admins)
 exports.canViewTimetables = (req, res, next) => {
   if (

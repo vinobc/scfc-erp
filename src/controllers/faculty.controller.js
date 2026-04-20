@@ -4,7 +4,7 @@ const db = require("../config/db");
 exports.getAllFaculty = async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT f.*, s.school_code, s.school_short_name 
+      `SELECT f.*, s.school_code, s.school_short_name
        FROM faculty f
        LEFT JOIN school s ON f.school_id = s.school_id
        ORDER BY f.name`,
