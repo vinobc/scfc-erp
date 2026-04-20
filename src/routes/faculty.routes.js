@@ -4,6 +4,7 @@ const {
   verifyToken,
   isAdmin,
   isStaffOrAdmin,
+  attachCoordinatorSchools,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -12,7 +13,7 @@ const router = express.Router();
 router.use(verifyToken);
 
 // Faculty routes
-router.get("/", facultyController.getAllFaculty);
+router.get("/", attachCoordinatorSchools, facultyController.getAllFaculty);
 router.get("/:id", facultyController.getFacultyById);
 
 // Admin-only routes
