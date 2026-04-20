@@ -22,6 +22,17 @@ function timesOverlap(range1, range2) {
   return range1.start < range2.end && range2.start < range1.end;
 }
 
+// Helper to verify faculty belongs to coordinator's assigned schools
+async function verifyFacultySchoolAccess(employeeId, coordinatorSchoolIds) {
+  if (coordinatorSchoolIds === null) return true; // admin or non-coordinator bypass
+  const result = await db.query(
+    "SELECT school_id FROM faculty WHERE employee_id = $1",
+    [employeeId]
+  );
+  if (result.rows.length === 0) return false;
+  return coordinatorSchoolIds.includes(result.rows[0].school_id);
+}
+
 // Get all faculty allocations
 exports.getAllFacultyAllocations = async (req, res) => {
   try {
@@ -56,6 +67,11 @@ exports.getAllFacultyAllocations = async (req, res) => {
     if (venue) {
       params.push(venue);
       query += ` AND fa.venue = $${params.length}`;
+    }
+
+    if (req.coordinatorSchoolIds) {
+      params.push(req.coordinatorSchoolIds);
+      query += ` AND f.school_id = ANY($${params.length})`;
     }
 
     query += ` ORDER BY fa.slot_year DESC, fa.semester_type DESC, fa.slot_day, fa.slot_time`;
@@ -112,6 +128,14 @@ exports.createFacultyAllocation = async (req, res) => {
       !slot_time
     ) {
       return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // School-based access check for coordinators
+    const hasSchoolAccess = await verifyFacultySchoolAccess(employee_id, req.coordinatorSchoolIds);
+    if (!hasSchoolAccess) {
+      return res.status(403).json({
+        message: "You can only allocate faculty from your assigned school(s)",
+      });
     }
 
     // Check for venue clash (different faculty for same venue/time)
@@ -797,6 +821,19 @@ exports.createFacultyAllocationBatch = async (req, res) => {
     }
   }
 
+  // School-based access check for coordinators
+  if (req.coordinatorSchoolIds !== null) {
+    const uniqueEmployeeIds = [...new Set(allocations.map((a) => a.employee_id))];
+    for (const empId of uniqueEmployeeIds) {
+      const hasAccess = await verifyFacultySchoolAccess(empId, req.coordinatorSchoolIds);
+      if (!hasAccess) {
+        return res.status(403).json({
+          message: "You can only allocate faculty from your assigned school(s)",
+        });
+      }
+    }
+  }
+
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
@@ -1176,6 +1213,14 @@ exports.deleteFacultyAllocation = async (req, res) => {
     ) {
       return res.status(400).json({
         message: "All fields are required to identify the allocation",
+      });
+    }
+
+    // School-based access check for coordinators
+    const hasSchoolAccess = await verifyFacultySchoolAccess(employee_id, req.coordinatorSchoolIds);
+    if (!hasSchoolAccess) {
+      return res.status(403).json({
+        message: "You can only delete allocations for faculty from your assigned school(s)",
       });
     }
 
@@ -1677,6 +1722,24 @@ exports.updateFacultyAllocation = async (req, res) => {
       return res.status(400).json({
         message: "No changes detected. Please modify faculty or venue.",
       });
+    }
+
+    // School-based access check for coordinators
+    if (req.coordinatorSchoolIds !== null) {
+      const hasOldAccess = await verifyFacultySchoolAccess(oldAllocation.employee_id, req.coordinatorSchoolIds);
+      if (!hasOldAccess) {
+        return res.status(403).json({
+          message: "You do not have permission to modify this allocation (faculty not in your assigned school)",
+        });
+      }
+      if (facultyChanged) {
+        const hasNewAccess = await verifyFacultySchoolAccess(newAllocation.employee_id, req.coordinatorSchoolIds);
+        if (!hasNewAccess) {
+          return res.status(403).json({
+            message: "You cannot reassign to a faculty member outside your assigned school(s)",
+          });
+        }
+      }
     }
 
     // Start a transaction
@@ -3068,6 +3131,14 @@ exports.createFacultyAllocationP4 = async (req, res) => {
       !lab_pair_2
     ) {
       return res.status(400).json({ message: "All fields including both venues are required for P=4 lab allocation" });
+    }
+
+    // School-based access check for coordinators
+    const hasSchoolAccess = await verifyFacultySchoolAccess(employee_id, req.coordinatorSchoolIds);
+    if (!hasSchoolAccess) {
+      return res.status(403).json({
+        message: "You can only allocate faculty from your assigned school(s)",
+      });
     }
 
     // Validate the course is P=4
