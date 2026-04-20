@@ -3,13 +3,18 @@ const db = require("../config/db");
 // Get all faculty members
 exports.getAllFaculty = async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT f.*, s.school_code, s.school_short_name
+    let query = `SELECT f.*, s.school_code, s.school_short_name
        FROM faculty f
-       LEFT JOIN school s ON f.school_id = s.school_id
-       ORDER BY f.name`,
-      []
-    );
+       LEFT JOIN school s ON f.school_id = s.school_id`;
+    const params = [];
+
+    if (req.query.schoolFilter === "true" && req.coordinatorSchoolIds) {
+      params.push(req.coordinatorSchoolIds);
+      query += ` WHERE f.school_id = ANY($1)`;
+    }
+
+    query += ` ORDER BY f.name`;
+    const result = await db.query(query, params);
 
     res.status(200).json(result.rows);
   } catch (error) {

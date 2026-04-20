@@ -897,7 +897,7 @@ function handleEmployeeIdInput(event) {
   }
 
   // Fetch all faculty and filter client-side
-  fetch(`${window.API_URL}/faculty`, {
+  fetch(`${window.API_URL}/faculty?schoolFilter=true`, {
     headers: {
       Authorization: localStorage.getItem("token"),
     },
@@ -3770,7 +3770,7 @@ function setupFacultyNameAutocomplete() {
     }
 
     // Fetch faculty data
-    fetch(`${window.API_URL}/faculty`, {
+    fetch(`${window.API_URL}/faculty?schoolFilter=true`, {
       headers: {
         Authorization: localStorage.getItem("token"),
       },
