@@ -237,8 +237,8 @@ function displayDownloadReportsInterface() {
             </div>
           </div>
 
-          <!-- Student Marks Report - Faculty View -->
-          ${currentUserRole === "faculty" ? `
+          <!-- Student Marks Report - Faculty/Coordinator View -->
+          ${currentUserRole === "faculty" || currentUserRole === "timetable_coordinator" ? `
           <div class="card mb-4">
             <div class="card-header bg-success text-white">
               <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Student Marks Report</h5>
