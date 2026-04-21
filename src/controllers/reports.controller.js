@@ -335,8 +335,8 @@ exports.getMarksReportCourses = async (req, res) => {
     let query;
     const params = [slot_year, semester_type];
 
-    if (req.userRole === "faculty") {
-      // Get faculty's employee_id
+    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
+      // Get faculty's/coordinator's employee_id
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
         [req.userId]
@@ -535,7 +535,7 @@ exports.getMarksReportSlots = async (req, res) => {
     const params = [slot_year, semester_type, course_code];
     let empFilter = "";
 
-    if (req.userRole === "faculty") {
+    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
         [req.userId]
@@ -622,7 +622,7 @@ exports.getStudentMarksReport = async (req, res) => {
 
     // Determine faculty filter
     let facultyEmployeeId = null;
-    if (req.userRole === "faculty") {
+    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
         [req.userId]

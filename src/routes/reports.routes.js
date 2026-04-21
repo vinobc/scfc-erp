@@ -12,10 +12,10 @@ router.get(
   reportsController.getStudentRegistrations
 );
 
-// Middleware: allow only admin and faculty for marks reports
+// Middleware: allow admin, faculty, and timetable_coordinator for marks reports
 function isAdminOrFaculty(req, res, next) {
-  if (req.userRole !== "admin" && req.userRole !== "faculty") {
-    return res.status(403).json({ message: "Require Admin or Faculty Role" });
+  if (!["admin", "faculty", "timetable_coordinator"].includes(req.userRole)) {
+    return res.status(403).json({ message: "Require Admin, Faculty, or Timetable Coordinator Role" });
   }
   next();
 }
