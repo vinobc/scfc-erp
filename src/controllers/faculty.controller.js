@@ -213,37 +213,54 @@ exports.updateFaculty = async (req, res) => {
 };
 
 // Toggle faculty status (active/inactive)
+// Also syncs the linked user account's is_active so deactivated faculty cannot log in.
 exports.toggleFacultyStatus = async (req, res) => {
+  const facultyId = req.params.id;
+  const { is_active } = req.body;
+
+  if (is_active === undefined) {
+    return res
+      .status(400)
+      .json({ message: "is_active parameter is required" });
+  }
+
+  const client = await db.pool.connect();
   try {
-    const facultyId = req.params.id;
-    const { is_active } = req.body;
+    await client.query("BEGIN");
 
-    // Validate is_active parameter
-    if (is_active === undefined) {
-      return res
-        .status(400)
-        .json({ message: "is_active parameter is required" });
-    }
-
-    // Check if faculty exists
-    const facultyExists = await db.query(
-      "SELECT COUNT(*) FROM faculty WHERE faculty_id = $1",
+    const facultyRow = await client.query(
+      "SELECT employee_id, email FROM faculty WHERE faculty_id = $1",
       [facultyId]
     );
 
-    if (parseInt(facultyExists.rows[0].count) === 0) {
+    if (facultyRow.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ message: "Faculty not found" });
     }
 
-    // Update faculty status
-    const result = await db.query(
-      `UPDATE faculty 
+    const { employee_id: employeeId, email: facultyEmail } = facultyRow.rows[0];
+
+    const result = await client.query(
+      `UPDATE faculty
        SET is_active = $1,
            updated_at = CURRENT_TIMESTAMP
        WHERE faculty_id = $2
        RETURNING *`,
       [is_active, facultyId]
     );
+
+    // Flip every linked user row (faculty role, timetable_coordinator, etc.).
+    // Match by employee_id (new rows) OR email (legacy rows without employee_id).
+    await client.query(
+      `UPDATE "user"
+       SET is_active = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE employee_id = $2
+          OR LOWER(email) = LOWER($3)`,
+      [is_active, employeeId, facultyEmail]
+    );
+
+    await client.query("COMMIT");
 
     res.status(200).json({
       message: `Faculty ${
@@ -252,10 +269,13 @@ exports.toggleFacultyStatus = async (req, res) => {
       faculty: result.rows[0],
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("Toggle faculty status error:", error);
     res
       .status(500)
       .json({ message: "Server error while toggling faculty status" });
+  } finally {
+    client.release();
   }
 };
 

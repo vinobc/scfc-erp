@@ -185,30 +185,34 @@ exports.updateStaff = async (req, res) => {
 };
 
 // Toggle staff status (active/inactive)
+// Also syncs the linked user account's is_active so deactivated staff cannot log in.
 exports.toggleStaffStatus = async (req, res) => {
+  const staffId = req.params.id;
+  const { is_active } = req.body;
+
+  if (is_active === undefined) {
+    return res
+      .status(400)
+      .json({ message: "is_active parameter is required" });
+  }
+
+  const client = await db.pool.connect();
   try {
-    const staffId = req.params.id;
-    const { is_active } = req.body;
+    await client.query("BEGIN");
 
-    // Validate is_active parameter
-    if (is_active === undefined) {
-      return res
-        .status(400)
-        .json({ message: "is_active parameter is required" });
-    }
-
-    // Check if staff exists
-    const staffExists = await db.query(
-      "SELECT COUNT(*) FROM staff WHERE staff_id = $1",
+    const staffRow = await client.query(
+      "SELECT email FROM staff WHERE staff_id = $1",
       [staffId]
     );
 
-    if (parseInt(staffExists.rows[0].count) === 0) {
+    if (staffRow.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ message: "Staff not found" });
     }
 
-    // Update staff status
-    const result = await db.query(
+    const staffEmail = staffRow.rows[0].email;
+
+    const result = await client.query(
       `UPDATE staff
        SET is_active = $1,
            updated_at = CURRENT_TIMESTAMP
@@ -217,15 +221,31 @@ exports.toggleStaffStatus = async (req, res) => {
       [is_active, staffId]
     );
 
+    // Staff users are linked to the user table by email (user.employee_id is NULL for staff).
+    if (staffEmail) {
+      await client.query(
+        `UPDATE "user"
+         SET is_active = $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE LOWER(email) = LOWER($2)`,
+        [is_active, staffEmail]
+      );
+    }
+
+    await client.query("COMMIT");
+
     res.status(200).json({
       message: `Staff ${is_active ? "activated" : "deactivated"} successfully`,
       staff: result.rows[0],
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("Toggle staff status error:", error);
     res
       .status(500)
       .json({ message: "Server error while toggling staff status" });
+  } finally {
+    client.release();
   }
 };
 
