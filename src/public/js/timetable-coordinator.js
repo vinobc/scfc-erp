@@ -403,14 +403,14 @@ function renderCoordinators(coordinators) {
 
 // Confirm remove coordinator
 function confirmRemoveCoordinator(userId) {
-  const coordinator = Object.values(
-    currentCoordinators.reduce((acc, coord) => {
-      if (!acc[coord.user_id]) {
-        acc[coord.user_id] = coord;
-      }
-      return acc;
-    }, {})
-  )[0];
+  const coordinator = currentCoordinators.find(
+    (c) => String(c.user_id) === String(userId)
+  );
+
+  if (!coordinator) {
+    showAlert("Coordinator not found", "danger");
+    return;
+  }
 
   if (
     confirm(
