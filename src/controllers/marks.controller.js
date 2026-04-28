@@ -385,6 +385,14 @@ exports.saveAssessmentConfig = async (req, res) => {
       courseResult.rows[0].practical
     );
 
+    // Check if config already exists (to detect question structure changes)
+    const existingConfig = await db.query(
+      `SELECT id, config_json FROM assessment_config
+       WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+         AND employee_id = $4 AND slot_name = $5 AND venue = $6 AND component_type = $7`,
+      [slot_year, semester_type, course_code, employee_id, slot_name, venue, compType]
+    );
+
     // Upsert the configuration (slot-specific)
     const result = await db.query(
       `INSERT INTO assessment_config
@@ -406,6 +414,37 @@ exports.saveAssessmentConfig = async (req, res) => {
         userId,
       ]
     );
+
+    // If config existed, check if CA question structures changed and clean up old marks
+    if (existingConfig.rows.length > 0) {
+      const oldConfig = typeof existingConfig.rows[0].config_json === "string"
+        ? JSON.parse(existingConfig.rows[0].config_json)
+        : existingConfig.rows[0].config_json;
+      const newConfig = config_json;
+      const configId = result.rows[0].id;
+
+      // Compare each CA's question structure
+      const oldCAs = (oldConfig.cas || []);
+      const newCAs = (newConfig.cas || []);
+
+      for (const newCA of newCAs) {
+        const oldCA = oldCAs.find(c => c.number === newCA.number);
+        if (!oldCA) continue; // New CA, no old marks to clean
+
+        // Compare question IDs and max marks
+        const oldQs = JSON.stringify((oldCA.questions || []).map(q => ({ id: q.id, maxMarks: q.maxMarks })).sort((a, b) => a.id.localeCompare(b.id)));
+        const newQs = JSON.stringify((newCA.questions || []).map(q => ({ id: q.id, maxMarks: q.maxMarks })).sort((a, b) => a.id.localeCompare(b.id)));
+
+        if (oldQs !== newQs) {
+          // Question structure changed — delete old marks for this CA
+          const deleted = await db.query(
+            `DELETE FROM student_marks WHERE assessment_config_id = $1 AND assessment_type = $2`,
+            [configId, `CA${newCA.number}`]
+          );
+          console.log(`Cleaned up ${deleted.rowCount} old marks for CA${newCA.number} (config ${configId}) due to question structure change`);
+        }
+      }
+    }
 
     res.status(200).json({
       message: "Assessment configuration saved successfully",
