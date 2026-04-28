@@ -143,7 +143,7 @@ function buildCoEWorksheet(headerInfo, students, component) {
     if (firstMulti > 0) {
       cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
     }
-    const row = [idx + 1, s.enrollment_number, cleanName, s.school || "ASET", program, branch];
+    const row = [idx + 1, s.enrollment_number, cleanName, s.school || "", program, branch];
 
     if (component === "IM") {
       if (hasTheoryConfig && hasLabConfig) {
@@ -707,10 +707,14 @@ exports.getStudentMarksReport = async (req, res) => {
         if (!validComponents.includes(component)) continue;
       }
 
-      // Get students registered for this course-slot-faculty
+      // Get students registered for this course-slot-faculty with school info
       const studentsResult = await db.query(`
-        SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code
+        SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
+               s.school_short_name as school
         FROM student_registrations sr
+        LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
+        LEFT JOIN program p ON st.program_id = p.program_id
+        LEFT JOIN school s ON p.school_id = s.school_id
         WHERE sr.slot_year = $1 AND sr.semester_type = $2
           AND sr.course_code = $3 AND sr.slot_name = $4
           AND sr.faculty_name = $5
