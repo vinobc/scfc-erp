@@ -446,14 +446,15 @@ exports.getMarksEntrySummary = async (req, res) => {
       const configs = configMap[groupKey] || [];
       const hasConfig = configs.length > 0;
 
-      // Get total registered students
+      // Get total registered students for this faculty
       const totalResult = await db.query(`
         SELECT COUNT(DISTINCT sr.enrollment_number) as total
         FROM student_registrations sr
         WHERE sr.slot_year = $1 AND sr.semester_type = $2
           AND sr.course_code = $3 AND sr.slot_name = $4
+          AND sr.faculty_name = $5
           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
-      `, [slot_year, semester_type, alloc.course_code, alloc.slot_name]);
+      `, [slot_year, semester_type, alloc.course_code, alloc.slot_name, alloc.faculty_name]);
 
       const totalStudents = parseInt(totalResult.rows[0].total);
 
@@ -706,15 +707,16 @@ exports.getStudentMarksReport = async (req, res) => {
         if (!validComponents.includes(component)) continue;
       }
 
-      // Get students registered for this course-slot
+      // Get students registered for this course-slot-faculty
       const studentsResult = await db.query(`
         SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code
         FROM student_registrations sr
         WHERE sr.slot_year = $1 AND sr.semester_type = $2
           AND sr.course_code = $3 AND sr.slot_name = $4
+          AND sr.faculty_name = $5
           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
         ORDER BY sr.enrollment_number
-      `, [slot_year, semester_type, info.course_code, info.slot_name]);
+      `, [slot_year, semester_type, info.course_code, info.slot_name, info.faculty_name]);
 
       if (studentsResult.rows.length === 0) continue;
 
