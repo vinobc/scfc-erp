@@ -1595,7 +1595,7 @@ async function loadAttendanceMarkingInterface(courseCode, employeeId, venue, slo
     // Fetch attendance stats for each student
     try {
       const statsParams = new URLSearchParams({
-        slot_year: slotYear, semester_type: semesterType, course_code: courseCode, employee_id: employeeId
+        slot_year: slotYear, semester_type: semesterType, course_code: courseCode, employee_id: employeeId, slot_name: slotName
       });
       const statsRes = await fetch(`${window.API_URL}/attendance/report?${statsParams}`, {
         headers: { "x-access-token": localStorage.getItem("token") }
@@ -2068,7 +2068,7 @@ async function reloadAttendanceForDate(courseCode, employeeId, venue, slotDay, s
     // Fetch attendance stats
     try {
       const statsParams = new URLSearchParams({
-        slot_year: slotYear, semester_type: semesterType, course_code: courseCode, employee_id: employeeId
+        slot_year: slotYear, semester_type: semesterType, course_code: courseCode, employee_id: employeeId, slot_name: slotName
       });
       const statsRes = await fetch(`${window.API_URL}/attendance/report?${statsParams}`, {
         headers: { "x-access-token": localStorage.getItem("token") }
