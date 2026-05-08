@@ -283,7 +283,7 @@ exports.getAttendanceRecords = async (req, res) => {
 // Calculate attendance percentage for students in a course
 exports.getAttendanceReport = async (req, res) => {
   try {
-    const { slot_year, semester_type, course_code, employee_id } = req.query;
+    const { slot_year, semester_type, course_code, employee_id, slot_name } = req.query;
 
     if (!slot_year || !semester_type || !course_code || !employee_id) {
       return res.status(400).json({ message: "Required parameters are missing" });
@@ -301,37 +301,47 @@ exports.getAttendanceReport = async (req, res) => {
 
     const course = courseResult.rows[0];
 
+    // Build params with optional slot_name filter
+    const params = [slot_year, semester_type, course_code, employee_id];
+    let slotFilter = "";
+    if (slot_name) {
+      params.push(slot_name);
+      slotFilter = ` AND a.slot_name = $${params.length}`;
+    }
+    params.push(course.theory);
+    const theoryParamIndex = params.length;
+
     // Get attendance percentage for each student
     const result = await db.query(
       `WITH student_attendance AS (
-         SELECT 
+         SELECT
            sr.enrollment_number,
            sr.student_name,
            COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END) as present_count,
            COUNT(a.id) as total_classes,
-           CASE 
+           CASE
              WHEN COUNT(a.id) = 0 THEN 0
              ELSE ROUND((COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
            END as attendance_percentage
          FROM student_registrations sr
          JOIN student s ON sr.enrollment_number = s.enrollment_no
-         LEFT JOIN attendance a ON s.user_id = a.student_id 
-           AND a.course_code = sr.course_code 
-           AND a.slot_year = sr.slot_year 
+         LEFT JOIN attendance a ON s.user_id = a.student_id
+           AND a.course_code = sr.course_code
+           AND a.slot_year = sr.slot_year
            AND a.semester_type = sr.semester_type
-           AND a.employee_id = $4
+           AND a.employee_id = $4${slotFilter}
          WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
          AND sr.withdrawn = false
          GROUP BY sr.enrollment_number, sr.student_name
        )
-       SELECT *, 
-         CASE 
-           WHEN $5 > 0 AND attendance_percentage < 75 THEN true 
-           ELSE false 
+       SELECT *,
+         CASE
+           WHEN $${theoryParamIndex} > 0 AND attendance_percentage < 75 THEN true
+           ELSE false
          END as below_minimum
        FROM student_attendance
        ORDER BY enrollment_number`,
-      [slot_year, semester_type, course_code, employee_id, course.theory]
+      params
     );
 
     res.status(200).json({
