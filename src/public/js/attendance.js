@@ -345,6 +345,36 @@ async function loadAttendanceInterface(course_code, employee_id, venue, slot_day
 
     const data = await response.json();
     enrolledStudents = data.students || data;
+
+    // Also fetch attendance stats for each student
+    try {
+      const statsParams = new URLSearchParams({
+        slot_year, semester_type, course_code, employee_id
+      });
+      const statsRes = await fetch(`${window.API_URL}/attendance/report?${statsParams}`, {
+        headers: { "x-access-token": localStorage.getItem("token") }
+      });
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        const statsMap = {};
+        (statsData.attendance_report || []).forEach(r => {
+          statsMap[r.enrollment_number] = r;
+        });
+        // Attach stats to each student
+        enrolledStudents.forEach(s => {
+          const stats = statsMap[s.enrollment_number];
+          if (stats) {
+            s.att_total = parseInt(stats.total_classes) || 0;
+            s.att_present = parseInt(stats.present_count) || 0;
+            s.att_absent = s.att_total - s.att_present;
+            s.att_percentage = parseFloat(stats.attendance_percentage) || 0;
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Could not fetch attendance stats:", e);
+    }
+
     renderAttendanceInterface();
 
   } catch (error) {
@@ -408,6 +438,10 @@ function renderAttendanceInterface() {
                 <th>Sl. No.</th>
                 <th>Enrollment Number</th>
                 <th>Student Name</th>
+                <th>Classes</th>
+                <th>Present</th>
+                <th>Absent</th>
+                <th>%</th>
                 <th>Attendance Status</th>
               </tr>
             </thead>
@@ -417,11 +451,17 @@ function renderAttendanceInterface() {
   enrolledStudents.forEach((student, index) => {
     const currentStatus = student.current_status || null;
     const isOD = student.is_od === true;
+    const attPct = student.att_percentage || 0;
+    const pctClass = attPct < 75 ? "text-danger fw-bold" : "text-success";
     interfaceHtml += `
-      <tr>
+      <tr${attPct < 75 && student.att_total > 0 ? ' class="table-warning"' : ''}>
         <td>${index + 1}</td>
         <td>${student.enrollment_number}</td>
         <td>${student.student_name}</td>
+        <td>${student.att_total || 0}</td>
+        <td>${student.att_present || 0}</td>
+        <td>${student.att_absent || 0}</td>
+        <td class="${pctClass}">${attPct}%</td>
         <td>
           <div class="d-flex align-items-center">
             <div class="btn-group" role="group" aria-label="Attendance options">

@@ -57,4 +57,28 @@ router.get(
   reportsController.getStudentMarksReport
 );
 
+// Get courses for attendance report
+router.get(
+  "/student-attendance/courses",
+  verifyToken,
+  isAdminOrFaculty,
+  reportsController.getAttendanceReportCourses
+);
+
+// Get slots for attendance report
+router.get(
+  "/student-attendance/slots",
+  verifyToken,
+  isAdminOrFaculty,
+  reportsController.getAttendanceReportSlots
+);
+
+// Download student attendance report
+router.get(
+  "/student-attendance",
+  verifyToken,
+  isAdminOrFaculty,
+  reportsController.getStudentAttendanceReport
+);
+
 module.exports = router;

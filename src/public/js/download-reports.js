@@ -362,6 +362,77 @@ function displayDownloadReportsInterface() {
           </div>
           ` : ""}
 
+          <!-- Student Attendance Report (Admin, Faculty, Coordinator) -->
+          ${currentUserRole === "admin" || currentUserRole === "faculty" || currentUserRole === "timetable_coordinator" ? `
+          <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+              <h5 class="card-title mb-0"><i class="fas fa-calendar-check me-2"></i>Student Attendance Report</h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Download student attendance report with summary and date-wise breakdown.</p>
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-md-3">
+                      <label for="att-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                      <select id="att-filter-year" class="form-select" onchange="onAttYearSemesterChange()">
+                        ${yearOptions}
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="att-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                      <select id="att-filter-semester" class="form-select" onchange="onAttYearSemesterChange()">
+                        <option value="">Select Semester</option>
+                        <option value="FALL">FALL</option>
+                        <option value="WINTER">WINTER</option>
+                        <option value="SUMMER">SUMMER</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="att-filter-course" class="form-label">Course <span class="text-danger">*</span></label>
+                      <select id="att-filter-course" class="form-select" onchange="onAttCourseChange()">
+                        <option value="">Select Year & Semester first</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="att-filter-slot" class="form-label">Slot</label>
+                      <select id="att-filter-slot" class="form-select">
+                        <option value="">All Slots</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row g-3 mt-1">
+                    ${currentUserRole === "admin" ? `
+                    <div class="col-md-3">
+                      <label for="att-filter-faculty" class="form-label">Faculty <span class="text-danger">*</span></label>
+                      <select id="att-filter-faculty" class="form-select">
+                        <option value="">Select Course first</option>
+                      </select>
+                    </div>
+                    ` : ""}
+                    <div class="col-md-3 d-flex align-items-end">
+                      <button class="btn btn-outline-secondary" onclick="clearAttFilters()">
+                        <i class="fas fa-times me-1"></i>Clear Filters
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <button type="button" class="btn btn-info text-white" onclick="downloadAttendanceReport()">
+                    <i class="fas fa-file-excel me-2"></i>Download Attendance Report (.xlsx)
+                  </button>
+                </div>
+              </div>
+              <div id="att-download-status" class="mt-3"></div>
+            </div>
+          </div>
+          ` : ""}
+
         </div>
       </div>
     </div>
@@ -1185,6 +1256,213 @@ async function doMarksDownload(year, semester, component, courseCode, slotName, 
   }
 }
 
+// ============ Attendance Report Functions ============
+
+let attCoursesCache = [];
+
+// When year or semester changes, load attendance courses
+async function onAttYearSemesterChange() {
+  const year = document.getElementById("att-filter-year").value;
+  const semester = document.getElementById("att-filter-semester").value;
+  const courseSelect = document.getElementById("att-filter-course");
+  const slotSelect = document.getElementById("att-filter-slot");
+
+  courseSelect.innerHTML = '<option value="">Loading courses...</option>';
+  slotSelect.innerHTML = '<option value="">All Slots</option>';
+  attCoursesCache = [];
+
+  if (!year || !semester) {
+    courseSelect.innerHTML = '<option value="">Select Year & Semester first</option>';
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(
+      `${window.API_URL}/reports/student-attendance/courses?slot_year=${year}&semester_type=${semester}`,
+      { headers: { "x-access-token": token } }
+    );
+    if (!res.ok) throw new Error("Failed to load courses");
+
+    attCoursesCache = await res.json();
+    courseSelect.innerHTML = '<option value="">Select Course</option>';
+
+    const uniqueCourses = [];
+    const seen = new Set();
+    for (const c of attCoursesCache) {
+      if (!seen.has(c.course_code)) {
+        seen.add(c.course_code);
+        uniqueCourses.push(c);
+      }
+    }
+    uniqueCourses.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.course_code;
+      opt.textContent = `${c.course_code} - ${c.course_name}`;
+      courseSelect.appendChild(opt);
+    });
+  } catch (error) {
+    console.error("Error loading attendance courses:", error);
+    courseSelect.innerHTML = '<option value="">Error loading courses</option>';
+  }
+}
+
+// When course changes, load slots and populate faculty dropdown for admin
+async function onAttCourseChange() {
+  const year = document.getElementById("att-filter-year").value;
+  const semester = document.getElementById("att-filter-semester").value;
+  const courseCode = document.getElementById("att-filter-course").value;
+  const slotSelect = document.getElementById("att-filter-slot");
+  const facultySelect = document.getElementById("att-filter-faculty");
+
+  slotSelect.innerHTML = '<option value="">All Slots</option>';
+  if (facultySelect) facultySelect.innerHTML = '<option value="">Select Faculty</option>';
+  if (!courseCode) {
+    if (facultySelect) facultySelect.innerHTML = '<option value="">Select Course first</option>';
+    return;
+  }
+
+  // Populate faculty dropdown for admin
+  if (facultySelect) {
+    const uniqueFaculty = [];
+    const seenFac = new Set();
+    for (const c of attCoursesCache) {
+      if (c.course_code === courseCode && !seenFac.has(c.employee_id)) {
+        seenFac.add(c.employee_id);
+        uniqueFaculty.push({ employee_id: c.employee_id, faculty_name: c.faculty_name });
+      }
+    }
+    uniqueFaculty.sort((a, b) => a.faculty_name.localeCompare(b.faculty_name));
+    uniqueFaculty.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.employee_id;
+      opt.textContent = f.faculty_name;
+      facultySelect.appendChild(opt);
+    });
+    // Auto-select if only one faculty
+    if (uniqueFaculty.length === 1) {
+      facultySelect.value = uniqueFaculty[0].employee_id;
+    }
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(
+      `${window.API_URL}/reports/student-attendance/slots?slot_year=${year}&semester_type=${semester}&course_code=${courseCode}`,
+      { headers: { "x-access-token": token } }
+    );
+    if (res.ok) {
+      const slots = await res.json();
+      slots.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.slot_name;
+        opt.textContent = `${s.slot_name} (${s.venue})`;
+        slotSelect.appendChild(opt);
+      });
+    }
+  } catch (error) {
+    console.error("Error loading attendance slots:", error);
+  }
+}
+
+// Clear attendance filters
+function clearAttFilters() {
+  document.getElementById("att-filter-year").value = "";
+  document.getElementById("att-filter-semester").value = "";
+  document.getElementById("att-filter-course").innerHTML = '<option value="">Select Year & Semester first</option>';
+  document.getElementById("att-filter-slot").innerHTML = '<option value="">All Slots</option>';
+  const facultySelect = document.getElementById("att-filter-faculty");
+  if (facultySelect) facultySelect.innerHTML = '<option value="">Select Course first</option>';
+  attCoursesCache = [];
+}
+
+// Download attendance report
+async function downloadAttendanceReport() {
+  const year = document.getElementById("att-filter-year").value;
+  const semester = document.getElementById("att-filter-semester").value;
+  const course = document.getElementById("att-filter-course").value;
+  const slot = document.getElementById("att-filter-slot").value;
+  const facultySelect = document.getElementById("att-filter-faculty");
+  const empId = facultySelect ? facultySelect.value : "";
+  const statusDiv = document.getElementById("att-download-status");
+
+  if (!year || !semester || !course) {
+    statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select Academic Year, Semester, and Course.
+      </div>
+    `;
+    return;
+  }
+
+  // Admin must select a faculty
+  if (facultySelect && !empId) {
+    statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select a Faculty.
+      </div>
+    `;
+    return;
+  }
+
+  statusDiv.innerHTML = `
+    <div class="alert alert-info">
+      <i class="fas fa-spinner fa-spin me-2"></i>Preparing attendance report...
+    </div>
+  `;
+
+  try {
+    const params = new URLSearchParams();
+    params.append("slot_year", year);
+    params.append("semester_type", semester);
+    params.append("course_code", course);
+    if (slot) params.append("slot_name", slot);
+    if (empId) params.append("employee_id", empId);
+
+    const response = await fetch(`${window.API_URL}/reports/student-attendance?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "x-access-token": localStorage.getItem("token"),
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to download attendance report");
+    }
+
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = "attendance_report.xlsx";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
+
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+
+    statusDiv.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Attendance report downloaded successfully!
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error downloading attendance report:", error);
+    statusDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}
+      </div>
+    `;
+  }
+}
+
 // Make functions available globally
 window.initializeDownloadReports = initializeDownloadReports;
 window.downloadRegistrations = downloadRegistrations;
@@ -1201,4 +1479,8 @@ window.downloadStatusReport = downloadStatusReport;
 window.toggleAllSummaryRows = toggleAllSummaryRows;
 window.downloadSingleMarks = downloadSingleMarks;
 window.downloadSelectedMarks = downloadSelectedMarks;
+window.onAttYearSemesterChange = onAttYearSemesterChange;
+window.onAttCourseChange = onAttCourseChange;
+window.clearAttFilters = clearAttFilters;
+window.downloadAttendanceReport = downloadAttendanceReport;
 console.log("download-reports.js loaded successfully");
