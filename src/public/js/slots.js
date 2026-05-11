@@ -25,6 +25,7 @@ let timetableContainer;
 let timetableTitle;
 let masterSlotTable;
 let slotInfoTextarea;
+let saveSlotInfoBtn;
 
 // Modal elements
 let slotModal;
@@ -74,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
   timetableTitle = document.getElementById("timetable-title");
   masterSlotTable = document.getElementById("master-slot-table");
   slotInfoTextarea = document.getElementById("slot-info-textarea");
+  saveSlotInfoBtn = document.getElementById("save-slot-info-btn");
 
   // Initialize form elements
   slotForm = document.getElementById("slot-form");
@@ -152,6 +154,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (viewTimetableBtn) {
     viewTimetableBtn.addEventListener("click", handleViewTimetable);
+  }
+
+  if (saveSlotInfoBtn) {
+    saveSlotInfoBtn.addEventListener("click", handleSaveSlotInfo);
   }
 
   // Setup navigation listeners
@@ -962,6 +968,7 @@ function handleViewTimetable() {
     .then((slots) => {
       // Generate the timetable
       generateTimetable(slots, year, semester);
+      loadSlotInfo(year, semester);
     })
     .catch((error) => {
       console.error("View timetable error:", error);
@@ -1100,6 +1107,89 @@ function generateTimetable(slots, year, semester) {
   if (masterSlotTable && masterSlotTable.querySelector("tbody")) {
     masterSlotTable.querySelector("tbody").innerHTML = tableHtml;
   }
+}
+
+// Load persisted Slot Information text for the selected (year, semester)
+function loadSlotInfo(year, semester) {
+  if (!slotInfoTextarea) return;
+
+  // Remember which (year, semester) the textarea currently reflects, for the save call
+  slotInfoTextarea.dataset.year = year;
+  slotInfoTextarea.dataset.semester = semester;
+
+  fetch(`${window.API_URL}/slot-info/${year}/${semester}`, {
+    headers: {
+      Authorization: localStorage.getItem("token"),
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Failed to load slot info");
+      }
+      return response.json();
+    })
+    .then((data) => {
+      slotInfoTextarea.value = data.info_text || "";
+      applySlotInfoEditPermission();
+    })
+    .catch((error) => {
+      console.error("Load slot info error:", error);
+      slotInfoTextarea.value = "";
+      applySlotInfoEditPermission();
+    });
+}
+
+// Show the Save button and enable editing only for admins; everyone else is read-only
+function applySlotInfoEditPermission() {
+  const isAdmin =
+    typeof currentUser !== "undefined" &&
+    currentUser &&
+    currentUser.role === "admin";
+
+  if (slotInfoTextarea) {
+    slotInfoTextarea.readOnly = !isAdmin;
+  }
+  if (saveSlotInfoBtn) {
+    saveSlotInfoBtn.style.display = isAdmin ? "" : "none";
+  }
+}
+
+// Persist the Slot Information text (admin only)
+function handleSaveSlotInfo() {
+  if (!slotInfoTextarea) return;
+
+  const year = slotInfoTextarea.dataset.year;
+  const semester = slotInfoTextarea.dataset.semester;
+
+  if (!year || !semester) {
+    showAlert(
+      "Please view a timetable before saving slot information.",
+      "warning"
+    );
+    return;
+  }
+
+  fetch(`${window.API_URL}/slot-info/${year}/${semester}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: localStorage.getItem("token"),
+    },
+    body: JSON.stringify({ info_text: slotInfoTextarea.value }),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Failed to save slot info");
+      }
+      return response.json();
+    })
+    .then(() => {
+      showAlert("Slot information saved.", "success");
+    })
+    .catch((error) => {
+      console.error("Save slot info error:", error);
+      showAlert("Failed to save slot information. Please try again.", "danger");
+    });
 }
 
 // Show alert message
