@@ -311,28 +311,32 @@ exports.getAttendanceReport = async (req, res) => {
     params.push(course.theory);
     const theoryParamIndex = params.length;
 
-    // Get attendance percentage for each student
+    // Get attendance percentage for each student (deduplicate student_registrations for TEL courses)
     const result = await db.query(
-      `WITH student_attendance AS (
+      `WITH distinct_students AS (
+         SELECT DISTINCT sr.enrollment_number, sr.student_name
+         FROM student_registrations sr
+         WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
+           AND sr.withdrawn = false
+       ),
+       student_attendance AS (
          SELECT
-           sr.enrollment_number,
-           sr.student_name,
+           ds.enrollment_number,
+           ds.student_name,
            COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END) as present_count,
            COUNT(a.id) as total_classes,
            CASE
              WHEN COUNT(a.id) = 0 THEN 0
              ELSE ROUND((COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
            END as attendance_percentage
-         FROM student_registrations sr
-         JOIN student s ON sr.enrollment_number = s.enrollment_no
+         FROM distinct_students ds
+         JOIN student s ON ds.enrollment_number = s.enrollment_no
          LEFT JOIN attendance a ON s.user_id = a.student_id
-           AND a.course_code = sr.course_code
-           AND a.slot_year = sr.slot_year
-           AND a.semester_type = sr.semester_type
+           AND a.course_code = $3
+           AND a.slot_year = $1
+           AND a.semester_type = $2
            AND a.employee_id = $4${slotFilter}
-         WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
-         AND sr.withdrawn = false
-         GROUP BY sr.enrollment_number, sr.student_name
+         GROUP BY ds.enrollment_number, ds.student_name
        )
        SELECT *,
          CASE

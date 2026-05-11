@@ -960,10 +960,18 @@ exports.getStudentAttendanceReport = async (req, res) => {
 
     const dates = datesResult.rows;
 
-    // Get students with attendance summary
+    // Get students with attendance summary (deduplicate student_registrations for TEL courses)
     const studentsResult = await db.query(`
+      WITH distinct_students AS (
+        SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code
+        FROM student_registrations sr
+        WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
+          AND sr.faculty_name = (SELECT name FROM faculty WHERE employee_id = $4)
+          ${slot_name ? `AND sr.slot_name = $5` : ""}
+          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+      )
       SELECT
-        sr.enrollment_number, sr.student_name, sr.program_code,
+        ds.enrollment_number, ds.student_name, ds.program_code,
         s.school_short_name as school,
         COUNT(a.id) as total_classes,
         COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END) as present_count,
@@ -973,22 +981,18 @@ exports.getStudentAttendanceReport = async (req, res) => {
           WHEN COUNT(a.id) = 0 THEN 0
           ELSE ROUND((COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
         END as attendance_percentage
-      FROM student_registrations sr
-      JOIN student st ON sr.enrollment_number = st.enrollment_no
+      FROM distinct_students ds
+      JOIN student st ON ds.enrollment_number = st.enrollment_no
       LEFT JOIN program p ON st.program_id = p.program_id
       LEFT JOIN school s ON p.school_id = s.school_id
       LEFT JOIN attendance a ON st.user_id = a.student_id
-        AND a.course_code = sr.course_code
-        AND a.slot_year = sr.slot_year
-        AND a.semester_type = sr.semester_type
+        AND a.course_code = $3
+        AND a.slot_year = $1
+        AND a.semester_type = $2
         AND a.employee_id = $4
         ${slot_name ? `AND a.slot_name = $5` : ""}
-      WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
-        AND sr.faculty_name = (SELECT name FROM faculty WHERE employee_id = $4)
-        ${slot_name ? `AND sr.slot_name = $5` : ""}
-        AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
-      GROUP BY sr.enrollment_number, sr.student_name, sr.program_code, s.school_short_name
-      ORDER BY sr.enrollment_number
+      GROUP BY ds.enrollment_number, ds.student_name, ds.program_code, s.school_short_name
+      ORDER BY ds.enrollment_number
     `, params);
 
     const students = studentsResult.rows;
