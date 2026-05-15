@@ -63,7 +63,7 @@ function parseProgramBranch(programCode) {
 
 // Helper: Build CoE template worksheet for a single course-slot-faculty-component combo
 function buildCoEWorksheet(headerInfo, students, component) {
-  const { slotName, facultyName, courseCode, courseName, credits, courseType, assessmentType, semesterLabel, hasTheoryConfig, hasLabConfig } = headerInfo;
+  const { slotName, facultyName, courseCode, courseName, credits, courseType, assessmentType, semesterLabel, hasTheoryConfig, hasLabConfig, theoryConfigJson, labConfigJson } = headerInfo;
 
   // Determine program level (UG/PG)
   const programLevel = assessmentType.startsWith("PG") ? "PG" : "UG";
@@ -94,26 +94,37 @@ function buildCoEWorksheet(headerInfo, students, component) {
 
   // Determine marks columns based on component
   let marksHeaders;
+  let imColumns = []; // Track IM column structure for data rows
   if (component === "IM") {
-    // Get max marks from first student that has data
-    let assignMax = "";
-    let labMax = "";
-    for (const s of students) {
-      if (assignMax === "" && s.assignment_max !== null && s.assignment_max !== undefined) assignMax = s.assignment_max;
-      if (labMax === "" && s.lab_max !== null && s.lab_max !== undefined) labMax = s.lab_max;
-      if (assignMax !== "" && labMax !== "") break;
-    }
-
     const showAssignment = hasTheoryConfig;
     const showLab = hasLabConfig;
+    let totalMax = 0;
 
-    if (showAssignment && showLab) {
-      const totalMax = (assignMax || 0) + (labMax || 0);
-      marksHeaders = [`Assignment Marks\n(${assignMax})`, `Lab Marks\n(${labMax})`, `Total\n(${totalMax})`];
-    } else if (showAssignment) {
-      marksHeaders = [`Assignment Marks\n(${assignMax})`];
-    } else if (showLab) {
-      marksHeaders = [`Lab Marks\n(${labMax})`];
+    // Build individual assignment columns from config
+    if (showAssignment && theoryConfigJson) {
+      const assignments = theoryConfigJson.assignments || [];
+      assignments.forEach(a => {
+        imColumns.push({ type: "assignment", number: a.number, maxMarks: a.maxMarks });
+        totalMax += a.maxMarks || 0;
+      });
+    }
+
+    // Build individual lab session columns from config
+    if (showLab && labConfigJson) {
+      const labSessions = labConfigJson.labSessions || [];
+      labSessions.forEach(l => {
+        imColumns.push({ type: "lab", number: l.sessionNumber, maxMarks: l.maxMarks });
+        totalMax += l.maxMarks || 0;
+      });
+    }
+
+    // Build headers from columns
+    marksHeaders = imColumns.map(col => {
+      const label = col.type === "assignment" ? `A${col.number}` : `Lab ${col.number}`;
+      return `${label}\n(${col.maxMarks})`;
+    });
+    if (imColumns.length > 0) {
+      marksHeaders.push(`Total\n(${totalMax})`);
     } else {
       marksHeaders = ["Marks"];
     }
@@ -146,15 +157,21 @@ function buildCoEWorksheet(headerInfo, students, component) {
     const row = [idx + 1, s.enrollment_number, cleanName, s.school || "", program, branch];
 
     if (component === "IM") {
-      if (hasTheoryConfig && hasLabConfig) {
-        row.push(s.assignment_marks !== null ? s.assignment_marks : "");
-        row.push(s.lab_marks !== null ? s.lab_marks : "");
-        const total = (s.assignment_marks || 0) + (s.lab_marks || 0);
-        row.push(s.assignment_marks !== null || s.lab_marks !== null ? total : "");
-      } else if (hasTheoryConfig) {
-        row.push(s.assignment_marks !== null ? s.assignment_marks : "");
-      } else if (hasLabConfig) {
-        row.push(s.lab_marks !== null ? s.lab_marks : "");
+      let rowTotal = 0;
+      let hasAnyMark = false;
+      imColumns.forEach(col => {
+        const key = col.type === "assignment" ? `assignment_${col.number}` : `lab_${col.number}`;
+        const val = s[key];
+        if (val !== null && val !== undefined) {
+          row.push(val);
+          rowTotal += val;
+          hasAnyMark = true;
+        } else {
+          row.push("");
+        }
+      });
+      if (imColumns.length > 0) {
+        row.push(hasAnyMark ? rowTotal : "");
       }
     } else {
       row.push(s.marks !== null && s.marks !== undefined ? s.marks : "");
@@ -744,7 +761,9 @@ exports.getStudentMarksReport = async (req, res) => {
         assessmentType: assessmentType,
         semesterLabel: semLabel,
         hasTheoryConfig: !!group.theoryConfig,
-        hasLabConfig: !!group.labConfig
+        hasLabConfig: !!group.labConfig,
+        theoryConfigJson: group.theoryConfig ? (typeof group.theoryConfig.config_json === "string" ? JSON.parse(group.theoryConfig.config_json) : group.theoryConfig.config_json) : null,
+        labConfigJson: group.labConfig ? (typeof group.labConfig.config_json === "string" ? JSON.parse(group.labConfig.config_json) : group.labConfig.config_json) : null
       };
 
       const ws = buildCoEWorksheet(headerInfo, students, component);
@@ -834,64 +853,46 @@ async function fetchIMMarks(group, students, assessmentType) {
   let labMaxMarks = null;
 
   students.forEach(s => {
-    results[s.enrollment_number] = {
-      ...s,
-      assignment_marks: null,
-      lab_marks: null,
-      assignment_max: null,
-      lab_max: null
-    };
+    results[s.enrollment_number] = { ...s };
   });
 
-  // Get assignment marks from THEORY config
+  // Get individual assignment marks from THEORY config
   if (group.theoryConfig && !assessmentType.endsWith("_LAB")) {
     const assignResult = await db.query(`
-      SELECT sm.enrollment_number,
-             SUM(sm.marks_obtained) as total_marks,
-             SUM(sm.max_marks) as total_max
+      SELECT sm.enrollment_number, sm.assessment_number,
+             SUM(sm.marks_obtained) as marks
       FROM student_marks sm
       WHERE sm.assessment_config_id = $1
         AND sm.assessment_type = 'ASSIGNMENT'
-      GROUP BY sm.enrollment_number
+      GROUP BY sm.enrollment_number, sm.assessment_number
     `, [group.theoryConfig.id]);
 
     for (const m of assignResult.rows) {
       if (results[m.enrollment_number]) {
-        results[m.enrollment_number].assignment_marks = parseFloat(m.total_marks);
-      }
-      if (assignmentMaxMarks === null) {
-        assignmentMaxMarks = parseFloat(m.total_max);
+        results[m.enrollment_number][`assignment_${m.assessment_number}`] = parseFloat(m.marks);
       }
     }
   }
 
-  // Get lab marks from LAB config (for INTEGRATED and LAB courses)
+  // Get individual lab session marks from LAB config
   if (group.labConfig && (assessmentType.endsWith("_INTEGRATED") || assessmentType.endsWith("_LAB"))) {
     const labResult = await db.query(`
-      SELECT sm.enrollment_number,
-             SUM(sm.marks_obtained) as total_marks,
-             SUM(sm.max_marks) as total_max
+      SELECT sm.enrollment_number, sm.assessment_number,
+             SUM(sm.marks_obtained) as marks
       FROM student_marks sm
       WHERE sm.assessment_config_id = $1
         AND sm.assessment_type = 'LAB_SESSION'
-      GROUP BY sm.enrollment_number
+      GROUP BY sm.enrollment_number, sm.assessment_number
     `, [group.labConfig.id]);
 
     for (const m of labResult.rows) {
       if (results[m.enrollment_number]) {
-        results[m.enrollment_number].lab_marks = parseFloat(m.total_marks);
-      }
-      if (labMaxMarks === null) {
-        labMaxMarks = parseFloat(m.total_max);
+        results[m.enrollment_number][`lab_${m.assessment_number}`] = parseFloat(m.marks);
       }
     }
   }
 
-  return students.map(s => ({
-    ...results[s.enrollment_number],
-    assignment_max: assignmentMaxMarks,
-    lab_max: labMaxMarks
-  }));
+  return students.map(s => results[s.enrollment_number]);
 }
 
 // ============ ATTENDANCE REPORT ============
