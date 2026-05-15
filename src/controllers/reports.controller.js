@@ -1191,3 +1191,167 @@ exports.getAttendanceReportSlots = async (req, res) => {
     res.status(500).json({ message: "Error fetching slots", error: error.message });
   }
 };
+
+// ============ INELIGIBLE STUDENTS REPORT ============
+
+// Download ineligible students report (admin only)
+exports.getIneligibleStudentsReport = async (req, res) => {
+  try {
+    const { slot_year, semester_type, level, school, cutoff_date } = req.query;
+
+    if (!slot_year || !semester_type || !level || !cutoff_date) {
+      return res.status(400).json({ message: "slot_year, semester_type, level, and cutoff_date are required" });
+    }
+
+    // Build level filter based on course code 4th digit
+    let levelFilter = "";
+    if (level === "UG") {
+      levelFilter = " AND CAST(SUBSTRING(fa.course_code, 4, 1) AS INTEGER) BETWEEN 1 AND 4";
+    } else if (level === "PG") {
+      levelFilter = " AND CAST(SUBSTRING(fa.course_code, 4, 1) AS INTEGER) BETWEEN 5 AND 6";
+    }
+
+    // Build school filter
+    let schoolFilter = "";
+    const params = [slot_year, semester_type, cutoff_date];
+    if (school) {
+      params.push(school);
+      schoolFilter = ` AND sch.school_short_name = $${params.length}`;
+    }
+
+    // Get all theory course-slot-faculty combos with attendance stats per student up to cutoff date
+    const result = await db.query(`
+      WITH distinct_students AS (
+        SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
+               sr.course_code, c.course_name, sr.slot_name, sr.faculty_name,
+               sch.school_short_name as school
+        FROM student_registrations sr
+        JOIN student st ON sr.enrollment_number = st.enrollment_no
+        JOIN program p ON st.program_id = p.program_id
+        JOIN school sch ON p.school_id = sch.school_id
+        JOIN course c ON sr.course_code = c.course_code
+        JOIN faculty_allocation fa ON fa.course_code = sr.course_code
+          AND fa.slot_year = sr.slot_year AND fa.semester_type = sr.semester_type
+          AND fa.slot_name = sr.slot_name
+          AND (SELECT name FROM faculty WHERE employee_id = fa.employee_id) = sr.faculty_name
+        WHERE sr.slot_year = $1 AND sr.semester_type = $2
+          AND sr.slot_name NOT LIKE 'L%'
+          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+          ${levelFilter}${schoolFilter}
+      ),
+      student_attendance AS (
+        SELECT
+          ds.enrollment_number, ds.student_name, ds.program_code,
+          ds.course_code, ds.course_name, ds.slot_name, ds.faculty_name, ds.school,
+          COUNT(a.id) as total_classes,
+          COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END) as present_count,
+          CASE
+            WHEN COUNT(a.id) = 0 THEN 0
+            ELSE ROUND((COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
+          END as attendance_percentage
+        FROM distinct_students ds
+        JOIN student st ON ds.enrollment_number = st.enrollment_no
+        JOIN faculty f ON f.name = ds.faculty_name
+        LEFT JOIN attendance a ON st.user_id = a.student_id
+          AND a.course_code = ds.course_code
+          AND a.slot_name = ds.slot_name
+          AND a.slot_year = $1
+          AND a.semester_type = $2
+          AND a.employee_id = f.employee_id
+          AND a.attendance_date <= $3::date
+        GROUP BY ds.enrollment_number, ds.student_name, ds.program_code,
+                 ds.course_code, ds.course_name, ds.slot_name, ds.faculty_name, ds.school
+      )
+      SELECT * FROM student_attendance
+      WHERE total_classes > 0 AND attendance_percentage < 75
+      ORDER BY school, course_code, slot_name, enrollment_number
+    `, params);
+
+    const ineligibleStudents = result.rows;
+
+    if (ineligibleStudents.length === 0) {
+      return res.status(404).json({ message: "No ineligible students found for the selected filters" });
+    }
+
+    // Group by school
+    const schoolGroups = {};
+    for (const row of ineligibleStudents) {
+      const s = row.school || "Unknown";
+      if (!schoolGroups[s]) schoolGroups[s] = [];
+      schoolGroups[s].push(row);
+    }
+
+    // Build Excel workbook
+    const workbook = XLSX.utils.book_new();
+    const semLabel = `${semester_type.charAt(0)}${semester_type.slice(1).toLowerCase()} Semester ${slot_year}`;
+    const levelLabel = level === "All" ? "UG & PG" : level;
+
+    // Summary sheet
+    const summaryRows = [];
+    summaryRows.push(["AMITY UNIVERSITY BENGALURU"]);
+    summaryRows.push([`Ineligible Students Report (< 75% Attendance) - ${levelLabel}`]);
+    summaryRows.push([`${semLabel} | Cutoff Date: ${cutoff_date}`]);
+    summaryRows.push([]);
+    summaryRows.push(["School", "Total Ineligible Students"]);
+
+    const schoolNames = Object.keys(schoolGroups).sort();
+    let grandTotal = 0;
+    schoolNames.forEach(s => {
+      summaryRows.push([s, schoolGroups[s].length]);
+      grandTotal += schoolGroups[s].length;
+    });
+    summaryRows.push([]);
+    summaryRows.push(["Grand Total", grandTotal]);
+
+    const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+    XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
+
+    // Per-school sheets
+    const headers = ["S.No.", "Enrollment", "Student Name", "Program", "Branch", "Course Code", "Course Name", "Slot", "Faculty", "Total Classes", "Present", "Attendance %"];
+
+    for (const schoolName of schoolNames) {
+      const students = schoolGroups[schoolName];
+      const rows = [];
+      rows.push(["AMITY UNIVERSITY BENGALURU"]);
+      rows.push([`Ineligible Students - ${schoolName} (${levelLabel})`]);
+      rows.push([`${semLabel} | Cutoff Date: ${cutoff_date}`]);
+      rows.push([]);
+      rows.push(headers);
+
+      students.forEach((s, idx) => {
+        const { program, branch } = parseProgramBranch(s.program_code);
+        let cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
+        const tokens = cleanName.split(/\s+/);
+        const firstMulti = tokens.findIndex(t => t.length > 1);
+        if (firstMulti > 0) {
+          cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
+        }
+
+        rows.push([
+          idx + 1, s.enrollment_number, cleanName, program, branch,
+          s.course_code, s.course_name, s.slot_name, s.faculty_name,
+          parseInt(s.total_classes), parseInt(s.present_count), parseFloat(s.attendance_percentage)
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      // Truncate sheet name to 31 chars
+      let sheetName = schoolName.substring(0, 31);
+      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
+    }
+
+    // Generate filename
+    const semPrefix = semester_type === "WINTER" ? "WS" : semester_type === "FALL" ? "FS" : "SS";
+    const cleanYear = slot_year.replace(/-/g, "_");
+    const filename = `${semPrefix}${cleanYear}_${levelLabel}_Ineligible_Students_${cutoff_date}.xlsx`;
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(buffer);
+
+  } catch (error) {
+    console.error("Error generating ineligible students report:", error);
+    res.status(500).json({ message: "Error generating report", error: error.message });
+  }
+};

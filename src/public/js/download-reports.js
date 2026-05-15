@@ -51,6 +51,16 @@ async function loadFilterOptions() {
           schoolSelect.appendChild(opt);
         });
       }
+      // Also populate ineligible report school dropdown
+      const inelSchoolSelect = document.getElementById("inel-filter-school");
+      if (inelSchoolSelect) {
+        schools.forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = s.school_short_name;
+          opt.textContent = `${s.school_short_name} - ${s.school_long_name}`;
+          inelSchoolSelect.appendChild(opt);
+        });
+      }
     }
 
     if (programsRes.ok) {
@@ -429,6 +439,69 @@ function displayDownloadReportsInterface() {
                 </div>
               </div>
               <div id="att-download-status" class="mt-3"></div>
+            </div>
+          </div>
+          ` : ""}
+
+          <!-- Ineligible Students Report (Admin only) -->
+          ${currentUserRole === "admin" ? `
+          <div class="card mb-4">
+            <div class="card-header bg-danger text-white">
+              <h5 class="card-title mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Ineligible Students Report</h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Download list of students below 75% attendance (theory courses only) for CoE submissions.</p>
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row g-3">
+                    <div class="col-md-3">
+                      <label for="inel-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                      <select id="inel-filter-year" class="form-select">
+                        ${yearOptions}
+                      </select>
+                    </div>
+                    <div class="col-md-3">
+                      <label for="inel-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                      <select id="inel-filter-semester" class="form-select">
+                        <option value="">Select Semester</option>
+                        <option value="FALL">FALL</option>
+                        <option value="WINTER">WINTER</option>
+                        <option value="SUMMER">SUMMER</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
+                      <label for="inel-filter-level" class="form-label">Level <span class="text-danger">*</span></label>
+                      <select id="inel-filter-level" class="form-select">
+                        <option value="">Select Level</option>
+                        <option value="UG">UG</option>
+                        <option value="PG">PG</option>
+                        <option value="All">All</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
+                      <label for="inel-filter-school" class="form-label">School</label>
+                      <select id="inel-filter-school" class="form-select">
+                        <option value="">All Schools</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
+                      <label for="inel-filter-cutoff" class="form-label">Cutoff Date <span class="text-danger">*</span></label>
+                      <input type="date" id="inel-filter-cutoff" class="form-control">
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <button type="button" class="btn btn-danger" onclick="downloadIneligibleReport()">
+                    <i class="fas fa-file-excel me-2"></i>Download Ineligible Students Report (.xlsx)
+                  </button>
+                </div>
+              </div>
+              <div id="inel-download-status" class="mt-3"></div>
             </div>
           </div>
           ` : ""}
@@ -1483,4 +1556,82 @@ window.onAttYearSemesterChange = onAttYearSemesterChange;
 window.onAttCourseChange = onAttCourseChange;
 window.clearAttFilters = clearAttFilters;
 window.downloadAttendanceReport = downloadAttendanceReport;
+window.downloadIneligibleReport = downloadIneligibleReport;
 console.log("download-reports.js loaded successfully");
+
+// ============ Ineligible Students Report Functions ============
+
+async function downloadIneligibleReport() {
+  const year = document.getElementById("inel-filter-year").value;
+  const semester = document.getElementById("inel-filter-semester").value;
+  const level = document.getElementById("inel-filter-level").value;
+  const school = document.getElementById("inel-filter-school").value;
+  const cutoff = document.getElementById("inel-filter-cutoff").value;
+  const statusDiv = document.getElementById("inel-download-status");
+
+  if (!year || !semester || !level || !cutoff) {
+    statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select Academic Year, Semester, Level, and Cutoff Date.
+      </div>
+    `;
+    return;
+  }
+
+  statusDiv.innerHTML = `
+    <div class="alert alert-info">
+      <i class="fas fa-spinner fa-spin me-2"></i>Generating ineligible students report...
+    </div>
+  `;
+
+  try {
+    const params = new URLSearchParams();
+    params.append("slot_year", year);
+    params.append("semester_type", semester);
+    params.append("level", level);
+    params.append("cutoff_date", cutoff);
+    if (school) params.append("school", school);
+
+    const response = await fetch(`${window.API_URL}/reports/ineligible-students?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "x-access-token": localStorage.getItem("token"),
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to download report");
+    }
+
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = "ineligible_students_report.xlsx";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
+
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+
+    statusDiv.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Ineligible students report downloaded successfully!
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error downloading ineligible report:", error);
+    statusDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}
+      </div>
+    `;
+  }
+}

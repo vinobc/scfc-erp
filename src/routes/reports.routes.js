@@ -81,4 +81,17 @@ router.get(
   reportsController.getStudentAttendanceReport
 );
 
+// Download ineligible students report (admin only)
+router.get(
+  "/ineligible-students",
+  verifyToken,
+  (req, res, next) => {
+    if (req.userRole !== "admin") {
+      return res.status(403).json({ message: "Require Admin Role" });
+    }
+    next();
+  },
+  reportsController.getIneligibleStudentsReport
+);
+
 module.exports = router;
