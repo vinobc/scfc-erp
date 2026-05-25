@@ -61,6 +61,16 @@ async function loadFilterOptions() {
           inelSchoolSelect.appendChild(opt);
         });
       }
+      // Also populate courses report school dropdown
+      const coursesSchoolSelect = document.getElementById("courses-filter-school");
+      if (coursesSchoolSelect) {
+        schools.forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = s.school_short_name;
+          opt.textContent = `${s.school_short_name} - ${s.school_long_name}`;
+          coursesSchoolSelect.appendChild(opt);
+        });
+      }
     }
 
     if (programsRes.ok) {
@@ -502,6 +512,41 @@ function displayDownloadReportsInterface() {
                 </div>
               </div>
               <div id="inel-download-status" class="mt-3"></div>
+            </div>
+          </div>
+          ` : ""}
+
+          <!-- Courses Report (Admin only) -->
+          ${currentUserRole === "admin" ? `
+          <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+              <h5 class="card-title mb-0"><i class="fas fa-book me-2"></i>Download Courses</h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Download course master data with TPC details.</p>
+              <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                  <label for="courses-filter-school" class="form-label">School</label>
+                  <select id="courses-filter-school" class="form-select">
+                    <option value="">All Schools</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label for="courses-filter-type" class="form-label">Course Type</label>
+                  <select id="courses-filter-type" class="form-select">
+                    <option value="">All Types</option>
+                    <option value="T">Theory (T)</option>
+                    <option value="P">Practical (P)</option>
+                    <option value="TEL">Integrated (TEL)</option>
+                  </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                  <button type="button" class="btn btn-secondary" onclick="downloadCoursesReport()">
+                    <i class="fas fa-file-excel me-2"></i>Download (.xlsx)
+                  </button>
+                </div>
+              </div>
+              <div id="courses-download-status"></div>
             </div>
           </div>
           ` : ""}
@@ -1557,6 +1602,7 @@ window.onAttCourseChange = onAttCourseChange;
 window.clearAttFilters = clearAttFilters;
 window.downloadAttendanceReport = downloadAttendanceReport;
 window.downloadIneligibleReport = downloadIneligibleReport;
+window.downloadCoursesReport = downloadCoursesReport;
 console.log("download-reports.js loaded successfully");
 
 // ============ Ineligible Students Report Functions ============
@@ -1628,6 +1674,68 @@ async function downloadIneligibleReport() {
     `;
   } catch (error) {
     console.error("Error downloading ineligible report:", error);
+    statusDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}
+      </div>
+    `;
+  }
+}
+
+// ============ Courses Report Functions ============
+
+async function downloadCoursesReport() {
+  const school = document.getElementById("courses-filter-school").value;
+  const courseType = document.getElementById("courses-filter-type").value;
+  const statusDiv = document.getElementById("courses-download-status");
+
+  statusDiv.innerHTML = `
+    <div class="alert alert-info">
+      <i class="fas fa-spinner fa-spin me-2"></i>Preparing courses download...
+    </div>
+  `;
+
+  try {
+    const params = new URLSearchParams();
+    if (school) params.append("school", school);
+    if (courseType) params.append("course_type", courseType);
+
+    const response = await fetch(`${window.API_URL}/reports/courses?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "x-access-token": localStorage.getItem("token"),
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to download courses");
+    }
+
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("Content-Disposition");
+    let filename = "courses.xlsx";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/);
+      if (match) filename = match[1];
+    }
+
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+
+    statusDiv.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Courses downloaded successfully!
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error downloading courses:", error);
     statusDiv.innerHTML = `
       <div class="alert alert-danger">
         <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}
