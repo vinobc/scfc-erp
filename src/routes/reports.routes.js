@@ -94,4 +94,17 @@ router.get(
   reportsController.getIneligibleStudentsReport
 );
 
+// Download courses report (admin only)
+router.get(
+  "/courses",
+  verifyToken,
+  (req, res, next) => {
+    if (req.userRole !== "admin") {
+      return res.status(403).json({ message: "Require Admin Role" });
+    }
+    next();
+  },
+  reportsController.getCoursesReport
+);
+
 module.exports = router;

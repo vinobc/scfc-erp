@@ -1355,3 +1355,85 @@ exports.getIneligibleStudentsReport = async (req, res) => {
     res.status(500).json({ message: "Error generating report", error: error.message });
   }
 };
+
+// ============ COURSES REPORT ============
+
+// Download courses report
+exports.getCoursesReport = async (req, res) => {
+  try {
+    const { school, course_type } = req.query;
+
+    let query = `
+      SELECT course_code, course_name, theory, practical, credits, course_type, course_owner,
+             prerequisite, antirequisite, course_equivalence, programs_offered_to, curriculum_version, remarks
+      FROM course
+      WHERE is_active = true
+    `;
+    const params = [];
+
+    if (school) {
+      params.push(school);
+      query += ` AND course_owner = $${params.length}`;
+    }
+    if (course_type) {
+      params.push(course_type);
+      query += ` AND course_type = $${params.length}`;
+    }
+
+    query += " ORDER BY course_owner, course_code";
+
+    const result = await db.query(query, params);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "No courses found for the selected filters" });
+    }
+
+    const workbook = XLSX.utils.book_new();
+
+    const headers = ["Course Code", "Course Name", "Theory", "Practical", "Credits", "TPC", "Course Type", "School",
+                     "Prerequisite", "Antirequisite", "Course Equivalence", "Programs Offered To", "Curriculum Version", "Remarks"];
+
+    const rows = [headers];
+    result.rows.forEach(c => {
+      rows.push([
+        c.course_code,
+        c.course_name,
+        c.theory,
+        c.practical,
+        c.credits,
+        `${c.theory}:${c.practical}:${c.credits}`,
+        c.course_type,
+        c.course_owner,
+        c.prerequisite || "",
+        c.antirequisite || "",
+        c.course_equivalence || "",
+        c.programs_offered_to || "",
+        c.curriculum_version || "",
+        c.remarks || ""
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Force TPC column (index 5) to text format so Excel doesn't interpret as date
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let r = 1; r <= range.e.r; r++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c: 5 });
+      if (ws[cellRef]) {
+        ws[cellRef].t = "s"; // Force string type
+      }
+    }
+
+    XLSX.utils.book_append_sheet(workbook, ws, "Courses");
+
+    const filename = school ? `Courses_${school}.xlsx` : "Courses_All.xlsx";
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(buffer);
+
+  } catch (error) {
+    console.error("Error generating courses report:", error);
+    res.status(500).json({ message: "Error generating report", error: error.message });
+  }
+};
