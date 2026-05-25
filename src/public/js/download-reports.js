@@ -516,8 +516,8 @@ function displayDownloadReportsInterface() {
           </div>
           ` : ""}
 
-          <!-- Courses Report (Admin only) -->
-          ${currentUserRole === "admin" ? `
+          <!-- Courses Report (all roles except students) -->
+          ${currentUserRole !== "student" ? `
           <div class="card mb-4">
             <div class="card-header bg-secondary text-white">
               <h5 class="card-title mb-0"><i class="fas fa-book me-2"></i>Download Courses</h5>
