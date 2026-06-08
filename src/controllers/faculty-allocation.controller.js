@@ -1852,6 +1852,42 @@ exports.updateFacultyAllocation = async (req, res) => {
         }
       }
 
+      // Prevents a silent unique-constraint violation when the target
+      // (course, faculty, slot, venue, component_type) is already occupied
+      // by a separate assessment_config row.
+      const assessmentConfigConflict = await client.query(
+        `SELECT id, component_type
+           FROM assessment_config
+          WHERE slot_year     = $1
+            AND semester_type = $2
+            AND course_code   = $3
+            AND slot_name     = $4
+            AND employee_id   = $5
+            AND venue         = $6
+            AND NOT (employee_id = $7 AND venue = $8)`,
+        [
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.course_code,
+          oldAllocation.slot_name,
+          newAllocation.employee_id,
+          newAllocation.venue,
+          oldAllocation.employee_id,
+          oldAllocation.venue,
+        ]
+      );
+
+      if (assessmentConfigConflict.rowCount > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          message:
+            "Cannot change venue/faculty: an assessment configuration already " +
+            "exists at the target (course, faculty, slot, venue). Resolve the " +
+            "conflict manually before retrying.",
+          conflicting_config_ids: assessmentConfigConflict.rows.map((r) => r.id),
+        });
+      }
+
       // Get all related allocations (same course, faculty, slot_name, and venue)
       // This gets all days for that specific slot at the same venue
       const isLabSlot = oldAllocation.slot_name.startsWith("L");
@@ -1942,6 +1978,34 @@ exports.updateFacultyAllocation = async (req, res) => {
         console.log(`Updated ${attendanceUpdated} attendance record(s)`);
       }
 
+      // student_marks rows reference assessment_config.id, which is stable across
+      // this UPDATE — no direct touch on student_marks is needed.
+      const assessmentConfigResult = await client.query(
+        `UPDATE assessment_config
+            SET employee_id = $1,
+                venue       = $2,
+                updated_at  = CURRENT_TIMESTAMP
+          WHERE slot_year     = $3
+            AND semester_type = $4
+            AND course_code   = $5
+            AND employee_id   = $6
+            AND venue         = $7
+            AND slot_name     = $8`,
+        [
+          newAllocation.employee_id,
+          newAllocation.venue,
+          oldAllocation.slot_year,
+          oldAllocation.semester_type,
+          oldAllocation.course_code,
+          oldAllocation.employee_id,
+          oldAllocation.venue,
+          oldAllocation.slot_name,
+        ]
+      );
+      console.log(
+        `Updated ${assessmentConfigResult.rowCount} assessment_config row(s)`
+      );
+
       // Step 3: Delete old allocations (filter by old employee_id AND old venue to avoid deleting new ones)
       // For lab slots, delete ALL lab allocations for this course+faculty+venue
       await client.query(
@@ -2012,6 +2076,7 @@ exports.updateFacultyAllocation = async (req, res) => {
         allocationsUpdated: relatedAllocations.rows.length,
         studentsUpdated: studentCount,
         attendanceUpdated: attendanceUpdated,
+        assessmentConfigUpdated: assessmentConfigResult.rowCount,
         changes: {
           facultyChanged: facultyChanged
             ? {
