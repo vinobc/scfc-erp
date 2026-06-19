@@ -468,7 +468,10 @@ exports.getMarksEntrySummary = async (req, res) => {
         SELECT COUNT(DISTINCT sr.enrollment_number) as total
         FROM student_registrations sr
         WHERE sr.slot_year = $1 AND sr.semester_type = $2
-          AND sr.course_code = $3 AND sr.slot_name = $4
+          AND sr.course_code = $3
+          AND ( sr.slot_name = $4
+             OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                   LIKE '%,' || REPLACE($4, ' ', '') || ',%' )
           AND sr.faculty_name = $5
           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
       `, [slot_year, semester_type, alloc.course_code, alloc.slot_name, alloc.faculty_name]);
@@ -602,7 +605,10 @@ exports.getMarksReportSlots = async (req, res) => {
         SELECT COUNT(DISTINCT sr.enrollment_number) as total
         FROM student_registrations sr
         WHERE sr.slot_year = $1 AND sr.semester_type = $2
-          AND sr.course_code = $3 AND sr.slot_name = $4
+          AND sr.course_code = $3
+          AND ( sr.slot_name = $4
+             OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                   LIKE '%,' || REPLACE($4, ' ', '') || ',%' )
           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
       `, [slot_year, semester_type, course_code, slot.slot_name]);
       if (parseInt(countResult.rows[0].total) > 0) {
@@ -733,7 +739,10 @@ exports.getStudentMarksReport = async (req, res) => {
         LEFT JOIN program p ON st.program_id = p.program_id
         LEFT JOIN school s ON p.school_id = s.school_id
         WHERE sr.slot_year = $1 AND sr.semester_type = $2
-          AND sr.course_code = $3 AND sr.slot_name = $4
+          AND sr.course_code = $3
+          AND ( sr.slot_name = $4
+             OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                   LIKE '%,' || REPLACE($4, ' ', '') || ',%' )
           AND sr.faculty_name = $5
           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
         ORDER BY sr.enrollment_number
