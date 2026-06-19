@@ -536,9 +536,13 @@ exports.getEnrolledStudents = async (req, res) => {
          AND sr.withdrawn = false`;
     let params = [slot_year, semester_type, course_code, facultyName];
 
-    // Filter by specific slot if provided
+    // Filter by specific slot if provided.
+    // Matches either the exact slot or a composite registration string like
+    // "L5+L6, L31+L32" that contains the requested slot as a comma-anchored token.
     if (slot_name) {
-      query += ` AND sr.slot_name = $5`;
+      query += ` AND ( sr.slot_name = $5
+                       OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                             LIKE '%,' || REPLACE($5, ' ', '') || ',%' )`;
       params.push(slot_name);
       if (venue) {
         query += ` AND sr.venue = $6`;
@@ -628,7 +632,10 @@ exports.getMarksEntryData = async (req, res) => {
        JOIN student s ON sr.enrollment_number = s.enrollment_no
        WHERE sr.slot_year = $1 AND sr.semester_type = $2
          AND sr.course_code = $3 AND sr.faculty_name = $4
-         AND sr.slot_name = $5 AND sr.venue = $6
+         AND ( sr.slot_name = $5
+            OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                  LIKE '%,' || REPLACE($5, ' ', '') || ',%' )
+         AND sr.venue = $6
          AND sr.withdrawn = false
        ORDER BY sr.enrollment_number`,
       [slot_year, semester_type, course_code, facultyName, slot_name, venue]
@@ -842,7 +849,10 @@ exports.getMarksSummary = async (req, res) => {
        FROM student_registrations sr
        WHERE sr.slot_year = $1 AND sr.semester_type = $2
          AND sr.course_code = $3 AND sr.faculty_name = $4
-         AND sr.slot_name = $5 AND sr.venue = $6
+         AND ( sr.slot_name = $5
+            OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                  LIKE '%,' || REPLACE($5, ' ', '') || ',%' )
+         AND sr.venue = $6
          AND sr.withdrawn = false
        ORDER BY sr.enrollment_number`,
       [slot_year, semester_type, course_code, facultyName, slot_name, venue]
@@ -1033,20 +1043,38 @@ exports.getMyMarks = async (req, res) => {
 
     const enrollmentNo = studentResult.rows[0].enrollment_no;
 
-    // Build query with optional filters
+    // Build query with optional filters.
+    // For two-meeting labs the student's registration carries a composite slot
+    // (e.g. "L5+L6, L31+L32") while each assessment_config has one of the
+    // single slots. LEFT JOIN student_registrations so we surface the student's
+    // own registration slot_name and the frontend (which keys on the registration
+    // card's slot label) can find the matching course entry.
     let query = `SELECT
          sm.*,
          ac.course_code,
          ac.slot_year,
          ac.semester_type,
-         ac.slot_name,
+         COALESCE(sr.slot_name, ac.slot_name) AS slot_name,
+         ac.slot_name AS config_slot_name,
          ac.venue,
          ac.assessment_type as course_assessment_type,
          ac.component_type,
-         c.course_name
+         c.course_name,
+         -- labSessions is a positional array; assessment_number=1 -> labSessions[0]
+         (ac.config_json -> 'labSessions' -> (sm.assessment_number - 1) ->> 'date') AS session_date
        FROM student_marks sm
        JOIN assessment_config ac ON sm.assessment_config_id = ac.id
        JOIN course c ON ac.course_code = c.course_code
+       LEFT JOIN student_registrations sr
+         ON sr.enrollment_number = sm.enrollment_number
+        AND sr.slot_year         = ac.slot_year
+        AND sr.semester_type     = ac.semester_type
+        AND sr.course_code       = ac.course_code
+        AND sr.venue             = ac.venue
+        AND sr.withdrawn         = false
+        AND ( sr.slot_name = ac.slot_name
+           OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                 LIKE '%,' || REPLACE(ac.slot_name, ' ', '') || ',%' )
        WHERE sm.enrollment_number = $1`;
 
     const params = [enrollmentNo];
@@ -1069,7 +1097,11 @@ exports.getMyMarks = async (req, res) => {
       paramIndex++;
     }
     if (slot_name) {
-      query += ` AND ac.slot_name = $${paramIndex}`;
+      // slot_name from the student card may be a composite (e.g.
+      // "L5+L6, L31+L32"). Match the config's single slot against that.
+      query += ` AND ( ac.slot_name = $${paramIndex}
+                       OR ',' || REPLACE($${paramIndex}, ' ', '') || ','
+                             LIKE '%,' || REPLACE(ac.slot_name, ' ', '') || ',%' )`;
       params.push(slot_name);
     }
 
@@ -1095,11 +1127,19 @@ exports.getMyMarks = async (req, res) => {
         };
       }
 
-      const compKey = `${mark.assessment_type}_${mark.assessment_number}`;
+      // Lab sessions are split per config slot so a student can see Tuesday's
+      // (L5+L6) and Wednesday's (L31+L32) Lab Session 1 as separate rows.
+      // Other components (CA, ASSIGNMENT, etc.) continue to aggregate as before.
+      const isLabSession = mark.assessment_type === 'LAB_SESSION';
+      const compKey = isLabSession
+        ? `${mark.assessment_type}_${mark.assessment_number}_${mark.config_slot_name}`
+        : `${mark.assessment_type}_${mark.assessment_number}`;
       if (!courseMarks[key].components[compKey]) {
         courseMarks[key].components[compKey] = {
           assessment_type: mark.assessment_type,
           assessment_number: mark.assessment_number,
+          config_slot_name: mark.config_slot_name,
+          session_date: mark.session_date,
           total_obtained: 0,
           total_max: 0,
         };
@@ -1113,15 +1153,22 @@ exports.getMyMarks = async (req, res) => {
 
     // Convert to the format expected by frontend
     const courses = Object.values(courseMarks).map(course => {
-      const marks = Object.values(course.components).map(comp => ({
-        component: comp.assessment_type === 'LAB_SESSION'
-          ? `Lab Session ${comp.assessment_number}`
-          : (comp.assessment_type === 'ASSIGNMENT'
-            ? `Assignment ${comp.assessment_number}`
-            : comp.assessment_type),
-        marks_obtained: comp.total_obtained,
-        max_marks: comp.total_max
-      }));
+      const marks = Object.values(course.components).map(comp => {
+        let component;
+        if (comp.assessment_type === 'LAB_SESSION') {
+          const dateSuffix = comp.session_date ? ` — ${comp.session_date}` : '';
+          component = `Lab Session ${comp.assessment_number} (${comp.config_slot_name}${dateSuffix})`;
+        } else if (comp.assessment_type === 'ASSIGNMENT') {
+          component = `Assignment ${comp.assessment_number}`;
+        } else {
+          component = comp.assessment_type;
+        }
+        return {
+          component,
+          marks_obtained: comp.total_obtained,
+          max_marks: comp.total_max,
+        };
+      });
 
       return {
         slot_year: course.slot_year,
