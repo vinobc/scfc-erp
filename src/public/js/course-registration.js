@@ -115,9 +115,54 @@ function replaceWithWorkingCourseRegistration() {
   initializeWorkingFunctionality();
 }
 
+// Render an inline banner explaining why a student can't register.
+function renderRegistrationBlockBanner(reason) {
+  const container = document.getElementById(
+    "student-course-registration-content"
+  );
+  if (!container) return;
+  const safeReason = String(reason || "Administrative hold").replace(
+    /[<>&]/g,
+    (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c])
+  );
+  container.innerHTML = `
+    <div style="padding: 20px;">
+      <h2 style="color: #007bff; margin-bottom: 20px;">📚 Course Registration</h2>
+      <div class="alert alert-warning" role="alert"
+           style="border-left: 5px solid #f0ad4e; padding: 20px; max-width: 700px;">
+        <h4 style="margin-top: 0;">⚠ You are currently blocked from course registration.</h4>
+        <p style="margin-bottom: 5px;"><strong>Reason:</strong> ${safeReason}</p>
+        <p style="margin-bottom: 0;">Please contact the accounts office to resolve this and try again.</p>
+      </div>
+    </div>
+  `;
+}
+
 // Initialize working functionality
 async function initializeWorkingFunctionality() {
   console.log("⚙️ Setting up course registration functionality...");
+
+  // Check block status first; if blocked, show banner and stop.
+  try {
+    const blockResp = await fetch(
+      `${window.API_URL}/course-registration/block-status`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      }
+    );
+    if (blockResp.ok) {
+      const blockData = await blockResp.json();
+      if (blockData.blocked) {
+        console.log("🚫 Student is blocked from registration:", blockData.reason);
+        renderRegistrationBlockBanner(blockData.reason);
+        return;
+      }
+    }
+  } catch (err) {
+    // Non-fatal — if block-status fails, fall through and let the submit-time
+    // check guard the actual registration action.
+    console.warn("Block-status check failed (non-fatal):", err);
+  }
 
   // Load semesters
   try {

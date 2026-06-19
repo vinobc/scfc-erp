@@ -178,6 +178,7 @@ function updateNavigationByRole(userRole) {
     staff: document.getElementById("staff-link"),
     users: document.getElementById("users-link"),
     students: document.getElementById("students-link"),
+    registrationBlocks: document.getElementById("registration-blocks-link"),
     timetable: document.getElementById("timetable-link"),
     timetableCoordinator: document.getElementById("timetable-coordinator-link"),
     projectAllocation: document.getElementById("project-allocation-link"),

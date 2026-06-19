@@ -1,4 +1,33 @@
 const db = require("../config/db");
+const { getActiveBlock } = require("../utils/registration-block");
+
+// Tells the frontend whether the current student is blocked from registration.
+// Always callable (no checkRegistrationEnabled gate) so the student sees the
+// banner even when the registration window is closed.
+exports.getBlockStatus = async (req, res) => {
+  try {
+    if (req.userRole !== "student") {
+      return res.status(200).json({ blocked: false });
+    }
+    const student = await getStudentByUserId(req.userId);
+    if (!student) {
+      return res.status(200).json({ blocked: false });
+    }
+    const activeBlock = await getActiveBlock(student.enrollment_number);
+    if (!activeBlock) {
+      return res.status(200).json({ blocked: false });
+    }
+    res.status(200).json({
+      blocked: true,
+      reason: activeBlock.block_reason,
+      notes: activeBlock.notes,
+      blocked_at: activeBlock.blocked_at,
+    });
+  } catch (error) {
+    console.error("Get block status error:", error);
+    res.status(500).json({ message: "Server error while checking block status" });
+  }
+};
 
 // Get available academic years and semesters
 exports.getAvailableSemesters = async (req, res) => {
@@ -34,6 +63,20 @@ exports.getCoursesForSemester = async (req, res) => {
       return res.status(400).json({
         message: "slot_year and semester_type are required",
       });
+    }
+
+    // For students on the block list, return an empty course list. The block
+    // banner is shown by the frontend via the /block-status endpoint, so we
+    // just suppress the data here as a defense-in-depth layer. Admin/staff
+    // browsing the endpoint, and admin impersonation, bypass.
+    if (req.userRole === "student" && !req.impersonatedBy) {
+      const student = await getStudentByUserId(req.userId);
+      if (student) {
+        const activeBlock = await getActiveBlock(student.enrollment_number);
+        if (activeBlock) {
+          return res.status(200).json([]);
+        }
+      }
     }
 
     // Get both regular and project courses
@@ -1084,10 +1127,23 @@ exports.registerCourseOffering = async (req, res) => {
     // Get student details
     const student = await getStudentByUserId(userId);
 
+    // Reject registration if this student is on the block list (pending fees,
+    // suspension, etc.). Admin impersonation bypasses the check.
+    if (!req.impersonatedBy) {
+      const activeBlock = await getActiveBlock(student.enrollment_number);
+      if (activeBlock) {
+        return res.status(403).json({
+          message: `Registration blocked: ${activeBlock.block_reason}. Please contact the accounts office.`,
+          registrationBlocked: true,
+          reason: activeBlock.block_reason,
+        });
+      }
+    }
+
     // Get course details
     const courseResult = await db.query(
       `SELECT course_code, course_name, theory, practical, credits, course_type
-       FROM course 
+       FROM course
        WHERE course_code = $1`,
       [course_code]
     );
@@ -2575,6 +2631,19 @@ exports.registerTELCourseAtomic = async (req, res) => {
 
     // Get student details
     const student = await getStudentByUserId(userId);
+
+    // Reject TEL registration if this student is on the block list. Admin
+    // impersonation bypasses the check.
+    if (!req.impersonatedBy) {
+      const activeBlock = await getActiveBlock(student.enrollment_number);
+      if (activeBlock) {
+        return res.status(403).json({
+          message: `Registration blocked: ${activeBlock.block_reason}. Please contact the accounts office.`,
+          registrationBlocked: true,
+          reason: activeBlock.block_reason,
+        });
+      }
+    }
 
     // Get course details
     const courseResult = await db.query(
