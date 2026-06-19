@@ -88,6 +88,7 @@ app.use("/api/project-allocations", projectAllocationRoutes);
 app.use("/api/marks", marksRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/od", odRoutes);
+app.use("/api/registration-blocks", require("./routes/registration-block.routes"));
 
 // Root route
 app.get("/", (req, res) => {

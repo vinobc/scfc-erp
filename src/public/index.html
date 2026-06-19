@@ -167,6 +167,12 @@
                 </a>
               </li>
               <li class="nav-item">
+                <a class="nav-link" href="#" id="registration-blocks-link">
+                  <i class="fas fa-ban me-2"></i>
+                  Registration Blocks
+                </a>
+              </li>
+              <li class="nav-item">
                 <a class="nav-link" href="#" id="timetable-link">
                   <i class="fas fa-clock me-2"></i>
                   TimeTable
@@ -943,6 +949,75 @@
                       <td colspan="8" class="text-center">
                         Loading students...
                       </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Registration Blocks Page -->
+            <div id="registration-blocks-page" class="content-page">
+              <div class="d-flex justify-content-between mb-4 flex-wrap gap-2">
+                <div class="d-flex gap-2 flex-wrap align-items-center">
+                  <button type="button" class="btn btn-warning" id="add-block-btn">
+                    <i class="fas fa-ban"></i> Add Block
+                  </button>
+                  <label class="btn btn-success mb-0">
+                    <i class="fas fa-upload"></i> Choose Excel
+                    <input
+                      type="file"
+                      id="block-file-input"
+                      accept=".xlsx,.xls"
+                      hidden
+                    />
+                  </label>
+                  <span id="block-file-info" class="text-muted small"></span>
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="upload-blocks-btn"
+                    disabled
+                  >
+                    Upload
+                  </button>
+                </div>
+                <div class="d-flex">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="block-search-input"
+                    placeholder="Search enrollment or name..."
+                    style="min-width: 250px;"
+                  />
+                </div>
+              </div>
+
+              <div class="alert alert-info">
+                <small>
+                  Excel format — <code>enrollment_no</code> (required),
+                  <code>block_reason</code> (optional, defaults to "Administrative
+                  hold"), <code>notes</code> (optional). Blocked students
+                  <strong>can still login</strong>; only course registration is
+                  disabled.
+                </small>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                  <thead>
+                    <tr>
+                      <th>Enrollment No.</th>
+                      <th>Student Name</th>
+                      <th>Program</th>
+                      <th>Reason</th>
+                      <th>Notes</th>
+                      <th>Blocked By / At</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="blocks-table">
+                    <tr>
+                      <td colspan="7" class="text-center">Loading...</td>
                     </tr>
                   </tbody>
                 </table>
@@ -5223,6 +5298,7 @@
     <script src="js/attendance.js"></script>
     <script src="js/od.js"></script>
     <script src="js/marks.js"></script>
+    <script src="js/registration-blocks.js"></script>
     <!-- Load main.js LAST so all module functions are available -->
     <script src="js/main.js"></script>
   </body>

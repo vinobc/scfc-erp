@@ -41,6 +41,14 @@ const checkRegistrationEnabled = async (req, res, next) => {
   }
 };
 
+// Block status — student-facing. No checkRegistrationEnabled middleware so the
+// banner shows even when registration window is closed.
+router.get(
+  "/block-status",
+  verifyToken,
+  courseRegistrationController.getBlockStatus
+);
+
 // Get available semesters (always available for viewing purposes)
 router.get(
   "/semesters",
