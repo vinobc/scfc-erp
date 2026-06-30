@@ -1,7 +1,10 @@
 const express = require("express");
 const multer = require("multer");
 const controller = require("../controllers/registration-block.controller");
-const { verifyToken, isAdmin } = require("../middleware/auth.middleware");
+const {
+  verifyToken,
+  isRegistrationManagerOrAdmin,
+} = require("../middleware/auth.middleware");
 
 const router = express.Router();
 
@@ -12,7 +15,7 @@ const upload = multer({
 });
 
 router.use(verifyToken);
-router.use(isAdmin);
+router.use(isRegistrationManagerOrAdmin);
 
 router.get("/", controller.listBlocks);
 router.post("/", controller.addBlock);

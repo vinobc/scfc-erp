@@ -133,6 +133,30 @@ exports.isDSWOrAdmin = async (req, res, next) => {
   }
 };
 
+// Check if user can manage course registration blocks (admins + delegated staff)
+// Currently delegated to Chaithra (staff, username '314629@blr.amity.edu').
+// Mirrors the DSW/OD pattern above.
+exports.isRegistrationManagerOrAdmin = async (req, res, next) => {
+  if (req.userRole === "admin") return next();
+  if (req.userRole !== "staff") {
+    return res.status(403).json({ message: "Require Registration Manager or Admin Role" });
+  }
+  try {
+    const db = require("../config/db");
+    const result = await db.query(
+      'SELECT username FROM "user" WHERE user_id = $1',
+      [req.userId]
+    );
+    if (!result.rows.length || result.rows[0].username !== "314629@blr.amity.edu") {
+      return res.status(403).json({ message: "Require Registration Manager or Admin Role" });
+    }
+    next();
+  } catch (error) {
+    console.error("Registration manager check error:", error);
+    return res.status(500).json({ message: "Server error checking permission" });
+  }
+};
+
 // Check if user has faculty, staff, or admin role
 exports.isFacultyOrStaffOrAdmin = (req, res, next) => {
   if (!["admin", "faculty", "staff", "timetable_coordinator"].includes(req.userRole)) {
