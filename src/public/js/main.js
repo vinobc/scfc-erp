@@ -249,6 +249,10 @@ function updateNavigationByRole(userRole) {
       if (currentUser && currentUser.username === "316690@blr.amity.edu") {
         staffItems.unshift(navItems.od);
       }
+      // Chaithra (staff) — delegated manager for Block Registration
+      if (currentUser && currentUser.username === "314629@blr.amity.edu") {
+        staffItems.unshift(navItems.registrationBlocks);
+      }
       staffItems.forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
