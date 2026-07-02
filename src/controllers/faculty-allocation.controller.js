@@ -1104,21 +1104,58 @@ exports.getFacultyTimetable = async (req, res) => {
       summaryAllocations.push(group);
     });
 
-    // Convert P=4 lab groups to summary entries, splitting into sections of 2
+    // Convert P=4 lab groups to summary entries
+    // For SUMMER: group individual pair rows by day (morning + afternoon mirror
+    // of the same day = one 4-hour bundle). For FALL/WINTER: keep the
+    // original section-of-2 pairing by created_at.
     p4LabGroups.forEach((allocations) => {
-      // Sort by created_at to determine section pairing
-      allocations.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      const slotsPerSection = 2; // P/2 = 4/2
+      // Filter out aggregate/primary compound rows (slot_name with comma) so
+      // they don't inflate the day groups. Individual pair rows drive the summary.
+      const individualPairs = allocations.filter(
+        (a) => !a.slot_name.includes(",")
+      );
 
-      for (let i = 0; i < allocations.length; i += slotsPerSection) {
-        const section = allocations.slice(i, i + slotsPerSection);
-        const slotNames = section.map(a => a.slot_name).sort();
+      const isSummer =
+        individualPairs.length > 0 &&
+        individualPairs[0].semester_type === "SUMMER";
 
-        summaryAllocations.push({
-          ...section[0],
-          slot_name: slotNames.join(', '),
-          combined_allocation: true
+      if (isSummer) {
+        // Group by day: morning + afternoon mirror = 4 hrs on that day
+        const byDay = new Map();
+        individualPairs.forEach((a) => {
+          if (!byDay.has(a.slot_day)) byDay.set(a.slot_day, []);
+          byDay.get(a.slot_day).push(a);
         });
+
+        byDay.forEach((daySlots) => {
+          // Order morning first (smaller L number), afternoon second
+          daySlots.sort((a, b) => {
+            const numA = parseInt(a.slot_name.replace(/[^0-9]/g, ""), 10);
+            const numB = parseInt(b.slot_name.replace(/[^0-9]/g, ""), 10);
+            return numA - numB;
+          });
+          const slotNames = daySlots.map((a) => a.slot_name);
+          summaryAllocations.push({
+            ...daySlots[0],
+            slot_name: slotNames.join(", "),
+            combined_allocation: true,
+          });
+        });
+      } else {
+        // FALL/WINTER: preserve original section-of-2 by created_at pairing
+        allocations.sort(
+          (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        );
+        const slotsPerSection = 2;
+        for (let i = 0; i < allocations.length; i += slotsPerSection) {
+          const section = allocations.slice(i, i + slotsPerSection);
+          const slotNames = section.map((a) => a.slot_name).sort();
+          summaryAllocations.push({
+            ...section[0],
+            slot_name: slotNames.join(", "),
+            combined_allocation: true,
+          });
+        }
       }
     });
 

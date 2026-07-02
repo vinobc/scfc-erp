@@ -364,12 +364,20 @@ exports.getCourseOfferings = async (req, res) => {
 
         if (practical === 4) {
           // For P=4 TEL courses, group by faculty+venue, then split into
-          // sections of 2 slots each based on creation order
+          // sections based on creation order. SUMMER stores 4 individual
+          // pair rows per section (morning + afternoon mirrors), so use
+          // slotsPerSection=4. FALL/WINTER stores 2 rows per section.
           console.log(`Processing TEL P=4 course: ${courseData.course_code}`);
+
+          // Filter out aggregate/compound rows (slot_name with comma) so
+          // only individual pair rows drive the offering.
+          const individualPairs = practicalAllocations.filter(
+            (a) => !a.slot_name.includes(",")
+          );
 
           const p4Groups = new Map();
 
-          practicalAllocations.forEach((allocation) => {
+          individualPairs.forEach((allocation) => {
             const key = `${allocation.venue}-${allocation.faculty_name}`;
 
             if (!p4Groups.has(key)) {
@@ -384,8 +392,7 @@ exports.getCourseOfferings = async (req, res) => {
             p4Groups.get(key).allocations.push(allocation);
           });
 
-          // Create offerings - split into sections of 2 (P/2) by created_at
-          const slotsPerSection = practical / 2; // 2 slot pairs per section
+          const slotsPerSection = semester_type === "SUMMER" ? 4 : 2;
           p4Groups.forEach((group) => {
             // Sort by created_at to determine section pairing
             group.allocations.sort((a, b) =>
@@ -609,13 +616,20 @@ exports.getCourseOfferings = async (req, res) => {
     } else if (courseType === "P") {
       // For Practical-only courses, handle P=4 differently from P=2
       if (practical === 4) {
-        // For P=4 courses, group by faculty+venue, then split into
-        // sections of 2 slots each based on creation order
+        // For P=4 courses, group by faculty+venue, then split into sections.
+        // SUMMER stores 4 individual pair rows per section (morning +
+        // afternoon mirrors), so slotsPerSection=4. FALL/WINTER stores 2.
         console.log(`Processing P=4 course: ${courseData.course_code}`);
+
+        // Filter out aggregate/compound rows (slot_name with comma) so
+        // only individual pair rows drive the offering.
+        const individualPairs = allocationsResult.rows.filter(
+          (a) => !a.slot_name.includes(",")
+        );
 
         const p4Groups = new Map();
 
-        allocationsResult.rows.forEach((allocation) => {
+        individualPairs.forEach((allocation) => {
           const key = `${allocation.venue}-${allocation.faculty_name}`;
 
           if (!p4Groups.has(key)) {
@@ -630,8 +644,7 @@ exports.getCourseOfferings = async (req, res) => {
           p4Groups.get(key).allocations.push(allocation);
         });
 
-        // Create offerings - split into sections of 2 (P/2) by created_at
-        const slotsPerSection = practical / 2; // 2 slot pairs per section
+        const slotsPerSection = semester_type === "SUMMER" ? 4 : 2;
         p4Groups.forEach((group) => {
           // Sort by created_at to determine section pairing
           group.allocations.sort((a, b) =>

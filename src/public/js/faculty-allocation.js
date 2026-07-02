@@ -2012,13 +2012,20 @@ function handleSaveFacultyAllocation() {
         }
 
         matchingSlots.forEach((slot) => {
-          let slotNameToUse;
-
-          if (is4HourLab && individualSlot === allIndividualSlots[0]) {
-            slotNameToUse = primarySlot;
-          } else if (is4HourLab) {
+          if (is4HourLab) {
+            // SUMMER 4-hour lab: emit one individual pair row per slot.
+            // The summary view groups these by day (morning + afternoon mirror).
+            batchAllocations.push({
+              ...allocationData,
+              slot_day: slot.slot_day,
+              slot_time: slot.slot_time,
+              slot_name: individualSlot,
+            });
             return;
-          } else if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
+          }
+
+          let slotNameToUse;
+          if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
             slotNameToUse = individualSlot;
           } else {
             slotNameToUse = slot.slot_name;
@@ -4272,8 +4279,14 @@ function clearConflictIndicators() {
 function toggleP4LabSelection(course, componentType) {
   if (!p4LabSelectionContainer || !course) return;
 
+  const semesterType = allocationSemesterTypeInput
+    ? allocationSemesterTypeInput.value
+    : "";
+  // SUMMER P=4 uses the regular slot dropdown + linked_slots auto-linking,
+  // not the FALL/WINTER two-pair selection UI.
   const shouldShowP4Selection =
     course.practical === 4 &&
+    semesterType !== "SUMMER" &&
     (
       // For Lab-only courses (T=0, P=4), always show P=4 selection
       (course.theory === 0) ||
