@@ -551,10 +551,204 @@ function displayDownloadReportsInterface() {
           </div>
           ` : ""}
 
+          <!-- Curriculum Download (all authenticated users incl. students) -->
+          <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+              <h5 class="card-title mb-0"><i class="fas fa-book-open me-2"></i>Curriculum Download</h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Download an uploaded program curriculum as PDF.</p>
+              <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                  <label for="curr-dl-school" class="form-label">School</label>
+                  <select id="curr-dl-school" class="form-select">
+                    <option value="">Select school</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label for="curr-dl-program" class="form-label">Program</label>
+                  <select id="curr-dl-program" class="form-select" disabled>
+                    <option value="">Select school first</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label for="curr-dl-year" class="form-label">Admitted Year</label>
+                  <select id="curr-dl-year" class="form-select" disabled>
+                    <option value="">-</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label for="curr-dl-version" class="form-label">Version</label>
+                  <select id="curr-dl-version" class="form-select" disabled>
+                    <option value="">-</option>
+                  </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                  <button type="button" class="btn btn-dark" id="curr-dl-btn" disabled>
+                    <i class="fas fa-file-pdf me-1"></i>Download PDF
+                  </button>
+                </div>
+              </div>
+              <div id="curr-dl-status"></div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
   `;
+
+  initializeCurriculumDownloadSection();
+}
+
+// ---------- Curriculum Download (user-facing) ----------
+let __curriculumDownloadList = null;
+
+async function initializeCurriculumDownloadSection() {
+  const schoolSel = document.getElementById("curr-dl-school");
+  if (!schoolSel) return;
+
+  try {
+    const res = await fetch(`${window.API_URL}/program-curriculum`, {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) throw new Error("Failed to load curricula");
+    __curriculumDownloadList = await res.json();
+  } catch (err) {
+    console.error(err);
+    __curriculumDownloadList = [];
+  }
+
+  const schools = new Map();
+  __curriculumDownloadList.forEach((r) => {
+    if (!schools.has(r.school_id)) schools.set(r.school_id, r.school_short_name || String(r.school_id));
+  });
+  schoolSel.innerHTML = '<option value="">Select school</option>';
+  [...schools.entries()].sort((a, b) => a[1].localeCompare(b[1])).forEach(([id, name]) => {
+    const opt = document.createElement("option");
+    opt.value = String(id);
+    opt.textContent = name;
+    schoolSel.appendChild(opt);
+  });
+
+  schoolSel.onchange = (e) => populateCurriculumDlPrograms(e.target.value);
+  document.getElementById("curr-dl-program").onchange = (e) => populateCurriculumDlYears(e.target.value);
+  document.getElementById("curr-dl-year").onchange = (e) => populateCurriculumDlVersions(e.target.value);
+  document.getElementById("curr-dl-version").onchange = (e) => {
+    document.getElementById("curr-dl-btn").disabled = !e.target.value;
+  };
+  document.getElementById("curr-dl-btn").onclick = downloadCurriculumPdfForUser;
+}
+
+function populateCurriculumDlPrograms(schoolId) {
+  const programSel = document.getElementById("curr-dl-program");
+  const yearSel = document.getElementById("curr-dl-year");
+  const verSel = document.getElementById("curr-dl-version");
+  const btn = document.getElementById("curr-dl-btn");
+  programSel.innerHTML = '<option value="">Select program</option>';
+  yearSel.innerHTML = '<option value="">-</option>';
+  verSel.innerHTML = '<option value="">-</option>';
+  yearSel.disabled = true;
+  verSel.disabled = true;
+  btn.disabled = true;
+  if (!schoolId || !__curriculumDownloadList) {
+    programSel.disabled = true;
+    return;
+  }
+  const programs = new Map();
+  __curriculumDownloadList
+    .filter((r) => String(r.school_id) === String(schoolId))
+    .forEach((r) => {
+      if (!programs.has(r.program_id)) programs.set(r.program_id, r.program_name_short || r.program_code || String(r.program_id));
+    });
+  [...programs.entries()].sort((a, b) => a[1].localeCompare(b[1])).forEach(([id, name]) => {
+    const opt = document.createElement("option");
+    opt.value = String(id);
+    opt.textContent = name;
+    programSel.appendChild(opt);
+  });
+  programSel.disabled = programs.size === 0;
+}
+
+function populateCurriculumDlYears(programId) {
+  const yearSel = document.getElementById("curr-dl-year");
+  const verSel = document.getElementById("curr-dl-version");
+  const btn = document.getElementById("curr-dl-btn");
+  yearSel.innerHTML = '<option value="">Select year</option>';
+  verSel.innerHTML = '<option value="">-</option>';
+  verSel.disabled = true;
+  btn.disabled = true;
+  if (!programId) {
+    yearSel.disabled = true;
+    return;
+  }
+  const years = new Set(
+    __curriculumDownloadList
+      .filter((r) => String(r.program_id) === String(programId))
+      .map((r) => r.admitted_year)
+  );
+  [...years].sort((a, b) => b - a).forEach((y) => {
+    const opt = document.createElement("option");
+    opt.value = String(y);
+    opt.textContent = String(y);
+    yearSel.appendChild(opt);
+  });
+  yearSel.disabled = years.size === 0;
+}
+
+function populateCurriculumDlVersions(year) {
+  const programId = document.getElementById("curr-dl-program").value;
+  const verSel = document.getElementById("curr-dl-version");
+  const btn = document.getElementById("curr-dl-btn");
+  verSel.innerHTML = '<option value="">Select version</option>';
+  btn.disabled = true;
+  if (!year || !programId) {
+    verSel.disabled = true;
+    return;
+  }
+  const versions = __curriculumDownloadList
+    .filter((r) => String(r.program_id) === String(programId) && String(r.admitted_year) === String(year))
+    .sort((a, b) => Number(b.curriculum_version) - Number(a.curriculum_version));
+  versions.forEach((r) => {
+    const opt = document.createElement("option");
+    opt.value = String(r.id);
+    opt.textContent = Number(r.curriculum_version).toFixed(2);
+    verSel.appendChild(opt);
+  });
+  verSel.disabled = versions.length === 0;
+}
+
+async function downloadCurriculumPdfForUser() {
+  const id = document.getElementById("curr-dl-version").value;
+  if (!id) return;
+  const status = document.getElementById("curr-dl-status");
+  try {
+    status.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Preparing download&hellip;</div>';
+    const res = await fetch(`${window.API_URL}/program-curriculum/${id}/download/pdf`, {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) {
+      const msg = (await res.json().catch(() => ({}))).message || "Download failed";
+      status.innerHTML = `<div class="text-danger">${msg}</div>`;
+      return;
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = /filename="?([^";]+)"?/.exec(disposition);
+    const filename = match ? match[1] : `curriculum_${id}.pdf`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    status.innerHTML = '<div class="text-success"><i class="fas fa-check me-1"></i>Download started.</div>';
+  } catch (err) {
+    console.error(err);
+    status.innerHTML = '<div class="text-danger">Download failed</div>';
+  }
 }
 
 // Clear all filters

@@ -95,6 +95,15 @@ function setupStudentNavigation() {
     });
   }
 
+  // Initialize curriculum navigation
+  const studentCurriculumLink = document.getElementById("student-curriculum-link");
+  if (studentCurriculumLink) {
+    studentCurriculumLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("curriculum");
+    });
+  }
+
   // Initialize voluntary password change
   const studentChangePasswordLink = document.getElementById(
     "student-change-password-link"
@@ -498,6 +507,24 @@ function showStudentPage(pageType) {
       // Initialize student marks view
       if (typeof initializeStudentMarks === "function") {
         initializeStudentMarks();
+      }
+      break;
+
+    case "curriculum":
+      const curriculumContent = document.getElementById("student-curriculum-content");
+      if (curriculumContent) {
+        curriculumContent.style.display = "block";
+      }
+      const curriculumLink = document.getElementById("student-curriculum-link");
+      if (curriculumLink) {
+        curriculumLink.classList.add("active");
+      }
+      const curriculumTitleElement = document.getElementById("student-page-title");
+      if (curriculumTitleElement) {
+        curriculumTitleElement.textContent = "My Curriculum";
+      }
+      if (typeof initializeStudentCurriculum === "function") {
+        initializeStudentCurriculum();
       }
       break;
   }
