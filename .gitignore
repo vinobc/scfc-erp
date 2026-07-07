@@ -7,3 +7,4 @@ coverage/
 .idea/
 *.log
 CLAUDE.md
+src/uploads/

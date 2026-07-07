@@ -171,6 +171,7 @@ function updateNavigationByRole(userRole) {
     dashboard: document.getElementById("dashboard-link"),
     schools: document.getElementById("schools-link"),
     programs: document.getElementById("programs-link"),
+    programCurriculum: document.getElementById("program-curriculum-link"),
     semesters: document.getElementById("semesters-link"),
     courses: document.getElementById("courses-link"),
     venues: document.getElementById("venues-link"),
@@ -450,6 +451,10 @@ function setupNavigation() {
             window.initializeDownloadReports();
           } else if (typeof initializeDownloadReports === "function") {
             initializeDownloadReports();
+          }
+        } else if (targetPage === "program-curriculum-page") {
+          if (typeof initializeProgramCurriculum === "function") {
+            initializeProgramCurriculum();
           }
         } else if (targetPage === "view-student-timetable-page") {
           console.log("🎯 Navigating to view-student-timetable-page");
