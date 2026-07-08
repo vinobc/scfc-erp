@@ -5,14 +5,18 @@ const { verifyToken, isAdmin } = require("../middleware/auth.middleware");
 
 const router = express.Router();
 
-// Rate limiter for login endpoint: max 15 failed attempts per worker per 15 minutes
+// Rate limiter for login endpoint: max 100 failed attempts per USERNAME per 15 minutes.
+// - Keyed by username (not IP) so campus NAT sharing doesn't lock out unrelated users
+// - Falls back to IP if username is missing (malformed request)
 // - skipSuccessfulRequests: successful logins don't count toward the limit
-// - Higher max to account for campus/university users sharing the same public IP (NAT)
-// - PM2 cluster mode runs 4 workers, so effective limit is ~60 failed attempts per IP
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: 100,
   skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const username = req.body?.username;
+    return username ? `user:${String(username).toLowerCase().trim()}` : `ip:${req.ip}`;
+  },
   message: {
     message: "Too many login attempts. Please try again after 15 minutes.",
   },
