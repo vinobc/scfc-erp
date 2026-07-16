@@ -593,12 +593,43 @@ function displayDownloadReportsInterface() {
             </div>
           </div>
 
+          <!-- Syllabus Download (all authenticated users incl. students) -->
+          <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+              <h5 class="card-title mb-0"><i class="fas fa-file-alt me-2"></i>Syllabus Download</h5>
+            </div>
+            <div class="card-body">
+              <p class="text-muted mb-3">Look up a course syllabus by Course Code. Leave version blank to use the latest.</p>
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label">Course Code</label>
+                  <div id="syl-dl-course-mount"></div>
+                  <input type="hidden" id="syl-dl-course" />
+                </div>
+                <div class="col-md-3">
+                  <label for="syl-dl-version" class="form-label">Syllabus Version</label>
+                  <select id="syl-dl-version" class="form-select" disabled>
+                    <option value="">Latest</option>
+                  </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                  <button type="button" class="btn btn-dark" id="syl-dl-btn" disabled>
+                    <i class="fas fa-file-pdf me-1"></i>Download PDF
+                  </button>
+                </div>
+              </div>
+              <div id="syl-dl-details" class="mb-2"></div>
+              <div id="syl-dl-status"></div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
   `;
 
   initializeCurriculumDownloadSection();
+  initializeSyllabusDownloadSection();
 }
 
 // ---------- Curriculum Download (user-facing) ----------
@@ -736,6 +767,166 @@ async function downloadCurriculumPdfForUser() {
     const disposition = res.headers.get("Content-Disposition") || "";
     const match = /filename="?([^";]+)"?/.exec(disposition);
     const filename = match ? match[1] : `curriculum_${id}.pdf`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    status.innerHTML = '<div class="text-success"><i class="fas fa-check me-1"></i>Download started.</div>';
+  } catch (err) {
+    console.error(err);
+    status.innerHTML = '<div class="text-danger">Download failed</div>';
+  }
+}
+
+// ---------- Syllabus Download (user-facing) ----------
+function sylDlEscape(str) {
+  return String(str == null ? "" : str).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+let __sylDlCourseWidget = null;
+
+async function initializeSyllabusDownloadSection() {
+  const mount = document.getElementById("syl-dl-course-mount");
+  if (!mount) return;
+
+  let courses = [];
+  try {
+    const res = await fetch(`${window.API_URL}/course-syllabus/uploaded-courses`, {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) throw new Error("Failed to load courses");
+    courses = await res.json();
+  } catch (err) {
+    console.error(err);
+  }
+
+  __sylDlCourseWidget = createSearchableSelect({
+    containerId: "syl-dl-course-mount",
+    hiddenInputId: "syl-dl-course",
+    items: courses.map((c) => ({ value: c.course_code, label: `${c.course_code} - ${c.course_name}` })),
+    placeholder: courses.length ? "Type course code or subject name…" : "No syllabi available",
+    onChange: (value) => syllabusDlOnCourseChange(value),
+  });
+  if (__sylDlCourseWidget && !courses.length) __sylDlCourseWidget.setDisabled(true);
+
+  document.getElementById("syl-dl-version").onchange = () => syllabusDlFetchDetails();
+  document.getElementById("syl-dl-btn").onclick = syllabusDlDownloadPdf;
+}
+
+async function syllabusDlOnCourseChange(courseCode) {
+  const verSel = document.getElementById("syl-dl-version");
+  const dlBtn = document.getElementById("syl-dl-btn");
+  const details = document.getElementById("syl-dl-details");
+  verSel.innerHTML = '<option value="">Latest</option>';
+  verSel.disabled = true;
+  dlBtn.disabled = true;
+  details.innerHTML = "";
+  if (!courseCode) return;
+
+  try {
+    const res = await fetch(
+      `${window.API_URL}/course-syllabus/versions?course_code=${encodeURIComponent(courseCode)}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
+    if (res.ok) {
+      const versions = await res.json();
+      versions.forEach((v) => {
+        const opt = document.createElement("option");
+        opt.value = v.syllabus_version;
+        opt.textContent = Number(v.syllabus_version).toFixed(2);
+        verSel.appendChild(opt);
+      });
+      verSel.disabled = versions.length === 0;
+    }
+  } catch (err) {
+    console.error(err);
+  }
+  // Auto-render details for the latest version — no explicit fetch button.
+  syllabusDlFetchDetails();
+}
+
+async function syllabusDlFetchDetails() {
+  const courseCode = document.getElementById("syl-dl-course").value;
+  const version = document.getElementById("syl-dl-version").value;
+  const details = document.getElementById("syl-dl-details");
+  const dlBtn = document.getElementById("syl-dl-btn");
+  details.innerHTML = "";
+  dlBtn.disabled = true;
+  if (!courseCode) return;
+
+  const url = new URL(`${window.API_URL}/course-syllabus/details`);
+  url.searchParams.set("course_code", courseCode);
+  if (version) url.searchParams.set("version", version);
+
+  try {
+    const res = await fetch(url.toString(), {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) {
+      const msg = (await res.json().catch(() => ({}))).message || "Failed to fetch syllabus";
+      details.innerHTML = `<div class="alert alert-warning mb-0">${sylDlEscape(msg)}</div>`;
+      return;
+    }
+    const d = await res.json();
+    dlBtn.dataset.syllabusId = d.id;
+    dlBtn.disabled = false;
+
+    const names = d.requisite_names || {};
+    const formatCode = (code) => {
+      const title = names[code];
+      return title ? `${code} - ${title}` : code;
+    };
+    const listOrNA = (arr) =>
+      (arr && arr.length ? arr.map((c) => sylDlEscape(formatCode(c))).join(", ") : "NA");
+    details.innerHTML = `
+      <div class="card">
+        <div class="card-body">
+          <div class="row g-2">
+            <div class="col-md-4"><strong>Course Code:</strong> ${sylDlEscape(d.course_code)}</div>
+            <div class="col-md-8"><strong>Course Title:</strong> ${sylDlEscape(d.course_name)}</div>
+            <div class="col-md-4"><strong>TPC:</strong> ${d.theory}-${d.practical}-${d.credits}</div>
+            <div class="col-md-4"><strong>Syllabus Version:</strong> ${Number(d.syllabus_version).toFixed(2)}</div>
+            <div class="col-md-4"><strong>Course Type:</strong> ${sylDlEscape(d.course_type || "")}</div>
+            <div class="col-12"><strong>Pre-requisite(s):</strong> ${listOrNA(d.pre_requisites)}</div>
+            <div class="col-12"><strong>Anti-requisite(s):</strong> ${listOrNA(d.anti_requisites)}</div>
+            <div class="col-12"><strong>Co-requisite(s):</strong> ${listOrNA(d.co_requisites)}</div>
+            <div class="col-12"><strong>Course Equivalence:</strong> ${listOrNA(d.course_equivalence)}</div>
+            <div class="col-md-3"><strong>OCNE:</strong> ${d.ocne ? "Yes" : "No"}</div>
+            <div class="col-md-3"><strong>PBL:</strong> ${d.pbl ? "Yes" : "No"}</div>
+          </div>
+        </div>
+      </div>`;
+  } catch (err) {
+    console.error(err);
+    details.innerHTML = '<div class="alert alert-danger mb-0">Failed to fetch syllabus details.</div>';
+  }
+}
+
+async function syllabusDlDownloadPdf() {
+  const btn = document.getElementById("syl-dl-btn");
+  const id = btn.dataset.syllabusId;
+  if (!id) return;
+  const status = document.getElementById("syl-dl-status");
+  try {
+    status.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Preparing download&hellip;</div>';
+    const res = await fetch(`${window.API_URL}/course-syllabus/${id}/download/pdf`, {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) {
+      const msg = (await res.json().catch(() => ({}))).message || "Download failed";
+      status.innerHTML = `<div class="text-danger">${msg}</div>`;
+      return;
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = /filename="?([^";]+)"?/.exec(disposition);
+    const filename = match ? match[1] : `syllabus_${id}.pdf`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

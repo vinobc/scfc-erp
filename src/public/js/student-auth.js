@@ -104,6 +104,15 @@ function setupStudentNavigation() {
     });
   }
 
+  // Initialize syllabus navigation
+  const studentSyllabusLink = document.getElementById("student-syllabus-link");
+  if (studentSyllabusLink) {
+    studentSyllabusLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showStudentPage("syllabus");
+    });
+  }
+
   // Initialize voluntary password change
   const studentChangePasswordLink = document.getElementById(
     "student-change-password-link"
@@ -525,6 +534,24 @@ function showStudentPage(pageType) {
       }
       if (typeof initializeStudentCurriculum === "function") {
         initializeStudentCurriculum();
+      }
+      break;
+
+    case "syllabus":
+      const syllabusContent = document.getElementById("student-syllabus-content");
+      if (syllabusContent) {
+        syllabusContent.style.display = "block";
+      }
+      const syllabusLink = document.getElementById("student-syllabus-link");
+      if (syllabusLink) {
+        syllabusLink.classList.add("active");
+      }
+      const syllabusTitleElement = document.getElementById("student-page-title");
+      if (syllabusTitleElement) {
+        syllabusTitleElement.textContent = "My Syllabus";
+      }
+      if (typeof initializeStudentSyllabus === "function") {
+        initializeStudentSyllabus();
       }
       break;
   }

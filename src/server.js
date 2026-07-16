@@ -90,6 +90,7 @@ app.use("/api/reports", reportsRoutes);
 app.use("/api/od", odRoutes);
 app.use("/api/registration-blocks", require("./routes/registration-block.routes"));
 app.use("/api/program-curriculum", require("./routes/program-curriculum.routes"));
+app.use("/api/course-syllabus", require("./routes/course-syllabus.routes"));
 
 // Root route
 app.get("/", (req, res) => {
