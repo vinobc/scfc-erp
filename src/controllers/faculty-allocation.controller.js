@@ -1639,7 +1639,7 @@ async function getStudentCountForAllocation(client, allocation) {
      WHERE course_code = $1
        AND slot_year = $2
        AND semester_type = $3
-       AND slot_name = $4
+       AND (slot_name = $4 OR $4 = ANY(string_to_array(slot_name, ', ')))
        AND venue = $5
        AND faculty_name = $6`,
     [
@@ -2087,7 +2087,7 @@ exports.updateFacultyAllocation = async (req, res) => {
           oldAllocation.faculty_name
         );
 
-        const regSlotCondition = `slot_name = $${paramIndex + 5}`;
+        const regSlotCondition = `(slot_name = $${paramIndex + 5} OR $${paramIndex + 5} = ANY(string_to_array(slot_name, ', ')))`;
 
         const updateQuery = `
           UPDATE student_registrations
