@@ -1201,10 +1201,10 @@ exports.getAttendanceReportSlots = async (req, res) => {
   }
 };
 
-// ============ INELIGIBLE STUDENTS REPORT ============
+// ============ DEBAR LIST REPORT ============
 
-// Download ineligible students report (admin only)
-exports.getIneligibleStudentsReport = async (req, res) => {
+// Download debar list report (admin only)
+exports.getDebarListReport = async (req, res) => {
   try {
     const { slot_year, semester_type, level, school, cutoff_date } = req.query;
 
@@ -1253,7 +1253,9 @@ exports.getIneligibleStudentsReport = async (req, res) => {
           ds.enrollment_number, ds.student_name, ds.program_code,
           ds.course_code, ds.course_name, ds.slot_name, ds.faculty_name, ds.school,
           COUNT(a.id) as total_classes,
-          COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END) as present_count,
+          COUNT(CASE WHEN a.status = 'present' AND a.is_od IS NOT TRUE THEN 1 END) as present_count,
+          COUNT(CASE WHEN a.status = 'absent' AND a.is_od IS NOT TRUE THEN 1 END) as absent_count,
+          COUNT(CASE WHEN a.is_od = true THEN 1 END) as od_count,
           CASE
             WHEN COUNT(a.id) = 0 THEN 0
             ELSE ROUND((COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
@@ -1272,25 +1274,40 @@ exports.getIneligibleStudentsReport = async (req, res) => {
                  ds.course_code, ds.course_name, ds.slot_name, ds.faculty_name, ds.school
       )
       SELECT * FROM student_attendance
-      WHERE total_classes > 0 AND attendance_percentage < 75
       ORDER BY school, course_code, slot_name, enrollment_number
     `, params);
 
-    const ineligibleStudents = result.rows;
+    const allRows = result.rows;
 
-    if (ineligibleStudents.length === 0) {
-      return res.status(404).json({ message: "No ineligible students found for the selected filters" });
+    if (allRows.length === 0) {
+      return res.status(404).json({ message: "No student registrations found for the selected filters" });
     }
 
-    // Group by school
-    const schoolGroups = {};
-    for (const row of ineligibleStudents) {
-      const s = row.school || "Unknown";
-      if (!schoolGroups[s]) schoolGroups[s] = [];
-      schoolGroups[s].push(row);
+    // Categorize
+    const eligible = [];
+    const ineligible = [];
+    const noData = [];
+    for (const r of allRows) {
+      const total = parseInt(r.total_classes);
+      const pct = parseFloat(r.attendance_percentage);
+      if (total === 0) noData.push(r);
+      else if (pct >= 75) eligible.push(r);
+      else ineligible.push(r);
     }
 
-    // Build Excel workbook
+    // Per-school breakdown for summary sheet
+    const schoolCounts = {};
+    const bump = (rows, key) => {
+      for (const r of rows) {
+        const s = r.school || "Unknown";
+        if (!schoolCounts[s]) schoolCounts[s] = { eligible: 0, ineligible: 0, noData: 0 };
+        schoolCounts[s][key] += 1;
+      }
+    };
+    bump(eligible, "eligible");
+    bump(ineligible, "ineligible");
+    bump(noData, "noData");
+
     const workbook = XLSX.utils.book_new();
     const semLabel = `${semester_type.charAt(0)}${semester_type.slice(1).toLowerCase()} Semester ${slot_year}`;
     const levelLabel = level === "All" ? "UG & PG" : level;
@@ -1298,61 +1315,68 @@ exports.getIneligibleStudentsReport = async (req, res) => {
     // Summary sheet
     const summaryRows = [];
     summaryRows.push(["AMITY UNIVERSITY BENGALURU"]);
-    summaryRows.push([`Ineligible Students Report (< 75% Attendance) - ${levelLabel}`]);
+    summaryRows.push([`Debar List (75% Attendance Rule, Theory Only) - ${levelLabel}`]);
     summaryRows.push([`${semLabel} | Cutoff Date: ${cutoff_date}`]);
     summaryRows.push([]);
-    summaryRows.push(["School", "Total Ineligible Students"]);
+    summaryRows.push(["School", "Eligible", "Ineligible (Debarred)", "No Data / Not Marked", "Total"]);
 
-    const schoolNames = Object.keys(schoolGroups).sort();
-    let grandTotal = 0;
+    const schoolNames = Object.keys(schoolCounts).sort();
+    let gEligible = 0, gIneligible = 0, gNoData = 0;
     schoolNames.forEach(s => {
-      summaryRows.push([s, schoolGroups[s].length]);
-      grandTotal += schoolGroups[s].length;
+      const c = schoolCounts[s];
+      const rowTotal = c.eligible + c.ineligible + c.noData;
+      summaryRows.push([s, c.eligible, c.ineligible, c.noData, rowTotal]);
+      gEligible += c.eligible;
+      gIneligible += c.ineligible;
+      gNoData += c.noData;
     });
     summaryRows.push([]);
-    summaryRows.push(["Grand Total", grandTotal]);
+    summaryRows.push(["Grand Total", gEligible, gIneligible, gNoData, gEligible + gIneligible + gNoData]);
 
     const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
     XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
 
-    // Per-school sheets
-    const headers = ["S.No.", "Enrollment", "Student Name", "Program", "Branch", "Course Code", "Course Name", "Slot", "Faculty", "Total Classes", "Present", "Attendance %"];
+    // Data sheets
+    const headers = ["S.No.", "Enrollment", "Student Name", "Program", "Branch", "School", "Course Code", "Course Name", "Slot", "Faculty", "Total Classes", "Present", "Absent", "OD", "Attendance %"];
 
-    for (const schoolName of schoolNames) {
-      const students = schoolGroups[schoolName];
+    const formatName = (raw) => {
+      let cleanName = raw.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
+      const tokens = cleanName.split(/\s+/);
+      const firstMulti = tokens.findIndex(t => t.length > 1);
+      if (firstMulti > 0) {
+        cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
+      }
+      return cleanName;
+    };
+
+    const buildDataSheet = (title, students, includePct) => {
       const rows = [];
       rows.push(["AMITY UNIVERSITY BENGALURU"]);
-      rows.push([`Ineligible Students - ${schoolName} (${levelLabel})`]);
+      rows.push([`${title} (${levelLabel})`]);
       rows.push([`${semLabel} | Cutoff Date: ${cutoff_date}`]);
       rows.push([]);
       rows.push(headers);
 
       students.forEach((s, idx) => {
         const { program, branch } = parseProgramBranch(s.program_code);
-        let cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
-        const tokens = cleanName.split(/\s+/);
-        const firstMulti = tokens.findIndex(t => t.length > 1);
-        if (firstMulti > 0) {
-          cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
-        }
-
         rows.push([
-          idx + 1, s.enrollment_number, cleanName, program, branch,
+          idx + 1, s.enrollment_number, formatName(s.student_name), program, branch, s.school || "",
           s.course_code, s.course_name, s.slot_name, s.faculty_name,
-          parseInt(s.total_classes), parseInt(s.present_count), parseFloat(s.attendance_percentage)
+          parseInt(s.total_classes), parseInt(s.present_count), parseInt(s.absent_count), parseInt(s.od_count),
+          includePct ? parseFloat(s.attendance_percentage) : ""
         ]);
       });
+      return XLSX.utils.aoa_to_sheet(rows);
+    };
 
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      // Truncate sheet name to 31 chars
-      let sheetName = schoolName.substring(0, 31);
-      XLSX.utils.book_append_sheet(workbook, ws, sheetName);
-    }
+    XLSX.utils.book_append_sheet(workbook, buildDataSheet("Eligible Students (>= 75%)", eligible, true), "Eligible");
+    XLSX.utils.book_append_sheet(workbook, buildDataSheet("Ineligible Students / Debarred (< 75%)", ineligible, true), "Ineligible");
+    XLSX.utils.book_append_sheet(workbook, buildDataSheet("No Attendance Data / Not Marked", noData, false), "No Data");
 
     // Generate filename
     const semPrefix = semester_type === "WINTER" ? "WS" : semester_type === "FALL" ? "FS" : "SS";
     const cleanYear = slot_year.replace(/-/g, "_");
-    const filename = `${semPrefix}${cleanYear}_${levelLabel}_Ineligible_Students_${cutoff_date}.xlsx`;
+    const filename = `${semPrefix}${cleanYear}_${levelLabel.replace(/\s+/g, "_").replace(/&/g, "and")}_Debar_List_${cutoff_date}.xlsx`;
 
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -1360,7 +1384,7 @@ exports.getIneligibleStudentsReport = async (req, res) => {
     return res.send(buffer);
 
   } catch (error) {
-    console.error("Error generating ineligible students report:", error);
+    console.error("Error generating debar list report:", error);
     res.status(500).json({ message: "Error generating report", error: error.message });
   }
 };
