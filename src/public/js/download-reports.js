@@ -51,14 +51,14 @@ async function loadFilterOptions() {
           schoolSelect.appendChild(opt);
         });
       }
-      // Also populate ineligible report school dropdown
-      const inelSchoolSelect = document.getElementById("inel-filter-school");
-      if (inelSchoolSelect) {
+      // Also populate debar list report school dropdown
+      const debarSchoolSelect = document.getElementById("debar-filter-school");
+      if (debarSchoolSelect) {
         schools.forEach(s => {
           const opt = document.createElement("option");
           opt.value = s.school_short_name;
           opt.textContent = `${s.school_short_name} - ${s.school_long_name}`;
-          inelSchoolSelect.appendChild(opt);
+          debarSchoolSelect.appendChild(opt);
         });
       }
       // Also populate courses report school dropdown
@@ -453,14 +453,14 @@ function displayDownloadReportsInterface() {
           </div>
           ` : ""}
 
-          <!-- Ineligible Students Report (Admin only) -->
+          <!-- Debar List Report (Admin only) -->
           ${currentUserRole === "admin" ? `
           <div class="card mb-4">
             <div class="card-header bg-danger text-white">
-              <h5 class="card-title mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Ineligible Students Report</h5>
+              <h5 class="card-title mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Debar List</h5>
             </div>
             <div class="card-body">
-              <p class="text-muted mb-3">Download list of students below 75% attendance (theory courses only) for CoE submissions.</p>
+              <p class="text-muted mb-3">Download debar list (theory courses only) — Eligible (&ge; 75%), Ineligible / Debarred (&lt; 75%), and No Data / Not Marked, in a single Excel workbook.</p>
               <div class="card mb-3">
                 <div class="card-header bg-light">
                   <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
@@ -468,14 +468,14 @@ function displayDownloadReportsInterface() {
                 <div class="card-body">
                   <div class="row g-3">
                     <div class="col-md-3">
-                      <label for="inel-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
-                      <select id="inel-filter-year" class="form-select">
+                      <label for="debar-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                      <select id="debar-filter-year" class="form-select">
                         ${yearOptions}
                       </select>
                     </div>
                     <div class="col-md-3">
-                      <label for="inel-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
-                      <select id="inel-filter-semester" class="form-select">
+                      <label for="debar-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                      <select id="debar-filter-semester" class="form-select">
                         <option value="">Select Semester</option>
                         <option value="FALL">FALL</option>
                         <option value="WINTER">WINTER</option>
@@ -483,8 +483,8 @@ function displayDownloadReportsInterface() {
                       </select>
                     </div>
                     <div class="col-md-2">
-                      <label for="inel-filter-level" class="form-label">Level <span class="text-danger">*</span></label>
-                      <select id="inel-filter-level" class="form-select">
+                      <label for="debar-filter-level" class="form-label">Level <span class="text-danger">*</span></label>
+                      <select id="debar-filter-level" class="form-select">
                         <option value="">Select Level</option>
                         <option value="UG">UG</option>
                         <option value="PG">PG</option>
@@ -492,26 +492,26 @@ function displayDownloadReportsInterface() {
                       </select>
                     </div>
                     <div class="col-md-2">
-                      <label for="inel-filter-school" class="form-label">School</label>
-                      <select id="inel-filter-school" class="form-select">
+                      <label for="debar-filter-school" class="form-label">School</label>
+                      <select id="debar-filter-school" class="form-select">
                         <option value="">All Schools</option>
                       </select>
                     </div>
                     <div class="col-md-2">
-                      <label for="inel-filter-cutoff" class="form-label">Cutoff Date <span class="text-danger">*</span></label>
-                      <input type="date" id="inel-filter-cutoff" class="form-control">
+                      <label for="debar-filter-cutoff" class="form-label">Cutoff Date <span class="text-danger">*</span></label>
+                      <input type="date" id="debar-filter-cutoff" class="form-control">
                     </div>
                   </div>
                 </div>
               </div>
               <div class="row">
                 <div class="col-md-6">
-                  <button type="button" class="btn btn-danger" onclick="downloadIneligibleReport()">
-                    <i class="fas fa-file-excel me-2"></i>Download Ineligible Students Report (.xlsx)
+                  <button type="button" class="btn btn-danger" onclick="downloadDebarList()">
+                    <i class="fas fa-file-excel me-2"></i>Download Debar List (.xlsx)
                   </button>
                 </div>
               </div>
-              <div id="inel-download-status" class="mt-3"></div>
+              <div id="debar-download-status" class="mt-3"></div>
             </div>
           </div>
           ` : ""}
@@ -1986,19 +1986,19 @@ window.onAttYearSemesterChange = onAttYearSemesterChange;
 window.onAttCourseChange = onAttCourseChange;
 window.clearAttFilters = clearAttFilters;
 window.downloadAttendanceReport = downloadAttendanceReport;
-window.downloadIneligibleReport = downloadIneligibleReport;
+window.downloadDebarList = downloadDebarList;
 window.downloadCoursesReport = downloadCoursesReport;
 console.log("download-reports.js loaded successfully");
 
-// ============ Ineligible Students Report Functions ============
+// ============ Debar List Report Functions ============
 
-async function downloadIneligibleReport() {
-  const year = document.getElementById("inel-filter-year").value;
-  const semester = document.getElementById("inel-filter-semester").value;
-  const level = document.getElementById("inel-filter-level").value;
-  const school = document.getElementById("inel-filter-school").value;
-  const cutoff = document.getElementById("inel-filter-cutoff").value;
-  const statusDiv = document.getElementById("inel-download-status");
+async function downloadDebarList() {
+  const year = document.getElementById("debar-filter-year").value;
+  const semester = document.getElementById("debar-filter-semester").value;
+  const level = document.getElementById("debar-filter-level").value;
+  const school = document.getElementById("debar-filter-school").value;
+  const cutoff = document.getElementById("debar-filter-cutoff").value;
+  const statusDiv = document.getElementById("debar-download-status");
 
   if (!year || !semester || !level || !cutoff) {
     statusDiv.innerHTML = `
@@ -2011,7 +2011,7 @@ async function downloadIneligibleReport() {
 
   statusDiv.innerHTML = `
     <div class="alert alert-info">
-      <i class="fas fa-spinner fa-spin me-2"></i>Generating ineligible students report...
+      <i class="fas fa-spinner fa-spin me-2"></i>Generating debar list...
     </div>
   `;
 
@@ -2023,7 +2023,7 @@ async function downloadIneligibleReport() {
     params.append("cutoff_date", cutoff);
     if (school) params.append("school", school);
 
-    const response = await fetch(`${window.API_URL}/reports/ineligible-students?${params.toString()}`, {
+    const response = await fetch(`${window.API_URL}/reports/debar-list?${params.toString()}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("token")}`,
         "x-access-token": localStorage.getItem("token"),
@@ -2037,7 +2037,7 @@ async function downloadIneligibleReport() {
 
     const blob = await response.blob();
     const contentDisposition = response.headers.get("Content-Disposition");
-    let filename = "ineligible_students_report.xlsx";
+    let filename = "debar_list.xlsx";
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="?(.+?)"?$/);
       if (match) filename = match[1];
@@ -2054,11 +2054,11 @@ async function downloadIneligibleReport() {
 
     statusDiv.innerHTML = `
       <div class="alert alert-success">
-        <i class="fas fa-check-circle me-2"></i>Ineligible students report downloaded successfully!
+        <i class="fas fa-check-circle me-2"></i>Debar list downloaded successfully!
       </div>
     `;
   } catch (error) {
-    console.error("Error downloading ineligible report:", error);
+    console.error("Error downloading debar list:", error);
     statusDiv.innerHTML = `
       <div class="alert alert-danger">
         <i class="fas fa-exclamation-circle me-2"></i>Error: ${error.message}

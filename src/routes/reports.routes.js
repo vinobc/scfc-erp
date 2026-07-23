@@ -81,9 +81,9 @@ router.get(
   reportsController.getStudentAttendanceReport
 );
 
-// Download ineligible students report (admin only)
+// Download debar list report (admin only)
 router.get(
-  "/ineligible-students",
+  "/debar-list",
   verifyToken,
   (req, res, next) => {
     if (req.userRole !== "admin") {
@@ -91,7 +91,7 @@ router.get(
     }
     next();
   },
-  reportsController.getIneligibleStudentsReport
+  reportsController.getDebarListReport
 );
 
 // Download courses report (all roles except students)
