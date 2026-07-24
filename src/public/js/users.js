@@ -178,7 +178,7 @@ function renderUsers(users) {
       <i class="fas fa-edit"></i>
     </button>
     ${
-      user.role === "faculty" || user.role === "timetable_coordinator"
+      user.role === "faculty" || user.role === "timetable_coordinator" || user.role === "coe"
         ? `<button class="btn btn-sm btn-outline-warning reset-user-password-btn"
           data-user-id="${user.user_id}"
           data-user-name="${user.full_name}"
@@ -396,7 +396,7 @@ function deleteUser(userId) {
 function confirmResetUserPassword(userId, userName, employeeId) {
   if (
     confirm(
-      `Are you sure you want to reset the password for ${userName}?\n\nThis will reset their password to the default format: Faculty@${employeeId}`
+      `Are you sure you want to reset the password for ${userName}?\n\nThe new default password will be shown after the reset completes.`
     )
   ) {
     resetUserPassword(userId, userName, employeeId);

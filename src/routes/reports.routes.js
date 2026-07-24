@@ -12,10 +12,10 @@ router.get(
   reportsController.getStudentRegistrations
 );
 
-// Middleware: allow admin, faculty, and timetable_coordinator for marks reports
+// Middleware: allow admin, faculty, timetable_coordinator, and coe for marks reports
 function isAdminOrFaculty(req, res, next) {
-  if (!["admin", "faculty", "timetable_coordinator"].includes(req.userRole)) {
-    return res.status(403).json({ message: "Require Admin, Faculty, or Timetable Coordinator Role" });
+  if (!["admin", "faculty", "timetable_coordinator", "coe"].includes(req.userRole)) {
+    return res.status(403).json({ message: "Require Admin, Faculty, Timetable Coordinator, or CoE Role" });
   }
   next();
 }
@@ -36,13 +36,13 @@ router.get(
   reportsController.getMarksReportSlots
 );
 
-// Get marks entry summary (admin only)
+// Get marks entry summary (admin and coe)
 router.get(
   "/student-marks/summary",
   verifyToken,
   (req, res, next) => {
-    if (req.userRole !== "admin") {
-      return res.status(403).json({ message: "Require Admin Role" });
+    if (!["admin", "coe"].includes(req.userRole)) {
+      return res.status(403).json({ message: "Require Admin or CoE Role" });
     }
     next();
   },

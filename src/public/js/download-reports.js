@@ -326,8 +326,8 @@ function displayDownloadReportsInterface() {
           </div>
           ` : ""}
 
-          <!-- Student Marks Report - Admin View -->
-          ${currentUserRole === "admin" ? `
+          <!-- Student Marks Report - Admin / CoE View -->
+          ${currentUserRole === "admin" || currentUserRole === "coe" ? `
           <div class="card mb-4">
             <div class="card-header bg-success text-white">
               <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Student Marks Report</h5>
