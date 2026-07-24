@@ -276,6 +276,15 @@ function updateNavigationByRole(userRole) {
       });
       break;
 
+    case "coe":
+      // Controller of Examinations sees: Dashboard, Download Reports, Change Password, Logout
+      [navItems.dashboard, navItems.downloadReports, navItems.changePassword, navItems.logout].forEach((item) => {
+        if (item && item.parentElement) {
+          item.parentElement.style.display = "block";
+        }
+      });
+      break;
+
     default:
       // Default: only dashboard and logout
       [navItems.dashboard, navItems.logout].forEach((item) => {

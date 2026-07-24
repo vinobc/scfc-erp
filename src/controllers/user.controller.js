@@ -358,7 +358,7 @@ exports.createAdminUser = async (req, res) => {
   }
 };
 
-// Admin reset faculty/coordinator/staff password to default
+// Admin reset faculty/coordinator/staff/coe password to default
 exports.adminResetUserPassword = async (req, res) => {
   try {
     const { id } = req.params;
@@ -367,13 +367,13 @@ exports.adminResetUserPassword = async (req, res) => {
     const userResult = await db.query(
       `SELECT u.user_id, u.username, u.full_name, u.role, u.employee_id
        FROM "user" u
-       WHERE u.user_id = $1 AND u.role IN ('faculty', 'timetable_coordinator', 'staff')`,
+       WHERE u.user_id = $1 AND u.role IN ('faculty', 'timetable_coordinator', 'staff', 'coe')`,
       [parseInt(id)]
     );
 
     if (userResult.rows.length === 0) {
       return res.status(404).json({
-        message: "Faculty, coordinator, or staff user not found",
+        message: "Faculty, coordinator, staff, or CoE user not found",
       });
     }
 
@@ -389,16 +389,23 @@ exports.adminResetUserPassword = async (req, res) => {
       }
     }
 
-    if (!employeeId) {
+    // CoE is not tied to a faculty employee record and uses a fixed default password.
+    // Other roles require an employee_id to build their default password.
+    if (user.role !== 'coe' && !employeeId) {
       return res.status(400).json({
         message: "Cannot reset password: user has no employee ID",
       });
     }
 
     // Use appropriate password format based on role
-    const defaultPassword = user.role === 'staff'
-      ? `Staff@${employeeId}`
-      : `Faculty@${employeeId}`;
+    let defaultPassword;
+    if (user.role === 'coe') {
+      defaultPassword = 'Coe@12345';
+    } else if (user.role === 'staff') {
+      defaultPassword = `Staff@${employeeId}`;
+    } else {
+      defaultPassword = `Faculty@${employeeId}`;
+    }
 
     // Hash the default password
     const saltRounds = 10;

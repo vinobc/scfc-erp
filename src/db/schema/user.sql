@@ -8,7 +8,7 @@ CREATE TABLE "user" (
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
-    role VARCHAR(30) NOT NULL CHECK (role IN ('admin', 'staff', 'faculty', 'student', 'parent', 'service', 'timetable_coordinator')),
+    role VARCHAR(30) NOT NULL CHECK (role IN ('admin', 'staff', 'faculty', 'student', 'parent', 'service', 'timetable_coordinator', 'coe')),
     employee_id INTEGER UNIQUE,
     is_active BOOLEAN DEFAULT TRUE,
     last_login TIMESTAMP,
