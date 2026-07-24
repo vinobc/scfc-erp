@@ -1588,8 +1588,12 @@ function filterSummaryByStatus(status, btn) {
       tr.style.display = "";
     } else {
       tr.style.display = "none";
+      // Uncheck hidden rows so the download reflects only what the user sees.
+      cb.checked = false;
     }
   });
+  const selectAll = document.getElementById("summary-select-all");
+  if (selectAll) selectAll.checked = false;
 }
 
 // Download status report as CSV
@@ -1652,7 +1656,10 @@ async function downloadSingleMarks(idx) {
 
 // Download marks for all selected rows
 async function downloadSelectedMarks() {
-  const checkboxes = document.querySelectorAll(".summary-row-check:checked");
+  // Only include checkboxes on visible rows; a hidden-but-checked row (e.g. left
+  // over from a prior filter state) must not sneak into the download.
+  const checkboxes = Array.from(document.querySelectorAll(".summary-row-check:checked"))
+    .filter(cb => cb.closest("tr").style.display !== "none");
   if (checkboxes.length === 0) {
     const statusDiv = document.getElementById("marks-download-status");
     if (statusDiv) statusDiv.innerHTML = `

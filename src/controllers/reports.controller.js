@@ -45,6 +45,48 @@ function getValidComponents(assessmentType) {
   }
 }
 
+// Helper: Enumerate the configured "pieces" that make up a component for one offering.
+// Each piece is a (assessment_type, assessment_number, question_id) triple that should
+// have a non-null student_marks row for every enrolled student when the component is
+// fully entered. Shape matches how src/public/js/marks.js writes marks.
+function extractConfiguredPieces(component, configRow, isLabSlot) {
+  const cj = typeof configRow.config_json === "string"
+    ? JSON.parse(configRow.config_json)
+    : (configRow.config_json || {});
+  const pieces = [];
+
+  if (component === "CA1" || component === "CA2" || component === "CA3") {
+    const n = parseInt(component.slice(2));
+    const ca = (cj.cas || []).find(c => c.number === n);
+    for (const q of (ca?.questions || [])) {
+      pieces.push({ assessment_type: component, assessment_number: n, question_id: String(q.id) });
+    }
+  } else if (component === "IM") {
+    if (isLabSlot) {
+      const sessions = cj.labSessions || [];
+      sessions.forEach((s, i) => {
+        pieces.push({
+          assessment_type: "LAB_SESSION",
+          assessment_number: i + 1,
+          question_id: String(s?.date ?? `S${i + 1}`),
+        });
+      });
+    } else {
+      for (const a of (cj.assignments || [])) {
+        for (const q of (a.questions || [])) {
+          pieces.push({
+            assessment_type: "ASSIGNMENT",
+            assessment_number: a.number,
+            question_id: String(q.id),
+          });
+        }
+      }
+    }
+  }
+
+  return pieces;
+}
+
 // Helper: Parse program_code from student_registrations into program and branch
 function parseProgramBranch(programCode) {
   // Match known degree patterns at the start, everything after is branch
@@ -421,7 +463,7 @@ exports.getMarksEntrySummary = async (req, res) => {
 
     // Get all assessment configs for this semester (for lookup)
     const configResult = await db.query(`
-      SELECT ac.id, ac.course_code, ac.slot_name, ac.employee_id, ac.assessment_type, ac.component_type
+      SELECT ac.id, ac.course_code, ac.slot_name, ac.employee_id, ac.assessment_type, ac.component_type, ac.config_json
       FROM assessment_config ac
       WHERE ac.slot_year = $1 AND ac.semester_type = $2
     `, [slot_year, semester_type]);
@@ -459,64 +501,85 @@ exports.getMarksEntrySummary = async (req, res) => {
         // Theory slot IM is fine (shows assignments)
       }
 
-      // Check if assessment config exists
+      // Resolve the required assessment_config for this component + slot type.
+      // IM on a lab slot needs the LAB config (lab sessions);
+      // CA1/CA2/CA3 and IM on a theory slot need the THEORY config (assignments / CA questions).
       const configs = configMap[groupKey] || [];
-      const hasConfig = configs.length > 0;
-
-      // Get total registered students for this faculty
-      const totalResult = await db.query(`
-        SELECT COUNT(DISTINCT sr.enrollment_number) as total
-        FROM student_registrations sr
-        WHERE sr.slot_year = $1 AND sr.semester_type = $2
-          AND sr.course_code = $3
-          AND ( sr.slot_name = $4
-             OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
-                   LIKE '%,' || REPLACE($4, ' ', '') || ',%' )
-          AND sr.faculty_name = $5
-          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
-      `, [slot_year, semester_type, alloc.course_code, alloc.slot_name, alloc.faculty_name]);
-
-      const totalStudents = parseInt(totalResult.rows[0].total);
+      const requiredComponentType = (component === "IM" && isLabSlot) ? "LAB" : "THEORY";
+      const configRow = configs.find(c => c.component_type === requiredComponentType);
 
       let status;
+      let totalStudents = 0;
       let studentsWithMarks = 0;
 
-      if (!hasConfig) {
+      if (!configRow) {
         status = "Not Configured";
       } else {
-        // Check marks entry status
-        if (component === "IM") {
-          const marksResult = await db.query(`
-            SELECT COUNT(DISTINCT sm.enrollment_number) as entered
-            FROM student_marks sm
-            JOIN assessment_config ac2 ON sm.assessment_config_id = ac2.id
-            WHERE ac2.slot_year = $1 AND ac2.semester_type = $2
-              AND ac2.course_code = $3 AND ac2.slot_name = $4 AND ac2.employee_id = $5
-              AND sm.assessment_type IN ('ASSIGNMENT', 'LAB_SESSION')
-              AND sm.marks_obtained IS NOT NULL
-          `, [slot_year, semester_type, alloc.course_code, alloc.slot_name, alloc.employee_id]);
-          studentsWithMarks = parseInt(marksResult.rows[0].entered);
-        } else {
-          // Find the THEORY config for CA marks
-          const theoryConfig = configs.find(c => c.component_type === "THEORY");
-          if (theoryConfig) {
-            const marksResult = await db.query(`
-              SELECT COUNT(DISTINCT sm.enrollment_number) as entered
-              FROM student_marks sm
-              WHERE sm.assessment_config_id = $1
-                AND sm.assessment_type = $2
-                AND sm.marks_obtained IS NOT NULL
-            `, [theoryConfig.id, component]);
-            studentsWithMarks = parseInt(marksResult.rows[0].entered);
-          }
-        }
+        const pieces = extractConfiguredPieces(component, configRow, isLabSlot);
 
-        if (studentsWithMarks === 0) {
-          status = "Not Entered";
-        } else if (studentsWithMarks >= totalStudents) {
-          status = "Complete";
+        if (pieces.length === 0) {
+          // Config row exists but no questions/assignments/sessions configured yet.
+          status = "Not Configured";
         } else {
-          status = "Partial";
+          // Fetch the actual enrolled non-withdrawn students for this offering
+          // (SUMMER-tolerant slot_name match, matches the prior COUNT query shape).
+          const enrollmentResult = await db.query(`
+            SELECT DISTINCT sr.enrollment_number
+            FROM student_registrations sr
+            WHERE sr.slot_year = $1 AND sr.semester_type = $2
+              AND sr.course_code = $3
+              AND ( sr.slot_name = $4
+                 OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                       LIKE '%,' || REPLACE($4, ' ', '') || ',%' )
+              AND sr.faculty_name = $5
+              AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+          `, [slot_year, semester_type, alloc.course_code, alloc.slot_name, alloc.faculty_name]);
+          const enrollments = enrollmentResult.rows.map(r => r.enrollment_number);
+          totalStudents = enrollments.length;
+
+          if (totalStudents === 0) {
+            // Approved edge-case: empty class shouldn't show a green Complete.
+            status = "Not Entered";
+          } else {
+            const coverageResult = await db.query(`
+              WITH filled AS (
+                SELECT sm.enrollment_number, COUNT(*) AS c
+                FROM student_marks sm
+                JOIN unnest($2::text[], $3::int[], $4::text[])
+                     AS p(assessment_type, assessment_number, question_id)
+                  ON p.assessment_type = sm.assessment_type
+                 AND p.assessment_number = sm.assessment_number
+                 AND p.question_id = sm.question_id
+                WHERE sm.assessment_config_id = $1
+                  AND sm.marks_obtained IS NOT NULL
+                  AND sm.enrollment_number = ANY($5::text[])
+                GROUP BY sm.enrollment_number
+              )
+              SELECT
+                COALESCE(COUNT(*) FILTER (WHERE c = $6), 0)::int AS fully_done,
+                COALESCE(SUM(c), 0)::int AS filled_cells
+              FROM filled
+            `, [
+              configRow.id,
+              pieces.map(p => p.assessment_type),
+              pieces.map(p => p.assessment_number),
+              pieces.map(p => p.question_id),
+              enrollments,
+              pieces.length,
+            ]);
+
+            const fullyDone = parseInt(coverageResult.rows[0].fully_done);
+            const filledCells = parseInt(coverageResult.rows[0].filled_cells);
+            studentsWithMarks = fullyDone;
+
+            if (filledCells === 0) {
+              status = "Not Entered";
+            } else if (fullyDone === totalStudents) {
+              status = "Complete";
+            } else {
+              status = "Partial";
+            }
+          }
         }
       }
 
