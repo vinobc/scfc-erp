@@ -1289,11 +1289,14 @@ exports.deleteFacultyAllocation = async (req, res) => {
     const faculty_name = allocationCheck.rows[0].faculty_name;
 
     // Check for student registrations
+    // SUMMER lab registrations store slot_name as a combined pair (e.g. "L11+L12,L31+L32"),
+    // while faculty_allocation stores each pair on its own row. Tolerate both by matching
+    // the exact string OR any element of a comma-split of the registered slot_name.
     const studentCheck = await db.query(
       `SELECT COUNT(*) as student_count
        FROM student_registrations
        WHERE course_code = $1 AND slot_year = $2 AND semester_type = $3
-       AND slot_name = $4 AND venue = $5 AND faculty_name = $6`,
+       AND (slot_name = $4 OR $4 = ANY(regexp_split_to_array(slot_name, '\\s*,\\s*'))) AND venue = $5 AND faculty_name = $6`,
       [course_code, slot_year, semester_type, slot_name, venue, faculty_name]
     );
 
