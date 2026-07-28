@@ -81,13 +81,13 @@ router.get(
   reportsController.getStudentAttendanceReport
 );
 
-// Download debar list report (admin only)
+// Download debar list report (admin or coe)
 router.get(
   "/debar-list",
   verifyToken,
   (req, res, next) => {
-    if (req.userRole !== "admin") {
-      return res.status(403).json({ message: "Require Admin Role" });
+    if (!["admin", "coe"].includes(req.userRole)) {
+      return res.status(403).json({ message: "Require Admin or CoE Role" });
     }
     next();
   },

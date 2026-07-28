@@ -453,8 +453,8 @@ function displayDownloadReportsInterface() {
           </div>
           ` : ""}
 
-          <!-- Debar List Report (Admin only) -->
-          ${currentUserRole === "admin" ? `
+          <!-- Debar List Report (Admin or CoE) -->
+          ${currentUserRole === "admin" || currentUserRole === "coe" ? `
           <div class="card mb-4">
             <div class="card-header bg-danger text-white">
               <h5 class="card-title mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Debar List</h5>
