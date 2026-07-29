@@ -3,6 +3,9 @@ console.log("Loading download-reports.js file...");
 
 // Store user role for conditional UI
 let currentUserRole = null;
+// HoI (Head of Institution) status for the current user, orthogonal to role
+let currentUserIsHoi = false;
+let currentUserHoiSchools = [];
 
 // Helper: get user role from JWT token
 function getUserRoleFromToken() {
@@ -16,11 +19,30 @@ function getUserRoleFromToken() {
   }
 }
 
+// Fetch HoI status from backend (populates currentUserIsHoi + currentUserHoiSchools).
+async function fetchHoiStatus() {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const res = await fetch(`${window.API_URL}/reports/hoi-status`, {
+      headers: { "x-access-token": token }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    currentUserIsHoi = !!data.isHoi;
+    currentUserHoiSchools = Array.isArray(data.schools) ? data.schools : [];
+  } catch (e) {
+    console.warn("Failed to fetch HoI status:", e);
+  }
+}
+
 // Initialize download reports functionality
-function initializeDownloadReports() {
+async function initializeDownloadReports() {
   console.log("Initializing download reports...");
   currentUserRole = getUserRoleFromToken();
   console.log("Detected user role:", currentUserRole);
+  await fetchHoiStatus();
+  console.log("Detected HoI status:", currentUserIsHoi, currentUserHoiSchools);
   displayDownloadReportsInterface();
   loadFilterOptions();
 }
@@ -257,130 +279,149 @@ function displayDownloadReportsInterface() {
             </div>
           </div>
 
-          <!-- Student Marks Report - Faculty/Coordinator View -->
-          ${currentUserRole === "faculty" || currentUserRole === "timetable_coordinator" ? `
+          <!-- Student Marks Report — unified section with optional scope toggle -->
+          ${(() => {
+            const showMyCourses = currentUserRole === "faculty" || currentUserRole === "timetable_coordinator";
+            const showMySchool = currentUserRole === "admin" || currentUserRole === "coe" || currentUserIsHoi;
+            if (!showMyCourses && !showMySchool) return "";
+            const showToggle = showMyCourses && showMySchool;
+            const defaultScope = showMySchool ? "my-school" : "my-courses";
+            const isAdminOrCoe = currentUserRole === "admin" || currentUserRole === "coe";
+            const mySchoolBlurb = isAdminOrCoe
+              ? "View marks entry status and download marks reports for all faculty."
+              : `View marks entry status and download marks reports for faculty of your school${currentUserHoiSchools.length ? ` (${currentUserHoiSchools.map(s => s.school_short_name).join(", ")})` : ""}.`;
+            return `
           <div class="card mb-4">
             <div class="card-header bg-success text-white">
               <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Student Marks Report</h5>
             </div>
             <div class="card-body">
-              <p class="text-muted mb-3">Download student marks report. Select academic year, semester, course, slot, and assessment component.</p>
-              <div class="card mb-3">
-                <div class="card-header bg-light">
-                  <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
+              ${showToggle ? `
+              <div class="mb-3">
+                <div class="btn-group" role="group" aria-label="Marks report scope">
+                  <input type="radio" class="btn-check" name="marks-scope" id="marks-scope-my-courses" value="my-courses" ${defaultScope === "my-courses" ? "checked" : ""} onchange="setMarksScope('my-courses')">
+                  <label class="btn btn-outline-primary" for="marks-scope-my-courses"><i class="fas fa-user me-1"></i> My Courses</label>
+                  <input type="radio" class="btn-check" name="marks-scope" id="marks-scope-my-school" value="my-school" ${defaultScope === "my-school" ? "checked" : ""} onchange="setMarksScope('my-school')">
+                  <label class="btn btn-outline-primary" for="marks-scope-my-school"><i class="fas fa-university me-1"></i> My School (HoI)</label>
                 </div>
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-md-3">
-                      <label for="marks-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
-                      <select id="marks-filter-year" class="form-select" onchange="onMarksYearSemesterChange()">
-                        ${yearOptions}
-                      </select>
+              </div>
+              ` : ""}
+
+              ${showMyCourses ? `
+              <div id="marks-view-my-courses" class="${showToggle && defaultScope !== "my-courses" ? "d-none" : ""}">
+                <p class="text-muted mb-3">Download student marks report. Select academic year, semester, course, slot, and assessment component.</p>
+                <div class="card mb-3">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="row g-3">
+                      <div class="col-md-3">
+                        <label for="marks-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                        <select id="marks-filter-year" class="form-select" onchange="onMarksYearSemesterChange()">
+                          ${yearOptions}
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="marks-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                        <select id="marks-filter-semester" class="form-select" onchange="onMarksYearSemesterChange()">
+                          <option value="">Select Semester</option>
+                          <option value="FALL">FALL</option>
+                          <option value="WINTER">WINTER</option>
+                          <option value="SUMMER">SUMMER</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="marks-filter-course" class="form-label">Course <span class="text-danger">*</span></label>
+                        <select id="marks-filter-course" class="form-select" onchange="onMarksCourseChange()">
+                          <option value="">Select Year & Semester first</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="marks-filter-slot" class="form-label">Slot</label>
+                        <select id="marks-filter-slot" class="form-select" onchange="onMarksSlotChange()">
+                          <option value="">All Slots</option>
+                        </select>
+                      </div>
                     </div>
-                    <div class="col-md-3">
-                      <label for="marks-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
-                      <select id="marks-filter-semester" class="form-select" onchange="onMarksYearSemesterChange()">
-                        <option value="">Select Semester</option>
-                        <option value="FALL">FALL</option>
-                        <option value="WINTER">WINTER</option>
-                        <option value="SUMMER">SUMMER</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3">
-                      <label for="marks-filter-course" class="form-label">Course <span class="text-danger">*</span></label>
-                      <select id="marks-filter-course" class="form-select" onchange="onMarksCourseChange()">
-                        <option value="">Select Year & Semester first</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3">
-                      <label for="marks-filter-slot" class="form-label">Slot</label>
-                      <select id="marks-filter-slot" class="form-select" onchange="onMarksSlotChange()">
-                        <option value="">All Slots</option>
-                      </select>
+                    <div class="row g-3 mt-1">
+                      <div class="col-md-3">
+                        <label for="marks-filter-component" class="form-label">Component <span class="text-danger">*</span></label>
+                        <select id="marks-filter-component" class="form-select">
+                          <option value="">Select Course first</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-outline-secondary" onclick="clearMarksFilters()">
+                          <i class="fas fa-times me-1"></i>Clear Filters
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div class="row g-3 mt-1">
-                    <div class="col-md-3">
-                      <label for="marks-filter-component" class="form-label">Component <span class="text-danger">*</span></label>
-                      <select id="marks-filter-component" class="form-select">
-                        <option value="">Select Course first</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3 d-flex align-items-end">
-                      <button class="btn btn-outline-secondary" onclick="clearMarksFilters()">
-                        <i class="fas fa-times me-1"></i>Clear Filters
-                      </button>
-                    </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-6">
+                    <button type="button" class="btn btn-success" onclick="downloadMarksReport()">
+                      <i class="fas fa-file-excel me-2"></i>Download Marks Report (.xlsx)
+                    </button>
                   </div>
                 </div>
               </div>
-              <div class="row">
-                <div class="col-md-6">
-                  <button type="button" class="btn btn-success" onclick="downloadMarksReport()">
-                    <i class="fas fa-file-excel me-2"></i>Download Marks Report (.xlsx)
-                  </button>
+              ` : ""}
+
+              ${showMySchool ? `
+              <div id="marks-view-my-school" class="${showToggle && defaultScope !== "my-school" ? "d-none" : ""}">
+                <p class="text-muted mb-3">${mySchoolBlurb}</p>
+                <div class="card mb-3">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Select Semester & Component</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="row g-3">
+                      <div class="col-md-3">
+                        <label for="admin-marks-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                        <select id="admin-marks-year" class="form-select">
+                          ${yearOptions}
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="admin-marks-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                        <select id="admin-marks-semester" class="form-select">
+                          <option value="">Select Semester</option>
+                          <option value="FALL">FALL</option>
+                          <option value="WINTER">WINTER</option>
+                          <option value="SUMMER">SUMMER</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="admin-marks-component" class="form-label">Component <span class="text-danger">*</span></label>
+                        <select id="admin-marks-component" class="form-select">
+                          <option value="">Select Component</option>
+                          <option value="CA1">CA1</option>
+                          <option value="CA2">CA2</option>
+                          <option value="CA3">CA3</option>
+                          <option value="IM">IM (Internal Marks)</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-primary" onclick="loadMarksSummary()">
+                          <i class="fas fa-search me-2"></i>View Summary
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                <!-- Summary Table -->
+                <div id="marks-summary-container"></div>
               </div>
+              ` : ""}
+
               <div id="marks-download-status" class="mt-3"></div>
             </div>
           </div>
-          ` : ""}
-
-          <!-- Student Marks Report - Admin / CoE View -->
-          ${currentUserRole === "admin" || currentUserRole === "coe" ? `
-          <div class="card mb-4">
-            <div class="card-header bg-success text-white">
-              <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Student Marks Report</h5>
-            </div>
-            <div class="card-body">
-              <p class="text-muted mb-3">View marks entry status and download marks reports for all faculty.</p>
-              <div class="card mb-3">
-                <div class="card-header bg-light">
-                  <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Select Semester & Component</h6>
-                </div>
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-md-3">
-                      <label for="admin-marks-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
-                      <select id="admin-marks-year" class="form-select">
-                        ${yearOptions}
-                      </select>
-                    </div>
-                    <div class="col-md-3">
-                      <label for="admin-marks-semester" class="form-label">Semester <span class="text-danger">*</span></label>
-                      <select id="admin-marks-semester" class="form-select">
-                        <option value="">Select Semester</option>
-                        <option value="FALL">FALL</option>
-                        <option value="WINTER">WINTER</option>
-                        <option value="SUMMER">SUMMER</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3">
-                      <label for="admin-marks-component" class="form-label">Component <span class="text-danger">*</span></label>
-                      <select id="admin-marks-component" class="form-select">
-                        <option value="">Select Component</option>
-                        <option value="CA1">CA1</option>
-                        <option value="CA2">CA2</option>
-                        <option value="CA3">CA3</option>
-                        <option value="IM">IM (Internal Marks)</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3 d-flex align-items-end">
-                      <button class="btn btn-primary" onclick="loadMarksSummary()">
-                        <i class="fas fa-search me-2"></i>View Summary
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Summary Table -->
-              <div id="marks-summary-container"></div>
-
-              <div id="marks-download-status" class="mt-3"></div>
-            </div>
-          </div>
-          ` : ""}
+            `;
+          })()}
 
           <!-- Student Attendance Report (Admin, Faculty, Coordinator) -->
           ${currentUserRole === "admin" || currentUserRole === "faculty" || currentUserRole === "timetable_coordinator" ? `
@@ -1532,6 +1573,8 @@ async function loadMarksSummary() {
       }
 
       const canDownload = row.status !== "Not Configured";
+      const enteredCell = renderEnteredCell(row, idx);
+      const detailRow = renderPartialDetailRow(row, idx);
 
       html += `
         <tr>
@@ -1540,7 +1583,7 @@ async function loadMarksSummary() {
           <td>${row.slot_name}</td>
           <td>${row.faculty_name}</td>
           <td><small>${row.assessment_type}</small></td>
-          <td>${row.students_with_marks}/${row.total_students}</td>
+          <td>${enteredCell}</td>
           <td>${statusBadge}</td>
           <td>
             ${canDownload ? `<button class="btn btn-sm btn-outline-success" onclick="downloadSingleMarks(${idx})" title="Download">
@@ -1550,6 +1593,7 @@ async function loadMarksSummary() {
             </button>`}
           </td>
         </tr>
+        ${detailRow}
       `;
     });
 
@@ -1973,8 +2017,101 @@ async function downloadAttendanceReport() {
   }
 }
 
+// Render the "Entered" cell for a summary row. When the row has any partial or
+// missing students, the partial/missing counts become clickable pills that
+// expand a detail sub-row below (see renderPartialDetailRow + toggleSummaryDetail).
+function renderEnteredCell(row, idx) {
+  // Backwards-compat: if backend didn't send the split (Not Configured / older builds),
+  // fall back to the old "N/N" display.
+  if (row.students_partial === undefined && row.students_missing === undefined) {
+    return `${row.students_with_marks || 0}/${row.total_students || 0}`;
+  }
+  const done = row.students_done ?? row.students_with_marks ?? 0;
+  const partial = row.students_partial || 0;
+  const missing = row.students_missing || 0;
+  const total = row.total_students || 0;
+
+  // Aggregate piece-blank counts across partial students → "Q3 blank for 6"
+  const pieceCounts = {};
+  (row.partial_detail || []).forEach(ps => {
+    (ps.missing_pieces || []).forEach(q => {
+      pieceCounts[q] = (pieceCounts[q] || 0) + 1;
+    });
+  });
+  const pieceHints = Object.entries(pieceCounts)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([q, n]) => `Q${escapeHtml(String(q))} blank for ${n}`);
+
+  const partialBits = [];
+  partialBits.push(`<span class="text-success">${done} done</span>`);
+  if (partial > 0) {
+    const hint = pieceHints.length ? ` (${pieceHints.join(", ")})` : "";
+    partialBits.push(`<a href="#" class="text-warning text-decoration-none" onclick="toggleSummaryDetail(event, ${idx})" title="Click to see partial students">${partial} partial${hint} <i class="fas fa-caret-down"></i></a>`);
+  } else {
+    partialBits.push(`<span class="text-muted">0 partial</span>`);
+  }
+  if (missing > 0) {
+    partialBits.push(`<a href="#" class="text-danger text-decoration-none" onclick="toggleSummaryDetail(event, ${idx})" title="Click to see students with no marks">${missing} missing <i class="fas fa-caret-down"></i></a>`);
+  } else {
+    partialBits.push(`<span class="text-muted">0 missing</span>`);
+  }
+  return `<small>${partialBits.join(" &middot; ")}<br><span class="text-muted">of ${total}</span></small>`;
+}
+
+// Detail sub-row for a summary row: hidden by default, toggled by the pills.
+function renderPartialDetailRow(row, idx) {
+  const partial = row.partial_detail || [];
+  const missing = row.missing_detail || [];
+  if (partial.length === 0 && missing.length === 0) return "";
+  const parts = [];
+  if (partial.length > 0) {
+    parts.push(`<div class="mb-2"><strong class="text-warning">Partial (${partial.length}):</strong><ul class="mb-1 ps-4">${
+      partial.map(ps => `<li><code>${escapeHtml(ps.enrollment_number)}</code> &mdash; ${
+        (ps.missing_pieces || []).map(q => `Q${escapeHtml(String(q))} blank`).join(", ") || "&mdash;"
+      }</li>`).join("")
+    }</ul></div>`);
+  }
+  if (missing.length > 0) {
+    parts.push(`<div><strong class="text-danger">No marks entered (${missing.length}):</strong><ul class="mb-1 ps-4">${
+      missing.map(ms => `<li><code>${escapeHtml(ms.enrollment_number)}</code></li>`).join("")
+    }</ul></div>`);
+  }
+  return `<tr id="summary-detail-${idx}" class="d-none"><td colspan="8" class="bg-light"><div class="p-2">${parts.join("")}</div></td></tr>`;
+}
+
+// Show/hide a detail sub-row when its pill is clicked.
+function toggleSummaryDetail(event, idx) {
+  if (event) event.preventDefault();
+  const row = document.getElementById(`summary-detail-${idx}`);
+  if (row) row.classList.toggle("d-none");
+}
+
+// Tiny HTML escape for safe interpolation of DB-sourced strings.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Toggle between the "My Courses" and "My School (HoI)" sub-views for users
+// who have access to both.
+function setMarksScope(scope) {
+  const myCourses = document.getElementById("marks-view-my-courses");
+  const mySchool = document.getElementById("marks-view-my-school");
+  if (!myCourses || !mySchool) return;
+  if (scope === "my-school") {
+    myCourses.classList.add("d-none");
+    mySchool.classList.remove("d-none");
+  } else {
+    mySchool.classList.add("d-none");
+    myCourses.classList.remove("d-none");
+  }
+  const statusDiv = document.getElementById("marks-download-status");
+  if (statusDiv) statusDiv.innerHTML = "";
+}
+
 // Make functions available globally
 window.initializeDownloadReports = initializeDownloadReports;
+window.setMarksScope = setMarksScope;
+window.toggleSummaryDetail = toggleSummaryDetail;
 window.downloadRegistrations = downloadRegistrations;
 window.downloadAllRegistrations = downloadAllRegistrations;
 window.clearReportFilters = clearReportFilters;

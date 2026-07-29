@@ -1,6 +1,6 @@
 const express = require("express");
 const reportsController = require("../controllers/reports.controller");
-const { verifyToken, isFacultyOrStaffOrAdmin } = require("../middleware/auth.middleware");
+const { verifyToken, isFacultyOrStaffOrAdmin, attachHoiSchools } = require("../middleware/auth.middleware");
 
 const router = express.Router();
 
@@ -25,6 +25,7 @@ router.get(
   "/student-marks/courses",
   verifyToken,
   isAdminOrFaculty,
+  attachHoiSchools,
   reportsController.getMarksReportCourses
 );
 
@@ -33,18 +34,19 @@ router.get(
   "/student-marks/slots",
   verifyToken,
   isAdminOrFaculty,
+  attachHoiSchools,
   reportsController.getMarksReportSlots
 );
 
-// Get marks entry summary (admin and coe)
+// Get marks entry summary (admin, coe, and HoIs — HoIs get school-scoped results)
 router.get(
   "/student-marks/summary",
   verifyToken,
+  attachHoiSchools,
   (req, res, next) => {
-    if (!["admin", "coe"].includes(req.userRole)) {
-      return res.status(403).json({ message: "Require Admin or CoE Role" });
-    }
-    next();
+    if (["admin", "coe"].includes(req.userRole)) return next();
+    if (req.hoiSchoolIds && req.hoiSchoolIds.length) return next();
+    return res.status(403).json({ message: "Require Admin, CoE, or HoI access" });
   },
   reportsController.getMarksEntrySummary
 );
@@ -54,6 +56,7 @@ router.get(
   "/student-marks",
   verifyToken,
   isAdminOrFaculty,
+  attachHoiSchools,
   reportsController.getStudentMarksReport
 );
 
@@ -92,6 +95,15 @@ router.get(
     next();
   },
   reportsController.getDebarListReport
+);
+
+// HoI status for the current user (used by the frontend to render the
+// school-scoped Student Marks Report view).
+router.get(
+  "/hoi-status",
+  verifyToken,
+  attachHoiSchools,
+  reportsController.getHoiStatus
 );
 
 // Download courses report (all roles except students)
