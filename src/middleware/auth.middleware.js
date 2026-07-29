@@ -193,6 +193,28 @@ exports.attachCoordinatorSchools = async (req, res, next) => {
   }
 };
 
+// Attach HoI (Head of Institution) school IDs to the request.
+// Sets req.hoiSchoolIds = [school_id, ...] if the user is an HoI of one or more
+// schools; otherwise sets it to null (no HoI privileges — controllers should
+// fall back to their non-HoI branch, e.g. faculty-scoped or admin/coe global).
+// HoI-ship is orthogonal to role, so this runs the lookup for every user.
+exports.attachHoiSchools = async (req, res, next) => {
+  try {
+    const db = require("../config/db");
+    const result = await db.query(
+      "SELECT school_id FROM school_hoi WHERE user_id = $1",
+      [req.userId]
+    );
+    req.hoiSchoolIds = result.rows.length
+      ? result.rows.map((r) => r.school_id)
+      : null;
+    next();
+  } catch (error) {
+    console.error("Error fetching HoI schools:", error);
+    return res.status(500).json({ message: "Server error checking HoI assignments" });
+  }
+};
+
 // Check if user can view timetables (faculty, coordinators, and admins)
 exports.canViewTimetables = (req, res, next) => {
   if (

@@ -449,6 +449,20 @@ exports.getMarksEntrySummary = async (req, res) => {
       return res.status(400).json({ message: "slot_year, semester_type, and component are required" });
     }
 
+    // HoI-scoping: non-admin/non-coe callers who have req.hoiSchoolIds see only
+    // faculty from their school(s). Admin/coe remain unrestricted.
+    const allocationParams = [slot_year, semester_type];
+    let hoiFilter = "";
+    if (
+      req.userRole !== "admin" &&
+      req.userRole !== "coe" &&
+      req.hoiSchoolIds &&
+      req.hoiSchoolIds.length
+    ) {
+      allocationParams.push(req.hoiSchoolIds);
+      hoiFilter = ` AND f.school_id = ANY($${allocationParams.length})`;
+    }
+
     // Get ALL faculty-course-slot combos from faculty_allocation
     const allocationResult = await db.query(`
       SELECT DISTINCT fa.course_code, fa.slot_name, fa.employee_id, fa.venue,
@@ -457,9 +471,9 @@ exports.getMarksEntrySummary = async (req, res) => {
       FROM faculty_allocation fa
       JOIN course c ON fa.course_code = c.course_code
       JOIN faculty f ON fa.employee_id = f.employee_id
-      WHERE fa.slot_year = $1 AND fa.semester_type = $2
+      WHERE fa.slot_year = $1 AND fa.semester_type = $2${hoiFilter}
       ORDER BY fa.course_code, fa.slot_name, f.name
-    `, [slot_year, semester_type]);
+    `, allocationParams);
 
     // Get all assessment configs for this semester (for lookup)
     const configResult = await db.query(`
@@ -511,6 +525,10 @@ exports.getMarksEntrySummary = async (req, res) => {
       let status;
       let totalStudents = 0;
       let studentsWithMarks = 0;
+      let studentsPartial = 0;
+      let studentsMissing = 0;
+      let partialDetail = [];
+      let missingDetail = [];
 
       if (!configRow) {
         status = "Not Configured";
@@ -557,6 +575,7 @@ exports.getMarksEntrySummary = async (req, res) => {
               )
               SELECT
                 COALESCE(COUNT(*) FILTER (WHERE c = $6), 0)::int AS fully_done,
+                COALESCE(COUNT(*) FILTER (WHERE c > 0 AND c < $6), 0)::int AS partial,
                 COALESCE(SUM(c), 0)::int AS filled_cells
               FROM filled
             `, [
@@ -569,8 +588,11 @@ exports.getMarksEntrySummary = async (req, res) => {
             ]);
 
             const fullyDone = parseInt(coverageResult.rows[0].fully_done);
+            const partialCount = parseInt(coverageResult.rows[0].partial);
             const filledCells = parseInt(coverageResult.rows[0].filled_cells);
             studentsWithMarks = fullyDone;
+            studentsPartial = partialCount;
+            studentsMissing = totalStudents - fullyDone - partialCount;
 
             if (filledCells === 0) {
               status = "Not Entered";
@@ -578,6 +600,59 @@ exports.getMarksEntrySummary = async (req, res) => {
               status = "Complete";
             } else {
               status = "Partial";
+            }
+
+            // If any student is partial or missing, fetch per-student detail so
+            // the UI can show "Q3 blank for 6" and let HoI expand the enrollment list.
+            if (studentsPartial > 0 || studentsMissing > 0) {
+              const detailResult = await db.query(`
+                WITH req AS (
+                  SELECT assessment_type, assessment_number, question_id
+                  FROM unnest($2::text[], $3::int[], $4::text[])
+                       AS p(assessment_type, assessment_number, question_id)
+                ),
+                sps AS (
+                  SELECT e.enrollment_number, r.question_id,
+                         CASE WHEN sm.marks_obtained IS NOT NULL THEN 1 ELSE 0 END AS is_filled
+                  FROM unnest($5::text[]) AS e(enrollment_number)
+                  CROSS JOIN req r
+                  LEFT JOIN student_marks sm
+                    ON sm.assessment_config_id = $1
+                   AND sm.enrollment_number = e.enrollment_number
+                   AND sm.assessment_type = r.assessment_type
+                   AND sm.assessment_number = r.assessment_number
+                   AND sm.question_id = r.question_id
+                )
+                SELECT sps.enrollment_number,
+                       SUM(sps.is_filled)::int AS filled,
+                       COALESCE(
+                         array_agg(sps.question_id ORDER BY sps.question_id)
+                           FILTER (WHERE sps.is_filled = 0),
+                         ARRAY[]::text[]
+                       ) AS missing_pieces
+                FROM sps
+                GROUP BY sps.enrollment_number
+                HAVING SUM(sps.is_filled) < $6
+                ORDER BY SUM(sps.is_filled), sps.enrollment_number
+              `, [
+                configRow.id,
+                pieces.map(p => p.assessment_type),
+                pieces.map(p => p.assessment_number),
+                pieces.map(p => p.question_id),
+                enrollments,
+                pieces.length,
+              ]);
+
+              for (const r of detailResult.rows) {
+                if (r.filled === 0) {
+                  missingDetail.push({ enrollment_number: r.enrollment_number });
+                } else {
+                  partialDetail.push({
+                    enrollment_number: r.enrollment_number,
+                    missing_pieces: r.missing_pieces || [],
+                  });
+                }
+              }
             }
           }
         }
@@ -594,6 +669,11 @@ exports.getMarksEntrySummary = async (req, res) => {
         assessment_type: assessmentType,
         total_students: totalStudents,
         students_with_marks: studentsWithMarks,
+        students_done: studentsWithMarks,
+        students_partial: studentsPartial,
+        students_missing: studentsMissing,
+        partial_detail: partialDetail,
+        missing_detail: missingDetail,
         status: status,
         theory: alloc.theory,
         practical: alloc.practical,
@@ -707,19 +787,47 @@ exports.getStudentMarksReport = async (req, res) => {
       }));
     }
 
-    // Determine faculty filter
+    // Determine faculty filter and (for HoIs) whether to restrict configs to
+    // the HoI's schools.
     let facultyEmployeeId = null;
-    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
+    let restrictToHoiSchools = false;
+    if (req.userRole === "admin" || req.userRole === "coe") {
+      // Global access; honor optional employee_id filter.
+      if (employee_id) facultyEmployeeId = parseInt(employee_id);
+    } else {
+      // faculty or timetable_coordinator: may also be an HoI.
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
         [req.userId]
       );
-      if (!userResult.rows.length || !userResult.rows[0].employee_id) {
-        return res.status(400).json({ message: "Faculty employee_id not found" });
+      const ownEmpId = userResult.rows.length ? userResult.rows[0].employee_id : null;
+      const reqEmpId = employee_id ? parseInt(employee_id) : null;
+      const isHoi = req.hoiSchoolIds && req.hoiSchoolIds.length > 0;
+
+      if (reqEmpId && reqEmpId !== ownEmpId) {
+        // Downloading another faculty's report — HoI-only, and only within their schools.
+        if (!isHoi) {
+          return res.status(403).json({ message: "Not authorized to download for another faculty" });
+        }
+        const schoolCheck = await db.query(
+          "SELECT school_id FROM faculty WHERE employee_id = $1",
+          [reqEmpId]
+        );
+        if (!schoolCheck.rows.length || !req.hoiSchoolIds.includes(schoolCheck.rows[0].school_id)) {
+          return res.status(403).json({ message: "Faculty is not in your school" });
+        }
+        facultyEmployeeId = reqEmpId;
+      } else if (reqEmpId === ownEmpId && ownEmpId) {
+        facultyEmployeeId = ownEmpId;
+      } else if (isHoi) {
+        // No employee_id → HoI bulk download across their school(s).
+        restrictToHoiSchools = true;
+      } else {
+        if (!ownEmpId) {
+          return res.status(400).json({ message: "Faculty employee_id not found" });
+        }
+        facultyEmployeeId = ownEmpId;
       }
-      facultyEmployeeId = userResult.rows[0].employee_id;
-    } else if (employee_id) {
-      facultyEmployeeId = parseInt(employee_id);
     }
 
     // Get assessment configs matching the filters
@@ -746,6 +854,10 @@ exports.getStudentMarksReport = async (req, res) => {
     if (facultyEmployeeId) {
       configParams.push(facultyEmployeeId);
       configQuery += ` AND ac.employee_id = $${configParams.length}`;
+    }
+    if (restrictToHoiSchools) {
+      configParams.push(req.hoiSchoolIds);
+      configQuery += ` AND f.school_id = ANY($${configParams.length})`;
     }
 
     configQuery += " ORDER BY ac.course_code, ac.slot_name, ac.employee_id";
@@ -775,7 +887,10 @@ exports.getStudentMarksReport = async (req, res) => {
     let sheetCount = 0;
 
     for (const [key, group] of Object.entries(groupedConfigs)) {
-      const info = group.info;
+      // Prefer THEORY config for CA components: a slot may have both LAB and
+      // THEORY configs (theory course taught in a lab-format slot); picking the
+      // LAB config's assessment_type would wrongly reject CA1/CA2/CA3 downloads.
+      const info = (component !== "IM" && group.theoryConfig) ? group.theoryConfig : group.info;
       const assessmentType = info.assessment_type;
 
       // Check if the requested component is valid for this slot's configs
@@ -1531,5 +1646,29 @@ exports.getCoursesReport = async (req, res) => {
   } catch (error) {
     console.error("Error generating courses report:", error);
     res.status(500).json({ message: "Error generating report", error: error.message });
+  }
+};
+
+// Return the current user's HoI (Head of Institution) status and school list.
+// Frontend uses this to decide whether to render the school-scoped Student
+// Marks Report view (and whether to show the "My courses | My school" toggle
+// for users who are also Timetable Coordinators).
+exports.getHoiStatus = async (req, res) => {
+  try {
+    const schoolIds = req.hoiSchoolIds || [];
+    if (schoolIds.length === 0) {
+      return res.json({ isHoi: false, schools: [] });
+    }
+    const result = await db.query(
+      `SELECT school_id, school_short_name, school_long_name
+       FROM school
+       WHERE school_id = ANY($1)
+       ORDER BY school_short_name`,
+      [schoolIds]
+    );
+    res.json({ isHoi: true, schools: result.rows });
+  } catch (error) {
+    console.error("Error fetching HoI status:", error);
+    res.status(500).json({ message: "Error fetching HoI status", error: error.message });
   }
 };
