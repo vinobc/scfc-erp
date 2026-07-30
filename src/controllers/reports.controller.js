@@ -1155,7 +1155,10 @@ exports.getStudentAttendanceReport = async (req, res) => {
         FROM student_registrations sr
         WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
           AND sr.faculty_name = (SELECT name FROM faculty WHERE employee_id = $4)
-          ${slot_name ? `AND sr.slot_name = $5` : ""}
+          -- SUMMER lab registrations store slot_name as a combined pair
+          -- (e.g. "L11+L12,L31+L32") while the slot dropdown offers each pair
+          -- separately; tolerate the compound form via a comma-split match.
+          ${slot_name ? `AND (sr.slot_name = $5 OR $5 = ANY(regexp_split_to_array(sr.slot_name, '\\s*,\\s*')))` : ""}
           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
       )
       SELECT
