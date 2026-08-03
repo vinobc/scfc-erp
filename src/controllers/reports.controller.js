@@ -1113,7 +1113,10 @@ exports.getAttendanceEntrySummary = async (req, res) => {
              c.course_name, c.course_type,
              f.name AS faculty_name,
              (
-               SELECT COUNT(DISTINCT a.attendance_date)::int
+               -- Count per-period sessions, not per-date. A compound theory
+               -- slot (e.g. SUMMER slot A) can meet twice on the same date at
+               -- different slot_times; each period is its own session.
+               SELECT COUNT(DISTINCT (a.attendance_date, a.slot_time))::int
                FROM attendance a
                WHERE a.slot_year = fa.slot_year
                  AND a.semester_type = fa.semester_type
@@ -1174,11 +1177,11 @@ async function appendAttendanceSheets(workbook, opts) {
   }
 
   const datesResult = await db.query(`
-    SELECT DISTINCT a.attendance_date, a.slot_day, a.slot_name
+    SELECT DISTINCT a.attendance_date, a.slot_time, a.slot_day, a.slot_name
     FROM attendance a
     WHERE a.slot_year = $1 AND a.semester_type = $2
       AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
-    ORDER BY a.attendance_date
+    ORDER BY a.attendance_date, a.slot_time
   `, params);
   const dates = datesResult.rows;
 
@@ -1222,17 +1225,20 @@ async function appendAttendanceSheets(workbook, opts) {
   if (students.length === 0) return false;
 
   const dateWiseResult = await db.query(`
-    SELECT a.student_id, st.enrollment_no as enrollment_number, a.attendance_date, a.status, a.is_od
+    SELECT a.student_id, st.enrollment_no as enrollment_number, a.attendance_date, a.slot_time, a.status, a.is_od
     FROM attendance a
     JOIN student st ON a.student_id = st.user_id
     WHERE a.slot_year = $1 AND a.semester_type = $2
       AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
-    ORDER BY a.attendance_date
+    ORDER BY a.attendance_date, a.slot_time
   `, params);
+  // Map key = "YYYY-MM-DD|<slot_time>" so compound theory slots (same date,
+  // two periods at different slot_times) each get their own column.
   const dateWiseMap = {};
   for (const row of dateWiseResult.rows) {
     if (!dateWiseMap[row.enrollment_number]) dateWiseMap[row.enrollment_number] = {};
-    dateWiseMap[row.enrollment_number][row.attendance_date.toISOString().slice(0, 10)] =
+    const key = `${row.attendance_date.toISOString().slice(0, 10)}|${row.slot_time || ""}`;
+    dateWiseMap[row.enrollment_number][key] =
       row.is_od ? "OD" : (row.status === "present" ? "P" : "A");
   }
 
@@ -1262,9 +1268,13 @@ async function appendAttendanceSheets(workbook, opts) {
 
   // ---- Date-wise sheet rows ----
   const dateHeaders = ["S.No.", "Enrollment", "Student Name"];
-  dates.forEach(d => {
+  dates.forEach((d, i) => {
     const dateStr = d.attendance_date.toISOString().slice(5, 10);
-    dateHeaders.push(`${dateStr}\n(${d.slot_day})`);
+    // Compound theory slots meet twice per date at different slot_times; include
+    // slot_time in the header so the two same-date columns are distinguishable.
+    // Prefix with a session number for easy reference (e.g. "S1", "S2").
+    const timeStr = d.slot_time ? ` ${d.slot_time}` : "";
+    dateHeaders.push(`S${i + 1} ${dateStr}${timeStr}\n(${d.slot_day})`);
   });
   dateHeaders.push("Total", "Present", "Absent", "OD", "%");
 
@@ -1285,8 +1295,8 @@ async function appendAttendanceSheets(workbook, opts) {
     }
     const row = [idx + 1, s.enrollment_number, cleanName];
     dates.forEach(d => {
-      const dateKey = d.attendance_date.toISOString().slice(0, 10);
-      row.push(dateWiseMap[s.enrollment_number]?.[dateKey] || "");
+      const key = `${d.attendance_date.toISOString().slice(0, 10)}|${d.slot_time || ""}`;
+      row.push(dateWiseMap[s.enrollment_number]?.[key] || "");
     });
     row.push(parseInt(s.total_classes), parseInt(s.present_count), parseInt(s.absent_count), parseInt(s.od_count), parseFloat(s.attendance_percentage));
     dateRows.push(row);
@@ -1334,8 +1344,14 @@ exports.getStudentAttendanceReport = async (req, res) => {
         return res.status(400).json({ message: "items parameter is empty or malformed" });
       }
     } else {
+      // Respect frontend-provided employee_id when present (HoI single-download
+      // from the school summary sends it). Only fall back to caller's own emp
+      // when employee_id is missing — that covers the plain My-Courses flow for
+      // pure faculty / TTC. The shared access-control loop below validates.
       let facultyEmployeeId = null;
-      if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
+      if (employee_id) {
+        facultyEmployeeId = parseInt(employee_id);
+      } else if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
         const userResult = await db.query(
           'SELECT employee_id FROM "user" WHERE user_id = $1',
           [req.userId]
@@ -1344,8 +1360,6 @@ exports.getStudentAttendanceReport = async (req, res) => {
           return res.status(400).json({ message: "Employee ID not found" });
         }
         facultyEmployeeId = userResult.rows[0].employee_id;
-      } else if (employee_id) {
-        facultyEmployeeId = parseInt(employee_id);
       }
       if (!course_code || !facultyEmployeeId) {
         return res.status(400).json({ message: "course_code and employee_id are required" });
