@@ -65,6 +65,7 @@ router.get(
   "/student-attendance/courses",
   verifyToken,
   isAdminOrFaculty,
+  attachHoiSchools,
   reportsController.getAttendanceReportCourses
 );
 
@@ -73,14 +74,29 @@ router.get(
   "/student-attendance/slots",
   verifyToken,
   isAdminOrFaculty,
+  attachHoiSchools,
   reportsController.getAttendanceReportSlots
 );
 
-// Download student attendance report
+// Attendance entry summary (admin and HoIs — powers the bulk-list view)
+router.get(
+  "/student-attendance/summary",
+  verifyToken,
+  attachHoiSchools,
+  (req, res, next) => {
+    if (req.userRole === "admin") return next();
+    if (req.hoiSchoolIds && req.hoiSchoolIds.length) return next();
+    return res.status(403).json({ message: "Require Admin or HoI access" });
+  },
+  reportsController.getAttendanceEntrySummary
+);
+
+// Download student attendance report (single or bulk via items=)
 router.get(
   "/student-attendance",
   verifyToken,
   isAdminOrFaculty,
+  attachHoiSchools,
   reportsController.getStudentAttendanceReport
 );
 

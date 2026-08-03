@@ -423,76 +423,133 @@ function displayDownloadReportsInterface() {
             `;
           })()}
 
-          <!-- Student Attendance Report (Admin, Faculty, Coordinator) -->
-          ${currentUserRole === "admin" || currentUserRole === "faculty" || currentUserRole === "timetable_coordinator" ? `
+          <!-- Student Attendance Report — unified section with optional scope toggle -->
+          ${(() => {
+            const showMyCourses = currentUserRole === "faculty" || currentUserRole === "timetable_coordinator";
+            const showMySchool = currentUserRole === "admin" || currentUserIsHoi;
+            if (!showMyCourses && !showMySchool) return "";
+            const showToggle = showMyCourses && showMySchool;
+            const defaultScope = showMySchool ? "my-school" : "my-courses";
+            const isAdmin = currentUserRole === "admin";
+            const mySchoolBlurb = isAdmin
+              ? "View attendance summary and download attendance reports for all faculty."
+              : `View attendance summary and download attendance reports for faculty of your school${currentUserHoiSchools.length ? ` (${currentUserHoiSchools.map(s => s.school_short_name).join(", ")})` : ""}.`;
+            return `
           <div class="card mb-4">
             <div class="card-header bg-info text-white">
               <h5 class="card-title mb-0"><i class="fas fa-calendar-check me-2"></i>Student Attendance Report</h5>
             </div>
             <div class="card-body">
-              <p class="text-muted mb-3">Download student attendance report with summary and date-wise breakdown.</p>
-              <div class="card mb-3">
-                <div class="card-header bg-light">
-                  <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
+              ${showToggle ? `
+              <div class="mb-3">
+                <div class="btn-group" role="group" aria-label="Attendance report scope">
+                  <input type="radio" class="btn-check" name="att-scope" id="att-scope-my-courses" value="my-courses" ${defaultScope === "my-courses" ? "checked" : ""} onchange="setAttendanceScope('my-courses')">
+                  <label class="btn btn-outline-info" for="att-scope-my-courses"><i class="fas fa-user me-1"></i> My Courses</label>
+                  <input type="radio" class="btn-check" name="att-scope" id="att-scope-my-school" value="my-school" ${defaultScope === "my-school" ? "checked" : ""} onchange="setAttendanceScope('my-school')">
+                  <label class="btn btn-outline-info" for="att-scope-my-school"><i class="fas fa-university me-1"></i> My School (HoI)</label>
                 </div>
-                <div class="card-body">
-                  <div class="row g-3">
-                    <div class="col-md-3">
-                      <label for="att-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
-                      <select id="att-filter-year" class="form-select" onchange="onAttYearSemesterChange()">
-                        ${yearOptions}
-                      </select>
+              </div>
+              ` : ""}
+
+              ${showMyCourses ? `
+              <div id="att-view-my-courses" class="${showToggle && defaultScope !== "my-courses" ? "d-none" : ""}">
+                <p class="text-muted mb-3">Download student attendance report with summary and date-wise breakdown.</p>
+                <div class="card mb-3">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="row g-3">
+                      <div class="col-md-3">
+                        <label for="att-filter-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                        <select id="att-filter-year" class="form-select" onchange="onAttYearSemesterChange()">
+                          ${yearOptions}
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="att-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                        <select id="att-filter-semester" class="form-select" onchange="onAttYearSemesterChange()">
+                          <option value="">Select Semester</option>
+                          <option value="FALL">FALL</option>
+                          <option value="WINTER">WINTER</option>
+                          <option value="SUMMER">SUMMER</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="att-filter-course" class="form-label">Course <span class="text-danger">*</span></label>
+                        <select id="att-filter-course" class="form-select" onchange="onAttCourseChange()">
+                          <option value="">Select Year & Semester first</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="att-filter-slot" class="form-label">Slot</label>
+                        <select id="att-filter-slot" class="form-select">
+                          <option value="">All Slots</option>
+                        </select>
+                      </div>
                     </div>
-                    <div class="col-md-3">
-                      <label for="att-filter-semester" class="form-label">Semester <span class="text-danger">*</span></label>
-                      <select id="att-filter-semester" class="form-select" onchange="onAttYearSemesterChange()">
-                        <option value="">Select Semester</option>
-                        <option value="FALL">FALL</option>
-                        <option value="WINTER">WINTER</option>
-                        <option value="SUMMER">SUMMER</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3">
-                      <label for="att-filter-course" class="form-label">Course <span class="text-danger">*</span></label>
-                      <select id="att-filter-course" class="form-select" onchange="onAttCourseChange()">
-                        <option value="">Select Year & Semester first</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3">
-                      <label for="att-filter-slot" class="form-label">Slot</label>
-                      <select id="att-filter-slot" class="form-select">
-                        <option value="">All Slots</option>
-                      </select>
+                    <div class="row g-3 mt-1">
+                      <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-outline-secondary" onclick="clearAttFilters()">
+                          <i class="fas fa-times me-1"></i>Clear Filters
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div class="row g-3 mt-1">
-                    ${currentUserRole === "admin" ? `
-                    <div class="col-md-3">
-                      <label for="att-filter-faculty" class="form-label">Faculty <span class="text-danger">*</span></label>
-                      <select id="att-filter-faculty" class="form-select">
-                        <option value="">Select Course first</option>
-                      </select>
-                    </div>
-                    ` : ""}
-                    <div class="col-md-3 d-flex align-items-end">
-                      <button class="btn btn-outline-secondary" onclick="clearAttFilters()">
-                        <i class="fas fa-times me-1"></i>Clear Filters
-                      </button>
-                    </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-6">
+                    <button type="button" class="btn btn-info text-white" onclick="downloadAttendanceReport()">
+                      <i class="fas fa-file-excel me-2"></i>Download Attendance Report (.xlsx)
+                    </button>
                   </div>
                 </div>
               </div>
-              <div class="row">
-                <div class="col-md-6">
-                  <button type="button" class="btn btn-info text-white" onclick="downloadAttendanceReport()">
-                    <i class="fas fa-file-excel me-2"></i>Download Attendance Report (.xlsx)
-                  </button>
+              ` : ""}
+
+              ${showMySchool ? `
+              <div id="att-view-my-school" class="${showToggle && defaultScope !== "my-school" ? "d-none" : ""}">
+                <p class="text-muted mb-3">${mySchoolBlurb}</p>
+                <div class="card mb-3">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Select Semester</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="row g-3">
+                      <div class="col-md-3">
+                        <label for="att-summary-year" class="form-label">Academic Year <span class="text-danger">*</span></label>
+                        <select id="att-summary-year" class="form-select">
+                          ${yearOptions}
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label for="att-summary-semester" class="form-label">Semester <span class="text-danger">*</span></label>
+                        <select id="att-summary-semester" class="form-select">
+                          <option value="">Select Semester</option>
+                          <option value="FALL">FALL</option>
+                          <option value="WINTER">WINTER</option>
+                          <option value="SUMMER">SUMMER</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-primary" onclick="loadAttendanceSummary()">
+                          <i class="fas fa-search me-2"></i>View Summary
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                <!-- Summary Table -->
+                <div id="att-summary-container"></div>
               </div>
+              ` : ""}
+
               <div id="att-download-status" class="mt-3"></div>
             </div>
           </div>
-          ` : ""}
+            `;
+          })()}
 
           <!-- Debar List Report (Admin or CoE) -->
           ${currentUserRole === "admin" || currentUserRole === "coe" ? `
@@ -2091,6 +2148,218 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ========== Attendance summary (bulk-list) helpers ==========
+
+let attendanceSummaryData = [];
+
+async function loadAttendanceSummary() {
+  const year = document.getElementById("att-summary-year").value;
+  const semester = document.getElementById("att-summary-semester").value;
+  const container = document.getElementById("att-summary-container");
+  const statusDiv = document.getElementById("att-download-status");
+
+  if (!year || !semester) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select Academic Year and Semester.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="text-center py-3">
+      <i class="fas fa-spinner fa-spin me-2"></i>Loading attendance summary...
+    </div>
+  `;
+  if (statusDiv) statusDiv.innerHTML = "";
+
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(
+      `${window.API_URL}/reports/student-attendance/summary?slot_year=${year}&semester_type=${semester}`,
+      { headers: { "x-access-token": token } }
+    );
+    if (!res.ok) throw new Error("Failed to load attendance summary");
+    attendanceSummaryData = await res.json();
+
+    if (attendanceSummaryData.length === 0) {
+      container.innerHTML = `
+        <div class="alert alert-info">
+          <i class="fas fa-info-circle me-2"></i>No faculty allocations found for ${semester} ${year}.
+        </div>
+      `;
+      return;
+    }
+
+    renderAttendanceSummaryTable();
+  } catch (error) {
+    console.error("Error loading attendance summary:", error);
+    container.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${escapeHtml(error.message)}
+      </div>
+    `;
+  }
+}
+
+function renderAttendanceSummaryTable() {
+  const container = document.getElementById("att-summary-container");
+  const total = attendanceSummaryData.length;
+  const withSessions = attendanceSummaryData.filter(r => (r.sessions_marked || 0) > 0).length;
+  const withoutSessions = total - withSessions;
+
+  let html = `
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+      <div class="card px-3 py-2"><strong>${total}</strong> <small class="text-muted">Total</small></div>
+      <div class="card px-3 py-2 border-success"><strong class="text-success">${withSessions}</strong> <small class="text-muted">With sessions marked</small></div>
+      <div class="card px-3 py-2 border-danger"><strong class="text-danger">${withoutSessions}</strong> <small class="text-muted">No sessions yet</small></div>
+    </div>
+    <div class="mb-2">
+      <button class="btn btn-sm btn-outline-secondary me-2" onclick="toggleAllAttendanceRows(true)">Select All</button>
+      <button class="btn btn-sm btn-outline-secondary me-2" onclick="toggleAllAttendanceRows(false)">Deselect All</button>
+      <button class="btn btn-sm btn-info text-white" onclick="downloadSelectedAttendance()"><i class="fas fa-file-excel me-1"></i>Download Selected</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped table-hover align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:40px"><input type="checkbox" id="att-select-all" onchange="toggleAllAttendanceRows(this.checked)"></th>
+            <th>Course</th>
+            <th>Slot</th>
+            <th>Faculty</th>
+            <th>Sessions marked</th>
+            <th>Last marked</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  attendanceSummaryData.forEach((row, idx) => {
+    const sessions = row.sessions_marked || 0;
+    const lastMarked = row.last_marked_date ? String(row.last_marked_date).slice(0, 10) : "—";
+    const sessionsCell = sessions > 0
+      ? `<span class="text-success"><strong>${sessions}</strong></span>`
+      : `<span class="text-danger">0 <small>(no sessions yet)</small></span>`;
+    html += `
+      <tr>
+        <td><input type="checkbox" class="att-summary-check" data-idx="${idx}"></td>
+        <td>${escapeHtml(row.course_code)} - ${escapeHtml(row.course_name || "")}</td>
+        <td>${escapeHtml(row.slot_name)}</td>
+        <td>${escapeHtml(row.faculty_name || "")}</td>
+        <td>${sessionsCell}</td>
+        <td><small>${escapeHtml(lastMarked)}</small></td>
+        <td>
+          <button class="btn btn-sm btn-outline-info" onclick="downloadSingleAttendance(${idx})" title="Download">
+            <i class="fas fa-download"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+  container.innerHTML = html;
+}
+
+function toggleAllAttendanceRows(checked) {
+  document.querySelectorAll(".att-summary-check").forEach(cb => { cb.checked = checked; });
+  const all = document.getElementById("att-select-all");
+  if (all) all.checked = checked;
+}
+
+async function downloadSingleAttendance(idx) {
+  const row = attendanceSummaryData[idx];
+  if (!row) return;
+  const year = document.getElementById("att-summary-year").value;
+  const semester = document.getElementById("att-summary-semester").value;
+  await doAttendanceDownload(year, semester, row.course_code, row.slot_name, row.employee_id);
+}
+
+async function downloadSelectedAttendance() {
+  const checked = Array.from(document.querySelectorAll(".att-summary-check:checked"));
+  if (checked.length === 0) {
+    const statusDiv = document.getElementById("att-download-status");
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Please select at least one row to download.</div>
+    `;
+    return;
+  }
+  const year = document.getElementById("att-summary-year").value;
+  const semester = document.getElementById("att-summary-semester").value;
+  if (checked.length === 1) {
+    const row = attendanceSummaryData[parseInt(checked[0].dataset.idx)];
+    await doAttendanceDownload(year, semester, row.course_code, row.slot_name, row.employee_id);
+  } else {
+    const items = checked.map(cb => {
+      const row = attendanceSummaryData[parseInt(cb.dataset.idx)];
+      return `${row.course_code}:${row.slot_name}:${row.employee_id}`;
+    }).join(",");
+    const params = new URLSearchParams({ slot_year: year, semester_type: semester, items });
+    await doAttendanceDownload(year, semester, null, null, null, params.toString());
+  }
+}
+
+async function doAttendanceDownload(year, semester, courseCode, slotName, employeeId, customParams) {
+  const statusDiv = document.getElementById("att-download-status");
+  statusDiv.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Preparing download...</div>`;
+  try {
+    let url;
+    if (customParams) {
+      url = `${window.API_URL}/reports/student-attendance?${customParams}`;
+    } else {
+      const params = new URLSearchParams({ slot_year: year, semester_type: semester, course_code: courseCode });
+      if (slotName) params.append("slot_name", slotName);
+      if (employeeId) params.append("employee_id", employeeId);
+      url = `${window.API_URL}/reports/student-attendance?${params.toString()}`;
+    }
+    const token = localStorage.getItem("token");
+    const res = await fetch(url, { headers: { "x-access-token": token } });
+    if (!res.ok) {
+      let msg = `Download failed (${res.status})`;
+      try { const j = await res.json(); if (j.message) msg = j.message; } catch (_) {}
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") || "";
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    const filename = match ? match[1] : `attendance_${Date.now()}.xlsx`;
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+    statusDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Attendance report downloaded.</div>`;
+  } catch (error) {
+    console.error("Error downloading attendance report:", error);
+    statusDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i>Error: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+// Toggle between the "My Courses" and "My School (HoI)" attendance sub-views.
+function setAttendanceScope(scope) {
+  const myCourses = document.getElementById("att-view-my-courses");
+  const mySchool = document.getElementById("att-view-my-school");
+  if (!myCourses || !mySchool) return;
+  if (scope === "my-school") {
+    myCourses.classList.add("d-none");
+    mySchool.classList.remove("d-none");
+  } else {
+    mySchool.classList.add("d-none");
+    myCourses.classList.remove("d-none");
+  }
+  const statusDiv = document.getElementById("att-download-status");
+  if (statusDiv) statusDiv.innerHTML = "";
+}
+
 // Toggle between the "My Courses" and "My School (HoI)" sub-views for users
 // who have access to both.
 function setMarksScope(scope) {
@@ -2130,6 +2399,11 @@ window.onAttYearSemesterChange = onAttYearSemesterChange;
 window.onAttCourseChange = onAttCourseChange;
 window.clearAttFilters = clearAttFilters;
 window.downloadAttendanceReport = downloadAttendanceReport;
+window.setAttendanceScope = setAttendanceScope;
+window.loadAttendanceSummary = loadAttendanceSummary;
+window.toggleAllAttendanceRows = toggleAllAttendanceRows;
+window.downloadSingleAttendance = downloadSingleAttendance;
+window.downloadSelectedAttendance = downloadSelectedAttendance;
 window.downloadDebarList = downloadDebarList;
 window.downloadCoursesReport = downloadCoursesReport;
 console.log("download-reports.js loaded successfully");
