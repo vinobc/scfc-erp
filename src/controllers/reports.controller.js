@@ -1085,208 +1085,344 @@ async function fetchIMMarks(group, students, assessmentType) {
 // ============ ATTENDANCE REPORT ============
 
 // Download student attendance report
+// Attendance entry summary — one row per (course, slot, faculty) allocation for
+// the semester, with sessions_marked (COUNT DISTINCT attendance_date) as a
+// minimal signal for the caller. Admin sees all schools; HoIs are constrained
+// to their own school(s). Powers the bulk-list view for admin and HoIs.
+exports.getAttendanceEntrySummary = async (req, res) => {
+  try {
+    const { slot_year, semester_type } = req.query;
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "slot_year and semester_type are required" });
+    }
+
+    const params = [slot_year, semester_type];
+    let hoiFilter = "";
+    if (
+      req.userRole !== "admin" &&
+      req.userRole !== "coe" &&
+      req.hoiSchoolIds &&
+      req.hoiSchoolIds.length
+    ) {
+      params.push(req.hoiSchoolIds);
+      hoiFilter = ` AND f.school_id = ANY($${params.length})`;
+    }
+
+    const result = await db.query(`
+      SELECT DISTINCT fa.course_code, fa.slot_name, fa.employee_id, fa.venue,
+             c.course_name, c.course_type,
+             f.name AS faculty_name,
+             (
+               SELECT COUNT(DISTINCT a.attendance_date)::int
+               FROM attendance a
+               WHERE a.slot_year = fa.slot_year
+                 AND a.semester_type = fa.semester_type
+                 AND a.course_code = fa.course_code
+                 AND a.slot_name = fa.slot_name
+                 AND a.employee_id = fa.employee_id
+             ) AS sessions_marked,
+             (
+               SELECT MAX(a.attendance_date)
+               FROM attendance a
+               WHERE a.slot_year = fa.slot_year
+                 AND a.semester_type = fa.semester_type
+                 AND a.course_code = fa.course_code
+                 AND a.slot_name = fa.slot_name
+                 AND a.employee_id = fa.employee_id
+             ) AS last_marked_date
+      FROM faculty_allocation fa
+      JOIN course c ON fa.course_code = c.course_code
+      JOIN faculty f ON fa.employee_id = f.employee_id
+      WHERE fa.slot_year = $1 AND fa.semester_type = $2${hoiFilter}
+      ORDER BY f.name, fa.course_code, fa.slot_name
+    `, params);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching attendance entry summary:", error);
+    res.status(500).json({ message: "Error fetching attendance summary", error: error.message });
+  }
+};
+
+// Build the two attendance sheets (Summary + Date-wise) for one
+// (course_code, slot_name, employee_id) tuple and append them to the workbook.
+// Returns true if sheets were appended, false if no students were found.
+// sheetSuffix is used to disambiguate sheet names in bulk mode; ignored in single mode.
+async function appendAttendanceSheets(workbook, opts) {
+  const { slot_year, semester_type, semLabel, course_code, slot_name, employee_id, bulkPrefix } = opts;
+
+  // Get course details
+  const courseResult = await db.query(
+    "SELECT course_name, course_type, theory, practical, credits FROM course WHERE course_code = $1",
+    [course_code]
+  );
+  if (!courseResult.rows.length) return false;
+  const course = courseResult.rows[0];
+
+  // Get faculty name
+  const facultyResult = await db.query(
+    "SELECT name FROM faculty WHERE employee_id = $1",
+    [employee_id]
+  );
+  const facultyName = facultyResult.rows.length ? facultyResult.rows[0].name : "";
+
+  let slotFilter = "";
+  const params = [slot_year, semester_type, course_code, employee_id];
+  if (slot_name) {
+    params.push(slot_name);
+    slotFilter = ` AND a.slot_name = $${params.length}`;
+  }
+
+  const datesResult = await db.query(`
+    SELECT DISTINCT a.attendance_date, a.slot_day, a.slot_name
+    FROM attendance a
+    WHERE a.slot_year = $1 AND a.semester_type = $2
+      AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
+    ORDER BY a.attendance_date
+  `, params);
+  const dates = datesResult.rows;
+
+  const studentsResult = await db.query(`
+    WITH distinct_students AS (
+      SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code
+      FROM student_registrations sr
+      WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
+        AND sr.faculty_name = (SELECT name FROM faculty WHERE employee_id = $4)
+        -- SUMMER lab registrations store slot_name as a combined pair
+        -- (e.g. "L11+L12,L31+L32") while the slot dropdown offers each pair
+        -- separately; tolerate the compound form via a comma-split match.
+        ${slot_name ? `AND (sr.slot_name = $5 OR $5 = ANY(regexp_split_to_array(sr.slot_name, '\\s*,\\s*')))` : ""}
+        AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+    )
+    SELECT
+      ds.enrollment_number, ds.student_name, ds.program_code,
+      s.school_short_name as school,
+      COUNT(a.id) as total_classes,
+      COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END) as present_count,
+      COUNT(CASE WHEN a.status = 'absent' AND (a.is_od IS NULL OR a.is_od = false) THEN 1 END) as absent_count,
+      COUNT(CASE WHEN a.is_od = true THEN 1 END) as od_count,
+      CASE
+        WHEN COUNT(a.id) = 0 THEN 0
+        ELSE ROUND((COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
+      END as attendance_percentage
+    FROM distinct_students ds
+    JOIN student st ON ds.enrollment_number = st.enrollment_no
+    LEFT JOIN program p ON st.program_id = p.program_id
+    LEFT JOIN school s ON p.school_id = s.school_id
+    LEFT JOIN attendance a ON st.user_id = a.student_id
+      AND a.course_code = $3
+      AND a.slot_year = $1
+      AND a.semester_type = $2
+      AND a.employee_id = $4
+      ${slot_name ? `AND a.slot_name = $5` : ""}
+    GROUP BY ds.enrollment_number, ds.student_name, ds.program_code, s.school_short_name
+    ORDER BY ds.enrollment_number
+  `, params);
+  const students = studentsResult.rows;
+  if (students.length === 0) return false;
+
+  const dateWiseResult = await db.query(`
+    SELECT a.student_id, st.enrollment_no as enrollment_number, a.attendance_date, a.status, a.is_od
+    FROM attendance a
+    JOIN student st ON a.student_id = st.user_id
+    WHERE a.slot_year = $1 AND a.semester_type = $2
+      AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
+    ORDER BY a.attendance_date
+  `, params);
+  const dateWiseMap = {};
+  for (const row of dateWiseResult.rows) {
+    if (!dateWiseMap[row.enrollment_number]) dateWiseMap[row.enrollment_number] = {};
+    dateWiseMap[row.enrollment_number][row.attendance_date.toISOString().slice(0, 10)] =
+      row.is_od ? "OD" : (row.status === "present" ? "P" : "A");
+  }
+
+  // ---- Summary sheet rows ----
+  const summaryRows = [];
+  summaryRows.push(["AMITY UNIVERSITY BENGALURU"]);
+  summaryRows.push([`Attendance Report - ${semLabel}`]);
+  summaryRows.push([]);
+  summaryRows.push(["Course Code", "", course_code, "Course Name", "", course.course_name]);
+  summaryRows.push(["Faculty", "", facultyName, "Slot", "", slot_name || "All Slots"]);
+  summaryRows.push([]);
+  summaryRows.push(["S.No.", "Enrollment", "Student Name", "School", "Program", "Branch", "Total Classes", "Present", "Absent", "OD", "Attendance %"]);
+  students.forEach((s, idx) => {
+    const { program, branch } = parseProgramBranch(s.program_code);
+    let cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
+    const tokens = cleanName.split(/\s+/);
+    const firstMulti = tokens.findIndex(t => t.length > 1);
+    if (firstMulti > 0) {
+      cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
+    }
+    summaryRows.push([
+      idx + 1, s.enrollment_number, cleanName, s.school || "", program, branch,
+      parseInt(s.total_classes), parseInt(s.present_count), parseInt(s.absent_count), parseInt(s.od_count),
+      parseFloat(s.attendance_percentage)
+    ]);
+  });
+
+  // ---- Date-wise sheet rows ----
+  const dateHeaders = ["S.No.", "Enrollment", "Student Name"];
+  dates.forEach(d => {
+    const dateStr = d.attendance_date.toISOString().slice(5, 10);
+    dateHeaders.push(`${dateStr}\n(${d.slot_day})`);
+  });
+  dateHeaders.push("Total", "Present", "Absent", "OD", "%");
+
+  const dateRows = [];
+  dateRows.push(["AMITY UNIVERSITY BENGALURU"]);
+  dateRows.push([`Date-wise Attendance - ${semLabel}`]);
+  dateRows.push([]);
+  dateRows.push(["Course Code", "", course_code, "Course Name", "", course.course_name]);
+  dateRows.push(["Faculty", "", facultyName, "Slot", "", slot_name || "All Slots"]);
+  dateRows.push([]);
+  dateRows.push(dateHeaders);
+  students.forEach((s, idx) => {
+    let cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
+    const tokens = cleanName.split(/\s+/);
+    const firstMulti = tokens.findIndex(t => t.length > 1);
+    if (firstMulti > 0) {
+      cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
+    }
+    const row = [idx + 1, s.enrollment_number, cleanName];
+    dates.forEach(d => {
+      const dateKey = d.attendance_date.toISOString().slice(0, 10);
+      row.push(dateWiseMap[s.enrollment_number]?.[dateKey] || "");
+    });
+    row.push(parseInt(s.total_classes), parseInt(s.present_count), parseInt(s.absent_count), parseInt(s.od_count), parseFloat(s.attendance_percentage));
+    dateRows.push(row);
+  });
+
+  // Sheet names — bulk mode needs disambiguation. Excel caps at 31 chars and
+  // disallows \ / ? * : [ ]  — course_code + slot are safe with those chars.
+  let sumName = bulkPrefix ? `${bulkPrefix}-Sum` : "Summary";
+  let dateName = bulkPrefix ? `${bulkPrefix}-Date` : "Date-wise";
+  if (sumName.length > 31) sumName = sumName.slice(0, 31);
+  if (dateName.length > 31) dateName = dateName.slice(0, 31);
+  let counter = 1;
+  const baseSum = sumName, baseDate = dateName;
+  while (workbook.SheetNames.includes(sumName) || workbook.SheetNames.includes(dateName)) {
+    sumName = `${baseSum.slice(0, 28)}_${counter}`;
+    dateName = `${baseDate.slice(0, 28)}_${counter}`;
+    counter++;
+  }
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryRows), sumName);
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(dateRows), dateName);
+  return true;
+}
+
 exports.getStudentAttendanceReport = async (req, res) => {
   try {
-    const { slot_year, semester_type, course_code, slot_name, employee_id } = req.query;
+    const { slot_year, semester_type, course_code, slot_name, employee_id, items } = req.query;
 
     if (!slot_year || !semester_type) {
       return res.status(400).json({ message: "slot_year and semester_type are required" });
     }
 
-    // Determine faculty filter
-    let facultyEmployeeId = null;
-    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
+    // Parse item list: bulk mode uses items=course:slot:employee[,course:slot:employee...]
+    // Single mode uses course_code + slot_name + employee_id (or own emp for faculty/TTC).
+    let itemList;
+    if (items) {
+      itemList = items.split(",").map(s => {
+        const parts = s.split(":");
+        return {
+          course_code: parts[0],
+          slot_name: parts[1] || null,
+          employee_id: parseInt(parts[2]),
+        };
+      }).filter(it => it.course_code && it.employee_id);
+      if (itemList.length === 0) {
+        return res.status(400).json({ message: "items parameter is empty or malformed" });
+      }
+    } else {
+      let facultyEmployeeId = null;
+      if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
+        const userResult = await db.query(
+          'SELECT employee_id FROM "user" WHERE user_id = $1',
+          [req.userId]
+        );
+        if (!userResult.rows.length || !userResult.rows[0].employee_id) {
+          return res.status(400).json({ message: "Employee ID not found" });
+        }
+        facultyEmployeeId = userResult.rows[0].employee_id;
+      } else if (employee_id) {
+        facultyEmployeeId = parseInt(employee_id);
+      }
+      if (!course_code || !facultyEmployeeId) {
+        return res.status(400).json({ message: "course_code and employee_id are required" });
+      }
+      itemList = [{ course_code, slot_name: slot_name || null, employee_id: facultyEmployeeId }];
+    }
+
+    // Access control per item.
+    // Admin/CoE: no restriction.
+    // Faculty/TTC: allowed only for their own employee_id.
+    // HoI (non-admin/non-coe with hoiSchoolIds): allowed for any faculty in their school(s), plus own.
+    const isAdminOrCoe = req.userRole === "admin" || req.userRole === "coe";
+    const isHoi = req.hoiSchoolIds && req.hoiSchoolIds.length > 0;
+    let ownEmpId = null;
+    if (!isAdminOrCoe) {
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
         [req.userId]
       );
-      if (!userResult.rows.length || !userResult.rows[0].employee_id) {
-        return res.status(400).json({ message: "Employee ID not found" });
+      ownEmpId = userResult.rows.length ? userResult.rows[0].employee_id : null;
+    }
+    for (const it of itemList) {
+      if (isAdminOrCoe) continue;
+      if (it.employee_id === ownEmpId) continue;
+      if (isHoi) {
+        const schoolCheck = await db.query(
+          "SELECT school_id FROM faculty WHERE employee_id = $1",
+          [it.employee_id]
+        );
+        if (!schoolCheck.rows.length || !req.hoiSchoolIds.includes(schoolCheck.rows[0].school_id)) {
+          return res.status(403).json({ message: `Faculty ${it.employee_id} is not in your school` });
+        }
+        continue;
       }
-      facultyEmployeeId = userResult.rows[0].employee_id;
-    } else if (employee_id) {
-      facultyEmployeeId = parseInt(employee_id);
+      return res.status(403).json({ message: "Not authorized to download for another faculty" });
     }
 
-    if (!course_code || !facultyEmployeeId) {
-      return res.status(400).json({ message: "course_code and employee_id are required" });
+    // Build workbook (one workbook, N items × 2 sheets each in bulk mode).
+    const workbook = XLSX.utils.book_new();
+    const semLabel = `${semester_type.charAt(0)}${semester_type.slice(1).toLowerCase()} Semester ${slot_year}`;
+    const semPrefix = semester_type === "WINTER" ? "WS" : semester_type === "FALL" ? "FS" : "SS";
+    const cleanYear = slot_year.replace(/-/g, "_");
+    const isBulk = itemList.length > 1;
+    let added = 0;
+    for (const it of itemList) {
+      const bulkPrefix = isBulk ? `${it.course_code}-${it.slot_name || "all"}` : null;
+      const ok = await appendAttendanceSheets(workbook, {
+        slot_year, semester_type, semLabel,
+        course_code: it.course_code,
+        slot_name: it.slot_name,
+        employee_id: it.employee_id,
+        bulkPrefix,
+      });
+      if (ok) added++;
     }
-
-    // Get course details
-    const courseResult = await db.query(
-      "SELECT course_name, course_type, theory, practical, credits FROM course WHERE course_code = $1",
-      [course_code]
-    );
-    if (!courseResult.rows.length) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-    const course = courseResult.rows[0];
-
-    // Get faculty name
-    const facultyResult = await db.query(
-      "SELECT name FROM faculty WHERE employee_id = $1",
-      [facultyEmployeeId]
-    );
-    const facultyName = facultyResult.rows.length ? facultyResult.rows[0].name : "";
-
-    // Build slot filter
-    let slotFilter = "";
-    const params = [slot_year, semester_type, course_code, facultyEmployeeId];
-    if (slot_name) {
-      params.push(slot_name);
-      slotFilter = ` AND a.slot_name = $${params.length}`;
-    }
-
-    // Get all attendance dates for this course-faculty (for date-wise columns)
-    const datesResult = await db.query(`
-      SELECT DISTINCT a.attendance_date, a.slot_day, a.slot_name
-      FROM attendance a
-      WHERE a.slot_year = $1 AND a.semester_type = $2
-        AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
-      ORDER BY a.attendance_date
-    `, params);
-
-    const dates = datesResult.rows;
-
-    // Get students with attendance summary (deduplicate student_registrations for TEL courses)
-    const studentsResult = await db.query(`
-      WITH distinct_students AS (
-        SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code
-        FROM student_registrations sr
-        WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
-          AND sr.faculty_name = (SELECT name FROM faculty WHERE employee_id = $4)
-          -- SUMMER lab registrations store slot_name as a combined pair
-          -- (e.g. "L11+L12,L31+L32") while the slot dropdown offers each pair
-          -- separately; tolerate the compound form via a comma-split match.
-          ${slot_name ? `AND (sr.slot_name = $5 OR $5 = ANY(regexp_split_to_array(sr.slot_name, '\\s*,\\s*')))` : ""}
-          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
-      )
-      SELECT
-        ds.enrollment_number, ds.student_name, ds.program_code,
-        s.school_short_name as school,
-        COUNT(a.id) as total_classes,
-        COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END) as present_count,
-        COUNT(CASE WHEN a.status = 'absent' AND (a.is_od IS NULL OR a.is_od = false) THEN 1 END) as absent_count,
-        COUNT(CASE WHEN a.is_od = true THEN 1 END) as od_count,
-        CASE
-          WHEN COUNT(a.id) = 0 THEN 0
-          ELSE ROUND((COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)::decimal / COUNT(a.id)) * 100, 2)
-        END as attendance_percentage
-      FROM distinct_students ds
-      JOIN student st ON ds.enrollment_number = st.enrollment_no
-      LEFT JOIN program p ON st.program_id = p.program_id
-      LEFT JOIN school s ON p.school_id = s.school_id
-      LEFT JOIN attendance a ON st.user_id = a.student_id
-        AND a.course_code = $3
-        AND a.slot_year = $1
-        AND a.semester_type = $2
-        AND a.employee_id = $4
-        ${slot_name ? `AND a.slot_name = $5` : ""}
-      GROUP BY ds.enrollment_number, ds.student_name, ds.program_code, s.school_short_name
-      ORDER BY ds.enrollment_number
-    `, params);
-
-    const students = studentsResult.rows;
-
-    if (students.length === 0) {
+    if (added === 0) {
       return res.status(404).json({ message: "No students found for the selected filters" });
     }
 
-    // Get date-wise attendance per student
-    const dateWiseResult = await db.query(`
-      SELECT a.student_id, st.enrollment_no as enrollment_number, a.attendance_date, a.status, a.is_od
-      FROM attendance a
-      JOIN student st ON a.student_id = st.user_id
-      WHERE a.slot_year = $1 AND a.semester_type = $2
-        AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
-      ORDER BY a.attendance_date
-    `, params);
-
-    // Build date-wise lookup: enrollment -> date -> status
-    const dateWiseMap = {};
-    for (const row of dateWiseResult.rows) {
-      if (!dateWiseMap[row.enrollment_number]) dateWiseMap[row.enrollment_number] = {};
-      dateWiseMap[row.enrollment_number][row.attendance_date.toISOString().slice(0, 10)] =
-        row.is_od ? "OD" : (row.status === "present" ? "P" : "A");
-    }
-
-    // Build Excel workbook
-    const workbook = XLSX.utils.book_new();
-    const semLabel = `${semester_type.charAt(0)}${semester_type.slice(1).toLowerCase()} Semester ${slot_year}`;
-
-    // ---- Sheet 1: Summary ----
-    const summaryRows = [];
-    summaryRows.push(["AMITY UNIVERSITY BENGALURU"]);
-    summaryRows.push([`Attendance Report - ${semLabel}`]);
-    summaryRows.push([]);
-    summaryRows.push(["Course Code", "", course_code, "Course Name", "", course.course_name]);
-    summaryRows.push(["Faculty", "", facultyName, "Slot", "", slot_name || "All Slots"]);
-    summaryRows.push([]);
-    summaryRows.push(["S.No.", "Enrollment", "Student Name", "School", "Program", "Branch", "Total Classes", "Present", "Absent", "OD", "Attendance %"]);
-
-    students.forEach((s, idx) => {
-      const { program, branch } = parseProgramBranch(s.program_code);
-      let cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
-      const tokens = cleanName.split(/\s+/);
-      const firstMulti = tokens.findIndex(t => t.length > 1);
-      if (firstMulti > 0) {
-        cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
-      }
-      summaryRows.push([
-        idx + 1, s.enrollment_number, cleanName, s.school || "", program, branch,
-        parseInt(s.total_classes), parseInt(s.present_count), parseInt(s.absent_count), parseInt(s.od_count),
-        parseFloat(s.attendance_percentage)
-      ]);
-    });
-
-    const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
-    XLSX.utils.book_append_sheet(workbook, summaryWs, "Summary");
-
-    // ---- Sheet 2: Date-wise ----
-    const dateHeaders = ["S.No.", "Enrollment", "Student Name"];
-    dates.forEach(d => {
-      const dateStr = d.attendance_date.toISOString().slice(5, 10); // MM-DD
-      dateHeaders.push(`${dateStr}\n(${d.slot_day})`);
-    });
-    dateHeaders.push("Total", "Present", "Absent", "OD", "%");
-
-    const dateRows = [];
-    dateRows.push(["AMITY UNIVERSITY BENGALURU"]);
-    dateRows.push([`Date-wise Attendance - ${semLabel}`]);
-    dateRows.push([]);
-    dateRows.push(["Course Code", "", course_code, "Course Name", "", course.course_name]);
-    dateRows.push(["Faculty", "", facultyName, "Slot", "", slot_name || "All Slots"]);
-    dateRows.push([]);
-    dateRows.push(dateHeaders);
-
-    students.forEach((s, idx) => {
-      let cleanName = s.student_name.replace(/^(Mr\.?|Ms\.?|Mrs\.?|Dr\.?)\s+/i, "").toUpperCase();
-      const tokens = cleanName.split(/\s+/);
-      const firstMulti = tokens.findIndex(t => t.length > 1);
-      if (firstMulti > 0) {
-        cleanName = [...tokens.slice(firstMulti), ...tokens.slice(0, firstMulti)].join(" ");
-      }
-      const row = [idx + 1, s.enrollment_number, cleanName];
-      dates.forEach(d => {
-        const dateKey = d.attendance_date.toISOString().slice(0, 10);
-        row.push(dateWiseMap[s.enrollment_number]?.[dateKey] || "");
-      });
-      row.push(parseInt(s.total_classes), parseInt(s.present_count), parseInt(s.absent_count), parseInt(s.od_count), parseFloat(s.attendance_percentage));
-      dateRows.push(row);
-    });
-
-    const dateWs = XLSX.utils.aoa_to_sheet(dateRows);
-    XLSX.utils.book_append_sheet(workbook, dateWs, "Date-wise");
-
-    // Generate filename
-    const semPrefix = semester_type === "WINTER" ? "WS" : semester_type === "FALL" ? "FS" : "SS";
-    const cleanFacultyName = facultyName.replace(/\./g, "").replace(/\s+/g, "_");
-    const cleanYear = slot_year.replace(/-/g, "_");
+    // Filename — preserve original shape for single-item requests; use a generic
+    // bulk filename otherwise.
     let filename;
-    if (slot_name) {
-      filename = `${semPrefix}${cleanYear}_${slot_name}_${course_code}_${cleanFacultyName}_Attendance.xlsx`;
+    if (!isBulk) {
+      const it = itemList[0];
+      const facultyResult = await db.query(
+        "SELECT name FROM faculty WHERE employee_id = $1",
+        [it.employee_id]
+      );
+      const facultyName = facultyResult.rows.length ? facultyResult.rows[0].name : "";
+      const cleanFacultyName = facultyName.replace(/\./g, "").replace(/\s+/g, "_");
+      if (it.slot_name) {
+        filename = `${semPrefix}${cleanYear}_${it.slot_name}_${it.course_code}_${cleanFacultyName}_Attendance.xlsx`;
+      } else {
+        filename = `${semPrefix}${cleanYear}_${it.course_code}_${cleanFacultyName}_Attendance.xlsx`;
+      }
     } else {
-      filename = `${semPrefix}${cleanYear}_${course_code}_${cleanFacultyName}_Attendance.xlsx`;
+      filename = `${semPrefix}${cleanYear}_Attendance_${added}items.xlsx`;
     }
 
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
