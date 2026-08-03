@@ -510,6 +510,8 @@ function displayDownloadReportsInterface() {
               ${showMySchool ? `
               <div id="att-view-my-school" class="${showToggle && defaultScope !== "my-school" ? "d-none" : ""}">
                 <p class="text-muted mb-3">${mySchoolBlurb}</p>
+                <!-- Status alert shown at the top so it's not hidden below the summary table -->
+                <div id="att-school-status" class="mb-3"></div>
                 <div class="card mb-3">
                   <div class="card-header bg-light">
                     <h6 class="mb-0"><i class="fas fa-filter me-2"></i>Select Semester</h6>
@@ -2156,7 +2158,8 @@ async function loadAttendanceSummary() {
   const year = document.getElementById("att-summary-year").value;
   const semester = document.getElementById("att-summary-semester").value;
   const container = document.getElementById("att-summary-container");
-  const statusDiv = document.getElementById("att-download-status");
+  // Use the my-school status div (above the table) so alerts aren't hidden below.
+  const statusDiv = document.getElementById("att-school-status");
 
   if (!year || !semester) {
     if (statusDiv) statusDiv.innerHTML = `
@@ -2284,7 +2287,7 @@ async function downloadSingleAttendance(idx) {
 async function downloadSelectedAttendance() {
   const checked = Array.from(document.querySelectorAll(".att-summary-check:checked"));
   if (checked.length === 0) {
-    const statusDiv = document.getElementById("att-download-status");
+    const statusDiv = document.getElementById("att-school-status");
     if (statusDiv) statusDiv.innerHTML = `
       <div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Please select at least one row to download.</div>
     `;
@@ -2306,7 +2309,8 @@ async function downloadSelectedAttendance() {
 }
 
 async function doAttendanceDownload(year, semester, courseCode, slotName, employeeId, customParams) {
-  const statusDiv = document.getElementById("att-download-status");
+  // Called only from the my-school (HoI/admin bulk) flow — write to the top-of-view alert.
+  const statusDiv = document.getElementById("att-school-status");
   statusDiv.innerHTML = `<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Preparing download...</div>`;
   try {
     let url;
@@ -2356,8 +2360,11 @@ function setAttendanceScope(scope) {
     mySchool.classList.add("d-none");
     myCourses.classList.remove("d-none");
   }
-  const statusDiv = document.getElementById("att-download-status");
-  if (statusDiv) statusDiv.innerHTML = "";
+  // Clear both status divs on toggle so stale messages don't linger.
+  const courses = document.getElementById("att-download-status");
+  const school = document.getElementById("att-school-status");
+  if (courses) courses.innerHTML = "";
+  if (school) school.innerHTML = "";
 }
 
 // Toggle between the "My Courses" and "My School (HoI)" sub-views for users
