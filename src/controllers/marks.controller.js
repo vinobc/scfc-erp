@@ -2,6 +2,16 @@ const db = require("../config/db");
 
 // ================== HELPER FUNCTIONS ==================
 
+// Derive the program level ('UG' | 'PG' | 'RESEARCH') from a course_code.
+// Same digit-classification rule used by deriveAssessmentType. Used for the
+// program-level lock scope: only UG/PG participate; RESEARCH bypasses locks.
+function deriveProgramLevel(courseCode) {
+  const levelDigit = parseInt(String(courseCode || "").charAt(3));
+  if (levelDigit >= 1 && levelDigit <= 4) return "UG";
+  if (levelDigit >= 5 && levelDigit <= 6) return "PG";
+  return "RESEARCH";
+}
+
 // Derive assessment type from course code and course type
 function deriveAssessmentType(courseCode, courseType, theory = 0, practical = 0) {
   // Course code format: ABC1234 (e.g., CSE2008)
@@ -605,14 +615,21 @@ exports.getMarksEntryData = async (req, res) => {
     const config = configResult.rows[0];
     const configJson = config.config_json;
 
-    // Check if component is locked
-    const lockResult = await db.query(
-      `SELECT is_locked FROM marks_entry_lock
-       WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3`,
-      [slot_year, semester_type, assType]
-    );
-
-    const isLocked = lockResult.rows.length > 0 && lockResult.rows[0].is_locked;
+    // Check if component is locked for this course's program level.
+    // 'ALL' locks apply to both UG and PG. RESEARCH courses bypass locks.
+    const programLevel = deriveProgramLevel(config.course_code);
+    let isLocked = false;
+    if (programLevel === "UG" || programLevel === "PG") {
+      const lockResult = await db.query(
+        `SELECT 1 FROM marks_entry_lock
+         WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3
+           AND program_level IN ('ALL', $4)
+           AND is_locked = true
+         LIMIT 1`,
+        [slot_year, semester_type, assType, programLevel]
+      );
+      isLocked = lockResult.rows.length > 0;
+    }
 
     // Get faculty name
     const facultyResult = await db.query(
@@ -757,14 +774,22 @@ exports.saveMarks = async (req, res) => {
       lockComponentType = 'LAB';
     }
 
-    const lockResult = await db.query(
-      `SELECT is_locked FROM marks_entry_lock
-       WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3`,
-      [config.slot_year, config.semester_type, lockComponentType]
-    );
-
-    if (lockResult.rows.length > 0 && lockResult.rows[0].is_locked) {
-      return res.status(403).json({ message: "Marks entry is locked for this component" });
+    // Program-level-aware lock: 'ALL' locks apply to both UG and PG; RESEARCH courses bypass.
+    const programLevel = deriveProgramLevel(config.course_code);
+    if (programLevel === "UG" || programLevel === "PG") {
+      const lockResult = await db.query(
+        `SELECT 1 FROM marks_entry_lock
+         WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3
+           AND program_level IN ('ALL', $4)
+           AND is_locked = true
+         LIMIT 1`,
+        [config.slot_year, config.semester_type, lockComponentType, programLevel]
+      );
+      if (lockResult.rows.length > 0) {
+        return res.status(403).json({
+          message: `Marks entry is locked for ${programLevel} courses (${lockComponentType})`,
+        });
+      }
     }
 
     const assNumber = assessment_number || 1;
@@ -938,7 +963,9 @@ exports.getMarksSummary = async (req, res) => {
 
 // ================== ADMIN ENDPOINTS ==================
 
-// Get lock status for all components
+// Get lock status for all components × program levels.
+// Returns one entry per (component_type, program_level). Program levels:
+// 'UG', 'PG', 'ALL' (ALL means lock applies to both UG and PG).
 exports.getLockStatus = async (req, res) => {
   try {
     const { slot_year, semester_type } = req.query;
@@ -950,21 +977,27 @@ exports.getLockStatus = async (req, res) => {
     const result = await db.query(
       `SELECT * FROM marks_entry_lock
        WHERE slot_year = $1 AND semester_type = $2
-       ORDER BY component_type`,
+       ORDER BY component_type, program_level`,
       [slot_year, semester_type]
     );
 
-    // Return all component types with their lock status
     const componentTypes = ["CA1", "CA2", "CA3", "ASSIGNMENT", "LAB"];
-    const lockStatus = componentTypes.map((type) => {
-      const existing = result.rows.find((r) => r.component_type === type);
-      return {
-        component_type: type,
-        is_locked: existing ? existing.is_locked : false,
-        locked_at: existing ? existing.locked_at : null,
-        locked_by: existing ? existing.locked_by : null,
-      };
-    });
+    const programLevels = ["UG", "PG", "ALL"];
+    const lockStatus = [];
+    for (const type of componentTypes) {
+      for (const level of programLevels) {
+        const existing = result.rows.find(
+          (r) => r.component_type === type && r.program_level === level
+        );
+        lockStatus.push({
+          component_type: type,
+          program_level: level,
+          is_locked: existing ? existing.is_locked : false,
+          locked_at: existing ? existing.locked_at : null,
+          locked_by: existing ? existing.locked_by : null,
+        });
+      }
+    }
 
     res.status(200).json(lockStatus);
   } catch (error) {
@@ -973,50 +1006,58 @@ exports.getLockStatus = async (req, res) => {
   }
 };
 
-// Lock a component
+// Lock a component for a specific program level (UG, PG, or ALL).
 exports.lockComponent = async (req, res) => {
   try {
     const userId = req.userId;
     const { slot_year, semester_type, component_type } = req.body;
+    const program_level = req.body.program_level || "ALL";
 
     if (!slot_year || !semester_type || !component_type) {
       return res.status(400).json({ message: "Required parameters missing" });
     }
+    if (!["UG", "PG", "ALL"].includes(program_level)) {
+      return res.status(400).json({ message: "program_level must be UG, PG, or ALL" });
+    }
 
     await db.query(
-      `INSERT INTO marks_entry_lock (slot_year, semester_type, component_type, is_locked, locked_by, locked_at)
-       VALUES ($1, $2, $3, true, $4, CURRENT_TIMESTAMP)
-       ON CONFLICT (slot_year, semester_type, component_type)
-       DO UPDATE SET is_locked = true, locked_by = $4, locked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP`,
-      [slot_year, semester_type, component_type, userId]
+      `INSERT INTO marks_entry_lock (slot_year, semester_type, component_type, program_level, is_locked, locked_by, locked_at)
+       VALUES ($1, $2, $3, $4, true, $5, CURRENT_TIMESTAMP)
+       ON CONFLICT (slot_year, semester_type, component_type, program_level)
+       DO UPDATE SET is_locked = true, locked_by = $5, locked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP`,
+      [slot_year, semester_type, component_type, program_level, userId]
     );
 
-    res.status(200).json({ message: `${component_type} locked successfully` });
+    res.status(200).json({ message: `${component_type} locked for ${program_level}` });
   } catch (error) {
     console.error("Lock component error:", error);
     res.status(500).json({ message: "Server error while locking component" });
   }
 };
 
-// Unlock a component
+// Unlock a component for a specific program level.
 exports.unlockComponent = async (req, res) => {
   try {
     const userId = req.userId;
     const { slot_year, semester_type, component_type } = req.body;
+    const program_level = req.body.program_level || "ALL";
 
     if (!slot_year || !semester_type || !component_type) {
       return res.status(400).json({ message: "Required parameters missing" });
     }
+    if (!["UG", "PG", "ALL"].includes(program_level)) {
+      return res.status(400).json({ message: "program_level must be UG, PG, or ALL" });
+    }
 
     await db.query(
-      `INSERT INTO marks_entry_lock (slot_year, semester_type, component_type, is_locked, locked_by, locked_at)
-       VALUES ($1, $2, $3, false, $4, NULL)
-       ON CONFLICT (slot_year, semester_type, component_type)
+      `INSERT INTO marks_entry_lock (slot_year, semester_type, component_type, program_level, is_locked, locked_by, locked_at)
+       VALUES ($1, $2, $3, $4, false, $5, NULL)
+       ON CONFLICT (slot_year, semester_type, component_type, program_level)
        DO UPDATE SET is_locked = false, locked_by = NULL, locked_at = NULL, updated_at = CURRENT_TIMESTAMP`,
-      [slot_year, semester_type, component_type, userId]
+      [slot_year, semester_type, component_type, program_level, userId]
     );
 
-    res.status(200).json({ message: `${component_type} unlocked successfully` });
+    res.status(200).json({ message: `${component_type} unlocked for ${program_level}` });
   } catch (error) {
     console.error("Unlock component error:", error);
     res.status(500).json({ message: "Server error while unlocking component" });

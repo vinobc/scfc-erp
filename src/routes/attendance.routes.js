@@ -3,7 +3,8 @@ const attendanceController = require("../controllers/attendance.controller");
 const {
   verifyToken,
   isFacultyOrCoordinator,
-  isStudent
+  isStudent,
+  isAdmin
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -21,6 +22,12 @@ router.get("/records", isFacultyOrCoordinator, attendanceController.getAttendanc
 router.get("/report", isFacultyOrCoordinator, attendanceController.getAttendanceReport);
 router.get("/date-range", isFacultyOrCoordinator, attendanceController.getAttendanceByDateRange);
 router.get("/low-attendance", isFacultyOrCoordinator, attendanceController.getLowAttendanceStudents);
+
+// Attendance lock admin routes — GET open to faculty/coordinator so the entry
+// page can show a "locked" hint; POSTs are admin-only.
+router.get("/admin/locks", isFacultyOrCoordinator, attendanceController.getAttendanceLockStatus);
+router.post("/admin/lock", isAdmin, attendanceController.lockAttendance);
+router.post("/admin/unlock", isAdmin, attendanceController.unlockAttendance);
 
 // Student attendance routes - protected by isStudent middleware
 router.get("/student/semesters", isStudent, attendanceController.getStudentSemesters);

@@ -1,19 +1,22 @@
 -- Marks Entry System Schema
 -- Created for faculty to enter CA, Assignment, and Lab marks
 
--- Table 1: marks_entry_lock (Admin control for locking/unlocking marks entry)
+-- Table 1: marks_entry_lock (Admin control for locking/unlocking marks entry).
+-- program_level splits locks by UG / PG so admin can freeze UG for result
+-- processing while PG faculty continue. 'ALL' means lock applies to both.
 CREATE TABLE IF NOT EXISTS marks_entry_lock (
     id SERIAL PRIMARY KEY,
     slot_year VARCHAR(20) NOT NULL,
     semester_type VARCHAR(10) NOT NULL,
     component_type VARCHAR(20) NOT NULL,  -- 'CA1', 'CA2', 'CA3', 'ASSIGNMENT', 'LAB'
+    program_level VARCHAR(10) NOT NULL DEFAULT 'ALL',  -- 'UG', 'PG', 'ALL'
     is_locked BOOLEAN DEFAULT FALSE,
     locked_by INTEGER,
     locked_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE(slot_year, semester_type, component_type),
+    UNIQUE(slot_year, semester_type, component_type, program_level),
     FOREIGN KEY (locked_by) REFERENCES "user"(user_id) ON DELETE SET NULL
 );
 

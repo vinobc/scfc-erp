@@ -1,32 +1,78 @@
 const db = require("../config/db");
 
+// ─── Program-level derivation + attendance-lock check ────────────────────
+// Mirrors the pattern in marks.controller.js. Program level is derived from
+// the 4th char of course_code: 1-4=UG, 5-6=PG, 7+=RESEARCH (bypasses lock).
+function deriveProgramLevel(courseCode) {
+  const levelDigit = parseInt(String(courseCode || "").charAt(3));
+  if (levelDigit >= 1 && levelDigit <= 4) return "UG";
+  if (levelDigit >= 5 && levelDigit <= 6) return "PG";
+  return "RESEARCH";
+}
 
-// Get available semesters for faculty based on their allocations
+// Returns { locked: bool, level: 'UG'|'PG'|'RESEARCH', reason: string }.
+// A lock applies if any attendance_entry_lock row matches (slot_year,
+// semester_type, program_level IN ('ALL', <derived>)) and is_locked=true.
+// RESEARCH courses always return locked=false.
+async function checkAttendanceLock(slot_year, semester_type, course_code) {
+  const level = deriveProgramLevel(course_code);
+  if (level !== "UG" && level !== "PG") {
+    return { locked: false, level, reason: "" };
+  }
+  const r = await db.query(
+    `SELECT 1 FROM attendance_entry_lock
+     WHERE slot_year = $1 AND semester_type = $2
+       AND program_level IN ('ALL', $3)
+       AND is_locked = true
+     LIMIT 1`,
+    [slot_year, semester_type, level]
+  );
+  if (r.rows.length > 0) {
+    return {
+      locked: true,
+      level,
+      reason: `Attendance marking is locked for ${level} courses this semester`,
+    };
+  }
+  return { locked: false, level, reason: "" };
+}
+
+
+// Get available semesters. Admin sees all semesters (distinct from
+// faculty_allocation) so they can operate the attendance-lock controls.
+// Faculty / timetable_coordinator see only their own allocations.
 exports.getAvailableSemesters = async (req, res) => {
   try {
-    const facultyId = req.userId; // From JWT token
-    
-    // Get employee_id for the faculty or timetable coordinator from user table
+    const userId = req.userId;
     const userResult = await db.query(
-      "SELECT employee_id, role FROM \"user\" WHERE user_id = $1 AND role IN ('faculty', 'timetable_coordinator')",
-      [facultyId]
+      'SELECT employee_id, role FROM "user" WHERE user_id = $1',
+      [userId]
     );
-
     if (!userResult.rows.length) {
-      return res.status(404).json({ message: "User not found or not authorized" });
+      return res.status(404).json({ message: "User not found" });
     }
-
     const user = userResult.rows[0];
 
-    // Both faculty and timetable coordinators see only their own allocations
+    if (user.role === "admin") {
+      const result = await db.query(
+        `SELECT DISTINCT slot_year, semester_type
+         FROM faculty_allocation
+         ORDER BY slot_year DESC, semester_type`
+      );
+      return res.status(200).json(result.rows);
+    }
+
+    if (user.role !== "faculty" && user.role !== "timetable_coordinator") {
+      return res.status(404).json({ message: "User not found or not authorized" });
+    }
     if (!user.employee_id) {
       return res.status(404).json({ message: "User not linked to employee record" });
     }
-    
+
     const result = await db.query(
-      `SELECT DISTINCT slot_year, semester_type 
-       FROM faculty_allocation 
-       WHERE employee_id = $1 
+      `SELECT DISTINCT slot_year, semester_type
+       FROM faculty_allocation
+       WHERE employee_id = $1
        ORDER BY slot_year DESC, semester_type`,
       [user.employee_id]
     );
@@ -38,29 +84,53 @@ exports.getAvailableSemesters = async (req, res) => {
   }
 };
 
-// Get faculty allocations for specific semester
+// Get faculty allocations for specific semester. Admin sees ALL allocations
+// (empty result also OK — admin is really here for the lock UI, but we return
+// the list so nothing errors). Faculty / timetable_coordinator see only their
+// own allocations.
 exports.getFacultyAllocations = async (req, res) => {
   try {
-    const facultyId = req.userId;
+    const userId = req.userId;
     const { slot_year, semester_type, course_code } = req.query;
 
     if (!slot_year || !semester_type) {
       return res.status(400).json({ message: "slot_year and semester_type are required" });
     }
 
-    // Get user role and employee_id
     const userResult = await db.query(
-      "SELECT employee_id, role FROM \"user\" WHERE user_id = $1 AND role IN ('faculty', 'timetable_coordinator')",
-      [facultyId]
+      'SELECT employee_id, role FROM "user" WHERE user_id = $1',
+      [userId]
     );
-
     if (!userResult.rows.length) {
-      return res.status(404).json({ message: "User not found or not authorized" });
+      return res.status(404).json({ message: "User not found" });
     }
-
     const user = userResult.rows[0];
 
-    // Both faculty and timetable coordinators see only their own allocations
+    // Admin: return all allocations for the semester (no per-employee filter).
+    if (user.role === "admin") {
+      const query = course_code
+        ? `SELECT fa.*, c.course_name, c.theory, c.practical, c.course_type, f.name as faculty_name
+           FROM faculty_allocation fa
+           JOIN course c ON fa.course_code = c.course_code
+           JOIN faculty f ON fa.employee_id = f.employee_id
+           WHERE fa.slot_year = $1 AND fa.semester_type = $2 AND fa.course_code = $3
+           ORDER BY fa.course_code, fa.slot_day, fa.slot_time`
+        : `SELECT fa.*, c.course_name, c.theory, c.practical, c.course_type, f.name as faculty_name
+           FROM faculty_allocation fa
+           JOIN course c ON fa.course_code = c.course_code
+           JOIN faculty f ON fa.employee_id = f.employee_id
+           WHERE fa.slot_year = $1 AND fa.semester_type = $2
+           ORDER BY fa.course_code, fa.slot_day, fa.slot_time`;
+      const params = course_code
+        ? [slot_year, semester_type, course_code]
+        : [slot_year, semester_type];
+      const result = await db.query(query, params);
+      return res.status(200).json(result.rows);
+    }
+
+    if (user.role !== "faculty" && user.role !== "timetable_coordinator") {
+      return res.status(404).json({ message: "User not found or not authorized" });
+    }
     if (!user.employee_id) {
       return res.status(404).json({ message: "User not linked to employee record" });
     }
@@ -179,6 +249,20 @@ exports.markAttendance = async (req, res) => {
       return res.status(400).json({ message: "attendance_records array is required" });
     }
 
+    // Program-level lock check: reject the whole batch if any course in the
+    // records is locked for its program level. Batches typically share one
+    // course, so a single check is usually enough; loop covers mixed cases.
+    const seen = new Set();
+    for (const rec of attendance_records) {
+      const key = `${rec.slot_year}|${rec.semester_type}|${rec.course_code}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const gate = await checkAttendanceLock(rec.slot_year, rec.semester_type, rec.course_code);
+      if (gate.locked) {
+        return res.status(403).json({ message: gate.reason });
+      }
+    }
+
     // Process each attendance record - simplified version without transactions for now
     for (const record of attendance_records) {
       const {
@@ -216,6 +300,12 @@ exports.clearAttendance = async (req, res) => {
     // Validate required parameters
     if (!slot_year || !semester_type || !course_code || !employee_id || !venue || !slot_day || !slot_name || !slot_time || !attendance_date) {
       return res.status(400).json({ message: "All parameters are required" });
+    }
+
+    // Program-level lock check
+    const gate = await checkAttendanceLock(slot_year, semester_type, course_code);
+    if (gate.locked) {
+      return res.status(403).json({ message: gate.reason });
     }
 
     console.log("Clearing attendance for:", { course_code, slot_day, slot_name, attendance_date });
@@ -776,5 +866,87 @@ exports.getStudentAttendanceReport = async (req, res) => {
   } catch (error) {
     console.error("Get student attendance report error:", error);
     res.status(500).json({ message: "Server error while fetching attendance report" });
+  }
+};
+
+// ─── Attendance lock admin controllers (mirror marks-lock pattern) ────────
+
+// Get lock status matrix (program_level: UG, PG, ALL) for a semester.
+exports.getAttendanceLockStatus = async (req, res) => {
+  try {
+    const { slot_year, semester_type } = req.query;
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "slot_year and semester_type are required" });
+    }
+    const result = await db.query(
+      `SELECT * FROM attendance_entry_lock
+       WHERE slot_year = $1 AND semester_type = $2
+       ORDER BY program_level`,
+      [slot_year, semester_type]
+    );
+    const programLevels = ["UG", "PG", "ALL"];
+    const lockStatus = programLevels.map((level) => {
+      const existing = result.rows.find((r) => r.program_level === level);
+      return {
+        program_level: level,
+        is_locked: existing ? existing.is_locked : false,
+        locked_at: existing ? existing.locked_at : null,
+        locked_by: existing ? existing.locked_by : null,
+      };
+    });
+    res.status(200).json(lockStatus);
+  } catch (error) {
+    console.error("Get attendance lock status error:", error);
+    res.status(500).json({ message: "Server error while fetching attendance lock status" });
+  }
+};
+
+exports.lockAttendance = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { slot_year, semester_type } = req.body;
+    const program_level = req.body.program_level || "ALL";
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "Required parameters missing" });
+    }
+    if (!["UG", "PG", "ALL"].includes(program_level)) {
+      return res.status(400).json({ message: "program_level must be UG, PG, or ALL" });
+    }
+    await db.query(
+      `INSERT INTO attendance_entry_lock (slot_year, semester_type, program_level, is_locked, locked_by, locked_at)
+       VALUES ($1, $2, $3, true, $4, CURRENT_TIMESTAMP)
+       ON CONFLICT (slot_year, semester_type, program_level)
+       DO UPDATE SET is_locked = true, locked_by = $4, locked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP`,
+      [slot_year, semester_type, program_level, userId]
+    );
+    res.status(200).json({ message: `Attendance locked for ${program_level}` });
+  } catch (error) {
+    console.error("Lock attendance error:", error);
+    res.status(500).json({ message: "Server error while locking attendance" });
+  }
+};
+
+exports.unlockAttendance = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { slot_year, semester_type } = req.body;
+    const program_level = req.body.program_level || "ALL";
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "Required parameters missing" });
+    }
+    if (!["UG", "PG", "ALL"].includes(program_level)) {
+      return res.status(400).json({ message: "program_level must be UG, PG, or ALL" });
+    }
+    await db.query(
+      `INSERT INTO attendance_entry_lock (slot_year, semester_type, program_level, is_locked, locked_by, locked_at)
+       VALUES ($1, $2, $3, false, $4, NULL)
+       ON CONFLICT (slot_year, semester_type, program_level)
+       DO UPDATE SET is_locked = false, locked_by = NULL, locked_at = NULL, updated_at = CURRENT_TIMESTAMP`,
+      [slot_year, semester_type, program_level, userId]
+    );
+    res.status(200).json({ message: `Attendance unlocked for ${program_level}` });
+  } catch (error) {
+    console.error("Unlock attendance error:", error);
+    res.status(500).json({ message: "Server error while unlocking attendance" });
   }
 };
