@@ -362,6 +362,28 @@ async function loadComponentsDashboard(slot_year, semester_type, course_code, em
   }
 }
 
+// Derive the course's program level from its course_code (mirrors backend).
+// 1-4 = UG, 5-6 = PG, 7+ = RESEARCH (bypasses lock).
+function deriveProgramLevelFromCode(courseCode) {
+  const levelDigit = parseInt(String(courseCode || "").charAt(3));
+  if (levelDigit >= 1 && levelDigit <= 4) return "UG";
+  if (levelDigit >= 5 && levelDigit <= 6) return "PG";
+  return "RESEARCH";
+}
+
+// Check if a component is locked for a given course. Matches the backend
+// rule: RESEARCH bypasses; UG/PG match ANY lock row whose program_level is
+// 'ALL' or equals the course's level.
+function isComponentLockedForCourse(lockStatus, componentType, courseCode) {
+  const level = deriveProgramLevelFromCode(courseCode);
+  if (level !== "UG" && level !== "PG") return false;
+  return (lockStatus || []).some(
+    l => l.component_type === componentType
+      && (l.program_level === "ALL" || l.program_level === level)
+      && l.is_locked
+  );
+}
+
 // Render components dashboard
 function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
   const dashboard = document.getElementById("components-dashboard");
@@ -419,7 +441,7 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
     structure.cas.forEach((ca, index) => {
       const caNum = index + 1;
       const isConfigured = theoryConfig.exists && theoryConfig.config_json?.cas?.find(c => c.number === caNum);
-      const isLocked = lockStatus.find(l => l.component_type === `CA${caNum}`)?.is_locked || false;
+      const isLocked = isComponentLockedForCourse(lockStatus, `CA${caNum}`, selectedCourse.course_code);
 
       html += `
         <tr>
@@ -450,7 +472,7 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
   // Add Assignment rows (only for theory courses or TEL with theory slot)
   if (showTheoryComponents && structure.assignmentTotal > 0) {
     const isConfigured = theoryConfig.exists && theoryConfig.config_json?.assignments?.length > 0;
-    const isLocked = lockStatus.find(l => l.component_type === 'ASSIGNMENT')?.is_locked || false;
+    const isLocked = isComponentLockedForCourse(lockStatus, 'ASSIGNMENT', selectedCourse.course_code);
 
     if (!isConfigured) {
       // Not configured - show single row with Configure button
@@ -497,7 +519,7 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
   // Add Lab row (only for lab courses or TEL with lab slot)
   if (showLabComponent && structure.labTotal > 0) {
     const isConfigured = labConfig?.exists && labConfig.config_json?.labSessions?.length > 0;
-    const isLocked = lockStatus.find(l => l.component_type === 'LAB')?.is_locked || false;
+    const isLocked = isComponentLockedForCourse(lockStatus, 'LAB', selectedCourse.course_code);
 
     if (!isConfigured) {
       // Not configured - show single row with Configure button
@@ -1815,34 +1837,42 @@ async function renderAdminLockControls(slot_year, semester_type) {
     const locks = await response.json();
     const components = ["CA1", "CA2", "CA3", "ASSIGNMENT", "LAB"];
 
-    // Build lock status map
+    // Build lock status map keyed by component × program_level.
+    // Each lock row = { component_type, program_level, is_locked, ... }
     const lockMap = {};
     locks.forEach((lock) => {
-      lockMap[lock.component_type] = lock.is_locked;
+      lockMap[`${lock.component_type}|${lock.program_level}`] = lock.is_locked;
     });
 
-    let lockRows = components
-      .map((comp) => {
-        const isLocked = lockMap[comp] || false;
-        const statusBadge = isLocked
-          ? '<span class="badge bg-danger">Locked</span>'
-          : '<span class="badge bg-success">Open</span>';
-        const buttonClass = isLocked ? "btn-success" : "btn-danger";
-        const buttonText = isLocked ? "Unlock" : "Lock";
-        const buttonIcon = isLocked ? "fa-unlock" : "fa-lock";
+    // Helper to render one lock cell (badge + toggle button) for a given
+    // component + level. The 'ALL' cell is the "Both" toggle.
+    const cell = (comp, level) => {
+      const isLocked = lockMap[`${comp}|${level}`] || false;
+      const badge = isLocked
+        ? '<span class="badge bg-danger">Locked</span>'
+        : '<span class="badge bg-success">Open</span>';
+      const btnClass = isLocked ? "btn-success" : "btn-danger";
+      const btnText = isLocked ? "Unlock" : "Lock";
+      const btnIcon = isLocked ? "fa-unlock" : "fa-lock";
+      return `
+        <div class="d-flex flex-column align-items-center gap-1">
+          ${badge}
+          <button class="btn btn-sm ${btnClass}" onclick="toggleLock('${slot_year}', '${semester_type}', '${comp}', '${level}', ${isLocked})">
+            <i class="fas ${btnIcon} me-1"></i>${btnText}
+          </button>
+        </div>
+      `;
+    };
 
-        return `
-          <tr>
-            <td><strong>${comp}</strong></td>
-            <td class="text-center">${statusBadge}</td>
-            <td class="text-center">
-              <button class="btn btn-sm ${buttonClass}" onclick="toggleLock('${slot_year}', '${semester_type}', '${comp}', ${isLocked})">
-                <i class="fas ${buttonIcon} me-1"></i>${buttonText}
-              </button>
-            </td>
-          </tr>
-        `;
-      })
+    let lockRows = components
+      .map((comp) => `
+        <tr>
+          <td><strong>${comp}</strong></td>
+          <td class="text-center">${cell(comp, "UG")}</td>
+          <td class="text-center">${cell(comp, "PG")}</td>
+          <td class="text-center">${cell(comp, "ALL")}</td>
+        </tr>
+      `)
       .join("");
 
     adminPanel.innerHTML = `
@@ -1851,13 +1881,14 @@ async function renderAdminLockControls(slot_year, semester_type) {
           <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Marks Entry Lock Controls (Admin Only) - ${slot_year} ${semester_type}</h6>
         </div>
         <div class="card-body">
-          <p class="text-muted small mb-3">Lock or unlock marks entry for each component. When locked, faculty cannot enter or edit marks for that component.</p>
-          <table class="table table-bordered table-sm mb-0">
+          <p class="text-muted small mb-3">Lock/unlock marks entry per component and program level. The "Both" toggle locks BOTH UG and PG regardless of the UG/PG individual toggles. When locked, faculty cannot enter or edit marks for that component in that program level. RESEARCH-tier courses are not affected by any lock.</p>
+          <table class="table table-bordered table-sm mb-0 align-middle">
             <thead class="table-light">
               <tr>
                 <th>Component</th>
-                <th class="text-center">Status</th>
-                <th class="text-center">Action</th>
+                <th class="text-center">UG</th>
+                <th class="text-center">PG</th>
+                <th class="text-center">Both</th>
               </tr>
             </thead>
             <tbody>
@@ -1877,8 +1908,8 @@ async function renderAdminLockControls(slot_year, semester_type) {
   }
 }
 
-// Toggle lock/unlock for a component
-async function toggleLock(slot_year, semester_type, component_type, currentlyLocked) {
+// Toggle lock/unlock for a component at a specific program level (UG/PG/ALL).
+async function toggleLock(slot_year, semester_type, component_type, program_level, currentlyLocked) {
   const action = currentlyLocked ? "unlock" : "lock";
 
   try {
@@ -1888,20 +1919,20 @@ async function toggleLock(slot_year, semester_type, component_type, currentlyLoc
         "Content-Type": "application/json",
         "x-access-token": localStorage.getItem("token"),
       },
-      body: JSON.stringify({ slot_year, semester_type, component_type }),
+      body: JSON.stringify({ slot_year, semester_type, component_type, program_level }),
     });
 
     if (!response.ok) {
       throw new Error(`Failed to ${action} component`);
     }
 
-    showMarksAlert(`${component_type} ${action}ed successfully`, "success");
+    showMarksAlert(`${component_type} (${program_level}) ${action}ed successfully`, "success");
 
     // Refresh the lock controls panel
     renderAdminLockControls(slot_year, semester_type);
   } catch (error) {
     console.error(`Error ${action}ing component:`, error);
-    showMarksAlert(`Failed to ${action} ${component_type}`, "danger");
+    showMarksAlert(`Failed to ${action} ${component_type} (${program_level})`, "danger");
   }
 }
 

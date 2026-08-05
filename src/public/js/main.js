@@ -764,7 +764,7 @@ async function loadAttendanceSemesters() {
                           <label for="semester-select" class="form-label">Academic Year & Semester</label>
                           <select id="semester-select" class="form-select">
                             <option value="">Select Academic Year & Semester</option>
-                            ${semesters.map(semester => 
+                            ${semesters.map(semester =>
                               `<option value="${semester.slot_year}|${semester.semester_type}">
                                 ${semester.slot_year} - ${semester.semester_type}
                               </option>`
@@ -781,22 +781,30 @@ async function loadAttendanceSemesters() {
                         </div>
                       </div>
                     </div>
+                    <!-- Admin-only: attendance-lock controls (populated by JS on semester change) -->
+                    <div id="attendance-admin-lock-controls" class="mt-4 d-none"></div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         `;
-        
+
         // Setup event listeners
         const semesterSelect = document.getElementById("semester-select");
         const loadCoursesBtn = document.getElementById("load-courses-btn");
-        
+
         if (semesterSelect && loadCoursesBtn) {
           semesterSelect.addEventListener("change", function() {
             loadCoursesBtn.disabled = !this.value;
+            // Admin-only: render attendance-lock controls for the picked semester.
+            if (typeof currentUser !== "undefined" && currentUser?.role === "admin" && this.value
+                && typeof window.renderAttendanceLockControls === "function") {
+              const [slot_year, semester_type] = this.value.split("|");
+              window.renderAttendanceLockControls(slot_year, semester_type);
+            }
           });
-          
+
           loadCoursesBtn.addEventListener("click", function() {
             loadFacultyCourses();
           });
@@ -1303,6 +1311,8 @@ function showCoursesInterface(courses, slot_year, semester_type) {
                 <h6>✅ Courses Loaded</h6>
                 <p>Found ${courses.length} course allocation(s) for ${slot_year} - ${semester_type}. Click on a course to manage attendance.</p>
               </div>
+              <!-- Admin-only: attendance-lock controls (populated by JS below) -->
+              <div id="attendance-admin-lock-controls" class="mb-3"></div>
               <div class="row">
   `;
 
@@ -1343,6 +1353,12 @@ function showCoursesInterface(courses, slot_year, semester_type) {
   `;
 
   content.innerHTML = coursesHtml;
+
+  // Admin-only: render the attendance-lock controls above the course list.
+  if (typeof currentUser !== "undefined" && currentUser?.role === "admin"
+      && typeof window.renderAttendanceLockControls === "function") {
+    window.renderAttendanceLockControls(slot_year, semester_type);
+  }
 }
 
 // Select course for attendance management
@@ -1773,6 +1789,8 @@ function showAttendanceMarkingInterface(students, courseCode, employeeId, venue,
                   </button>
                 </div>
               </div>
+              <!-- Inline status area right below the Save button (no scroll needed) -->
+              <div id="attendance-save-status" class="mt-3"></div>
             </div>
           </div>
         </div>
@@ -1912,14 +1930,29 @@ async function saveAttendanceData(courseCode, employeeId, venue, slotDay, slotNa
     });
 
     console.log("📡 Save attendance API response status:", response.status);
+    // Reset the inline status area on every attempt so old messages don't linger.
+    const inlineStatus = document.getElementById("attendance-save-status");
+    if (inlineStatus) inlineStatus.innerHTML = "";
     if (!response.ok) {
+      // Surface the backend message (e.g. attendance-lock 403) instead of a generic error.
       const errorText = await response.text();
       console.error("❌ Save attendance API error:", errorText);
-      throw new Error("Failed to save attendance");
+      let msg = "Failed to save attendance";
+      try { const j = JSON.parse(errorText); if (j.message) msg = j.message; } catch (_) {}
+      throw new Error(msg);
     }
     
     console.log("✅ Attendance saved successfully!");
-    
+
+    // Inline success next to the Save button so faculty sees it without scrolling.
+    if (inlineStatus) {
+      inlineStatus.innerHTML = `
+        <div class="alert alert-success mb-0">
+          <i class="fas fa-check-circle me-2"></i>Attendance saved successfully.
+        </div>
+      `;
+    }
+
     // Show success notification
     showAlert("Attendance saved successfully! 🎉", "success");
     
@@ -1954,8 +1987,23 @@ async function saveAttendanceData(courseCode, employeeId, venue, slotDay, slotNa
 
   } catch (error) {
     console.error("Error saving attendance:", error);
-    showAlert("Error saving attendance. Please try again.", "error");
+    const msg = error.message || "Error saving attendance. Please try again.";
+    // Inline error next to the Save button — no scrolling needed.
+    const inlineStatus = document.getElementById("attendance-save-status");
+    if (inlineStatus) {
+      inlineStatus.innerHTML = `
+        <div class="alert alert-danger mb-0">
+          <i class="fas fa-exclamation-circle me-2"></i>${escapeHtmlForAlert(msg)}
+        </div>
+      `;
+    }
+    showAlert(msg, "error");
   }
+}
+
+// Tiny HTML escape for safe interpolation of backend messages into the inline alert.
+function escapeHtmlForAlert(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 // Clear attendance for a specific date

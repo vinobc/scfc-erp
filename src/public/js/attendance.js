@@ -1,10 +1,10 @@
 // Global variables for attendance system
 console.log("📋 Loading attendance.js file...");
 console.log("🧪 Testing attendance.js loading - this should appear in browser console");
-let currentSemesters = [];
-let currentAllocations = [];
+let attendanceSemesters = [];
+let attendanceAllocations = [];
 let selectedAllocation = null;
-let enrolledStudents = [];
+let attendanceEnrolledStudents = [];
 
 // Initialize attendance system
 function initializeAttendance() {
@@ -49,7 +49,7 @@ async function loadAttendanceInterface() {
       throw new Error(`Failed to load available semesters: ${response.status}`);
     }
     
-    currentSemesters = await response.json();
+    attendanceSemesters = await response.json();
     renderSemesterSelection();
 
   } catch (error) {
@@ -62,7 +62,7 @@ async function loadAttendanceInterface() {
 function renderSemesterSelection() {
   const content = document.getElementById("attendance-content");
   
-  if (!currentSemesters.length) {
+  if (!attendanceSemesters.length) {
     content.innerHTML = `
       <div class="alert alert-info text-center">
         <h5>📚 No Course Allocations Found</h5>
@@ -72,7 +72,7 @@ function renderSemesterSelection() {
     return;
   }
 
-  let semesterOptions = currentSemesters
+  let semesterOptions = attendanceSemesters
     .map(semester => 
       `<option value="${semester.slot_year}|${semester.semester_type}">
         ${semester.slot_year} - ${semester.semester_type}
@@ -112,6 +112,9 @@ function renderSemesterSelection() {
                 </div>
               </div>
 
+              <!-- Admin-only: Attendance lock controls (rendered by JS after semester picked) -->
+              <div id="attendance-admin-lock-controls" class="mt-4 d-none"></div>
+
               <!-- Step 2: Course Selection -->
               <div id="course-selection-step" class="step-section d-none mt-4">
                 <h6 class="text-primary mb-3"><i class="fas fa-book me-2"></i>Step 2: Select Course for Attendance</h6>
@@ -144,7 +147,117 @@ function renderSemesterSelection() {
     // Hide subsequent steps when semester changes
     document.getElementById("course-selection-step").classList.add("d-none");
     document.getElementById("attendance-marking-step").classList.add("d-none");
+    // Admin: render/refresh the attendance-lock controls for the picked semester.
+    if (typeof currentUser !== "undefined" && currentUser?.role === "admin" && this.value) {
+      const [slot_year, semester_type] = this.value.split("|");
+      renderAttendanceLockControls(slot_year, semester_type);
+    } else {
+      const adminPanel = document.getElementById("attendance-admin-lock-controls");
+      if (adminPanel) { adminPanel.classList.add("d-none"); adminPanel.innerHTML = ""; }
+    }
   });
+}
+
+// Admin-only: render the attendance-lock controls (UG / PG / Both toggles).
+async function renderAttendanceLockControls(slot_year, semester_type) {
+  const panel = document.getElementById("attendance-admin-lock-controls");
+  if (!panel) return;
+  panel.classList.remove("d-none");
+  panel.innerHTML = `
+    <div class="card border-warning">
+      <div class="card-header bg-warning text-dark">
+        <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Attendance Lock Controls (Admin Only)</h6>
+      </div>
+      <div class="card-body">
+        <div class="text-center py-2">
+          <div class="spinner-border spinner-border-sm" role="status"></div>
+          <span class="ms-2">Loading lock status...</span>
+        </div>
+      </div>
+    </div>
+  `;
+  try {
+    const response = await fetch(
+      `${window.API_URL}/attendance/admin/locks?slot_year=${slot_year}&semester_type=${semester_type}`,
+      { headers: { "x-access-token": localStorage.getItem("token") } }
+    );
+    if (!response.ok) throw new Error("Failed to load attendance lock status");
+    const locks = await response.json();
+    const lockMap = {};
+    locks.forEach((l) => { lockMap[l.program_level] = l.is_locked; });
+
+    const cell = (level) => {
+      const isLocked = lockMap[level] || false;
+      const badge = isLocked
+        ? '<span class="badge bg-danger">Locked</span>'
+        : '<span class="badge bg-success">Open</span>';
+      const btnClass = isLocked ? "btn-success" : "btn-danger";
+      const btnText = isLocked ? "Unlock" : "Lock";
+      const btnIcon = isLocked ? "fa-unlock" : "fa-lock";
+      return `
+        <div class="d-flex flex-column align-items-center gap-1">
+          ${badge}
+          <button class="btn btn-sm ${btnClass}" onclick="toggleAttendanceLock('${slot_year}', '${semester_type}', '${level}', ${isLocked})">
+            <i class="fas ${btnIcon} me-1"></i>${btnText}
+          </button>
+        </div>
+      `;
+    };
+
+    panel.innerHTML = `
+      <div class="card border-warning">
+        <div class="card-header bg-warning text-dark">
+          <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Attendance Lock Controls (Admin Only) - ${slot_year} ${semester_type}</h6>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">Lock/unlock attendance marking per program level. The "Both" toggle locks BOTH UG and PG regardless of the UG/PG individual toggles. When locked, faculty cannot mark, edit, or clear attendance for that program level. RESEARCH-tier courses are not affected by any lock.</p>
+          <table class="table table-bordered table-sm mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th class="text-center">UG</th>
+                <th class="text-center">PG</th>
+                <th class="text-center">Both</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-center">${cell("UG")}</td>
+                <td class="text-center">${cell("PG")}</td>
+                <td class="text-center">${cell("ALL")}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error("Error loading attendance lock status:", error);
+    panel.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-triangle me-2"></i>Failed to load attendance lock status
+      </div>
+    `;
+  }
+}
+
+async function toggleAttendanceLock(slot_year, semester_type, program_level, currentlyLocked) {
+  const action = currentlyLocked ? "unlock" : "lock";
+  try {
+    const response = await fetch(`${window.API_URL}/attendance/admin/${action}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({ slot_year, semester_type, program_level }),
+    });
+    if (!response.ok) throw new Error(`Failed to ${action} attendance`);
+    // Refresh the panel to reflect the new state
+    renderAttendanceLockControls(slot_year, semester_type);
+  } catch (error) {
+    console.error(`Error ${action}ing attendance:`, error);
+    alert(`Failed to ${action} attendance for ${program_level}`);
+  }
 }
 
 // Load faculty courses for selected semester
@@ -181,7 +294,7 @@ async function loadFacultyCourses() {
 
     if (!response.ok) throw new Error("Failed to load faculty courses");
     
-    currentAllocations = await response.json();
+    attendanceAllocations = await response.json();
     renderCourseSelection();
 
   } catch (error) {
@@ -194,7 +307,7 @@ async function loadFacultyCourses() {
 function renderCourseSelection() {
   const courseList = document.getElementById("course-list");
 
-  if (!currentAllocations.length) {
+  if (!attendanceAllocations.length) {
     courseList.innerHTML = `
       <div class="alert alert-info">
         <h6>No courses found</h6>
@@ -206,7 +319,7 @@ function renderCourseSelection() {
 
   // Group allocations by course
   const courseGroups = {};
-  currentAllocations.forEach(allocation => {
+  attendanceAllocations.forEach(allocation => {
     const key = `${allocation.course_code}`;
     if (!courseGroups[key]) {
       courseGroups[key] = {
@@ -255,7 +368,7 @@ function renderCourseSelection() {
 
 // Select course for attendance
 function selectCourse(courseCode) {
-  const course = currentAllocations.filter(a => a.course_code === courseCode);
+  const course = attendanceAllocations.filter(a => a.course_code === courseCode);
   
   if (!course.length) {
     showAttendanceAlert("Course not found", "error");
@@ -344,7 +457,7 @@ async function loadAttendanceInterface(course_code, employee_id, venue, slot_day
     if (!response.ok) throw new Error("Failed to load enrolled students");
 
     const data = await response.json();
-    enrolledStudents = data.students || data;
+    attendanceEnrolledStudents = data.students || data;
 
     // Also fetch attendance stats for each student
     try {
@@ -361,7 +474,7 @@ async function loadAttendanceInterface(course_code, employee_id, venue, slot_day
           statsMap[r.enrollment_number] = r;
         });
         // Attach stats to each student
-        enrolledStudents.forEach(s => {
+        attendanceEnrolledStudents.forEach(s => {
           const stats = statsMap[s.enrollment_number];
           if (stats) {
             s.att_total = parseInt(stats.total_classes) || 0;
@@ -387,7 +500,7 @@ async function loadAttendanceInterface(course_code, employee_id, venue, slot_day
 function renderAttendanceInterface() {
   const attendanceInterface = document.getElementById("attendance-interface");
   
-  if (!enrolledStudents.length) {
+  if (!attendanceEnrolledStudents.length) {
     attendanceInterface.innerHTML = `
       <div class="alert alert-warning">
         <h6>No enrolled students</h6>
@@ -406,7 +519,7 @@ function renderAttendanceInterface() {
             <small class="text-muted">${selectedAllocation.slot_time} | Venue: ${selectedAllocation.venue}</small>
           </div>
           <div class="col-auto">
-            <button class="btn btn-sm btn-outline-secondary" onclick="showAllocationSelection('${selectedAllocation.course_code}', currentAllocations.filter(a => a.course_code === '${selectedAllocation.course_code}'))">
+            <button class="btn btn-sm btn-outline-secondary" onclick="showAllocationSelection('${selectedAllocation.course_code}', attendanceAllocations.filter(a => a.course_code === '${selectedAllocation.course_code}'))">
               <i class="fas fa-arrow-left me-1"></i>Back
             </button>
           </div>
@@ -448,7 +561,7 @@ function renderAttendanceInterface() {
             <tbody>
   `;
 
-  enrolledStudents.forEach((student, index) => {
+  attendanceEnrolledStudents.forEach((student, index) => {
     const currentStatus = student.current_status || null;
     const isOD = student.is_od === true;
     const attPct = student.att_percentage || 0;
@@ -517,7 +630,7 @@ function renderAttendanceInterface() {
 
 // Bulk mark attendance (includes all students, OD is a separate indicator)
 function bulkMarkAttendance(status) {
-  enrolledStudents.forEach(student => {
+  attendanceEnrolledStudents.forEach(student => {
     const radio = document.getElementById(`${status}_${student.student_id}`);
     if (radio) radio.checked = true;
   });
@@ -535,7 +648,7 @@ async function saveAttendance() {
 
   // Collect attendance data (all students including OD — OD is a separate flag)
   const attendanceRecords = [];
-  enrolledStudents.forEach(student => {
+  attendanceEnrolledStudents.forEach(student => {
     const checkedRadio = document.querySelector(`input[name="attendance_${student.student_id}"]:checked`);
     if (checkedRadio) {
       attendanceRecords.push({
@@ -562,14 +675,19 @@ async function saveAttendance() {
       body: JSON.stringify({ attendance_records: attendanceRecords })
     });
 
-    if (!response.ok) throw new Error("Failed to save attendance");
-    
+    if (!response.ok) {
+      // Surface the backend message (e.g. attendance-lock 403) instead of a generic error.
+      let msg = "Failed to save attendance";
+      try { const j = await response.json(); if (j.message) msg = j.message; } catch (_) {}
+      throw new Error(msg);
+    }
+
     const result = await response.json();
     showAttendanceAlert("Attendance saved successfully!", "success");
 
   } catch (error) {
     console.error("Error saving attendance:", error);
-    showAttendanceAlert("Error saving attendance. Please try again.", "error");
+    showAttendanceAlert(error.message || "Error saving attendance. Please try again.", "error");
   }
 }
 
@@ -669,4 +787,6 @@ function showAttendanceError(message) {
 
 // Make function available globally
 window.initializeAttendance = initializeAttendance;
+window.renderAttendanceLockControls = renderAttendanceLockControls;
+window.toggleAttendanceLock = toggleAttendanceLock;
 console.log("✅ attendance.js loaded successfully, initializeAttendance is now:", typeof window.initializeAttendance);
