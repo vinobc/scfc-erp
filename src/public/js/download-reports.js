@@ -1635,11 +1635,15 @@ async function loadMarksSummary() {
       const enteredCell = renderEnteredCell(row, idx);
       const detailRow = renderPartialDetailRow(row, idx);
 
+      // Compound slot_names (SUMMER lab merge) are comma-separated; add a
+      // space after each comma for readability. Underlying value passed to
+      // downstream download calls (row.slot_name) is unchanged.
+      const slotDisplay = String(row.slot_name || "").replace(/,\s*/g, ", ");
       html += `
         <tr>
           <td><input type="checkbox" class="summary-row-check" data-idx="${idx}" ${canDownload ? "" : "disabled"}></td>
           <td>${row.course_code} - ${row.course_name}</td>
-          <td>${row.slot_name}</td>
+          <td>${slotDisplay}</td>
           <td>${row.faculty_name}</td>
           <td><small>${row.assessment_type}</small></td>
           <td>${enteredCell}</td>

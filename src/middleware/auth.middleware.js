@@ -159,10 +159,10 @@ exports.isRegistrationManagerOrAdmin = async (req, res, next) => {
 
 // Check if user has faculty, staff, or admin role
 exports.isFacultyOrStaffOrAdmin = (req, res, next) => {
-  if (!["admin", "faculty", "staff", "timetable_coordinator"].includes(req.userRole)) {
+  if (!["admin", "faculty", "staff", "timetable_coordinator", "coe"].includes(req.userRole)) {
     return res
       .status(403)
-      .json({ message: "Require Faculty, Staff, or Admin Role" });
+      .json({ message: "Require Faculty, Staff, Admin, or CoE Role" });
   }
   next();
 };
