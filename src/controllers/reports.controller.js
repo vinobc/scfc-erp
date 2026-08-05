@@ -1,6 +1,56 @@
 const db = require("../config/db");
 const XLSX = require("xlsx");
 
+// ─── Helpers for SUMMER lab compound-slot merge ─────────────────────────────
+// In SUMMER, student_registrations.slot_name is comma-separated for compound
+// lab batches (e.g. "L11+L12,L31+L32"), meaning one student is registered
+// across two pair-slots as a single merged lab batch. faculty_allocation and
+// assessment_config still hold one row per pair. These helpers let the marks
+// report collapse the pair-rows into a single merged row per compound.
+
+function isCompoundSlot(s) {
+  return typeof s === "string" && s.includes(",");
+}
+function decomposeCompoundSlot(s) {
+  if (typeof s !== "string") return [];
+  return s.split(",").map((t) => t.trim()).filter(Boolean);
+}
+
+// Parse a slot_time string like "9.00-9.50" or "1.15–2.05" into
+// minutes-since-midnight (24h). Hours below 8 are treated as PM (adds 12h)
+// since morning lab slots start at 9. Returns Infinity for unparseable input
+// so unknown slots fall to the end of a sort.
+function parseSlotStartMinutes(slot_time) {
+  if (typeof slot_time !== "string") return Infinity;
+  const startPart = slot_time.split(/[–\-]/)[0].trim();
+  const [rawH, rawM] = startPart.split(/[.:]/).map(Number);
+  if (!Number.isFinite(rawH)) return Infinity;
+  const h = rawH < 8 ? rawH + 12 : rawH;
+  return h * 60 + (Number.isFinite(rawM) ? rawM : 0);
+}
+
+// Look up slot start-time (in minutes) for each of the given slot_names.
+// Returns { <slot_name>: minutes | Infinity }. Uses the `slot` table filtered
+// to the given (slot_year, semester_type). Same slot_name may appear multiple
+// times across weekdays with the same slot_time — MIN() picks any of them.
+async function getSlotStartTimeMap(slot_year, semester_type, slot_names) {
+  const uniq = Array.from(new Set((slot_names || []).filter(Boolean)));
+  const out = {};
+  for (const n of uniq) out[n] = Infinity;
+  if (uniq.length === 0) return out;
+  const r = await db.query(
+    `SELECT slot_name, MIN(slot_time) AS slot_time
+     FROM slot
+     WHERE slot_year = $1 AND semester_type = $2 AND slot_name = ANY($3)
+     GROUP BY slot_name`,
+    [slot_year, semester_type, uniq]
+  );
+  for (const row of r.rows) {
+    out[row.slot_name] = parseSlotStartMinutes(row.slot_time);
+  }
+  return out;
+}
+
 // Helper: Derive assessment type from course code and course type
 function deriveAssessmentType(courseCode, courseType, theory = 0, practical = 0) {
   const levelDigit = parseInt(courseCode.charAt(3));
@@ -105,7 +155,7 @@ function parseProgramBranch(programCode) {
 
 // Helper: Build CoE template worksheet for a single course-slot-faculty-component combo
 function buildCoEWorksheet(headerInfo, students, component) {
-  const { slotName, facultyName, courseCode, courseName, credits, courseType, assessmentType, semesterLabel, hasTheoryConfig, hasLabConfig, theoryConfigJson, labConfigJson } = headerInfo;
+  const { slotName, facultyName, courseCode, courseName, credits, courseType, assessmentType, semesterLabel, hasTheoryConfig, hasLabConfig, theoryConfigJson, labConfigs, isMerged, slotStartTimes } = headerInfo;
 
   // Determine program level (UG/PG)
   const programLevel = assessmentType.startsWith("PG") ? "PG" : "UG";
@@ -151,19 +201,55 @@ function buildCoEWorksheet(headerInfo, students, component) {
       });
     }
 
-    // Build individual lab session columns from config
-    if (showLab && labConfigJson) {
-      const labSessions = labConfigJson.labSessions || [];
-      labSessions.forEach(l => {
-        imColumns.push({ type: "lab", number: l.sessionNumber, maxMarks: l.maxMarks });
-        totalMax += l.maxMarks || 0;
+    // Build individual lab session columns from all lab configs. For merged
+    // groups (SUMMER compound), sessions from multiple pair-configs get global
+    // S1..Sn numbering, ordered by (session_date, slot_start_time).
+    if (showLab && Array.isArray(labConfigs) && labConfigs.length > 0) {
+      // Flatten (pair_slot, sessionNumber, date, maxMarks, config_id) from every labConfig.
+      const flatSessions = [];
+      for (const lc of labConfigs) {
+        const sessions = (lc.config_json && lc.config_json.labSessions) || [];
+        for (const s of sessions) {
+          flatSessions.push({
+            config_id: lc.id,
+            pair_slot: lc.slot_name,
+            number: s.sessionNumber,
+            date: s.date || "",
+            maxMarks: s.maxMarks || 0,
+          });
+        }
+      }
+      // Sort by (date, slot_start_time). Unknown slot_time → Infinity (sort last).
+      flatSessions.sort((a, b) => {
+        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        const ta = slotStartTimes ? (slotStartTimes[a.pair_slot] ?? Infinity) : 0;
+        const tb = slotStartTimes ? (slotStartTimes[b.pair_slot] ?? Infinity) : 0;
+        return ta - tb;
+      });
+      flatSessions.forEach((s, idx) => {
+        imColumns.push({
+          type: "lab",
+          number: s.number,
+          config_id: s.config_id,
+          pair_slot: s.pair_slot,
+          date: s.date,
+          globalIndex: idx + 1,
+          maxMarks: s.maxMarks,
+        });
+        totalMax += s.maxMarks || 0;
       });
     }
 
     // Build headers from columns
     marksHeaders = imColumns.map(col => {
-      const label = col.type === "assignment" ? `A${col.number}` : `Lab ${col.number}`;
-      return `${label}\n(${col.maxMarks})`;
+      if (col.type === "assignment") {
+        return `A${col.number}\n(${col.maxMarks})`;
+      }
+      // Lab column — global index + pair-slot + date so same-day columns from
+      // different pair-configs are distinguishable.
+      const dateShort = col.date ? String(col.date).slice(5, 10) : `S${col.number}`;
+      const labPrefix = isMerged ? `S${col.globalIndex} ${col.pair_slot}` : `Lab ${col.number}`;
+      return `${labPrefix} ${dateShort}\n(${col.maxMarks})`;
     });
     if (imColumns.length > 0) {
       marksHeaders.push(`Total\n(${totalMax})`);
@@ -202,7 +288,9 @@ function buildCoEWorksheet(headerInfo, students, component) {
       let rowTotal = 0;
       let hasAnyMark = false;
       imColumns.forEach(col => {
-        const key = col.type === "assignment" ? `assignment_${col.number}` : `lab_${col.number}`;
+        const key = col.type === "assignment"
+          ? `assignment_${col.number}`
+          : `lab_${col.config_id}_${col.number}`;
         const val = s[key];
         if (val !== null && val !== undefined) {
           row.push(val);
@@ -490,6 +578,91 @@ exports.getMarksEntrySummary = async (req, res) => {
       configMap[key].push(cfg);
     }
 
+    // ─── SUMMER lab compound-slot merge: pre-fetch compound + bare SR ─────
+    // A student registered as sr.slot_name = "L11+L12,L31+L32" attends BOTH
+    // pair-slots as one merged lab batch. We collapse those pair rows into a
+    // single merged summary row so faculty/HoI see one file per batch.
+    const allowedFacultyKeys = new Set(
+      allocationResult.rows.map(a => `${a.course_code}_${a.faculty_name}`)
+    );
+    let mergedCoverage = new Map(); // key: `${course}_${faculty}_${pair}` → compound_slot
+    let compoundKeys = new Set();   // key: `${course}_${faculty}_${compound_slot}`
+    let barePairsWithStudents = new Set(); // key: `${course}_${faculty}_${pair}`
+    if (component === "IM") {
+      // Compound registrations
+      const compoundResult = await db.query(`
+        SELECT DISTINCT sr.course_code, sr.faculty_name, sr.slot_name AS compound_slot
+        FROM student_registrations sr
+        WHERE sr.slot_year = $1 AND sr.semester_type = $2
+          AND sr.slot_name LIKE '%,%'
+          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+      `, [slot_year, semester_type]);
+      for (const row of compoundResult.rows) {
+        const facultyKey = `${row.course_code}_${row.faculty_name}`;
+        if (!allowedFacultyKeys.has(facultyKey)) continue; // respect HoI/allocation filter
+        const pairs = decomposeCompoundSlot(row.compound_slot);
+        const labPairs = pairs.filter(p => /^L\d+\+L\d+$/.test(p));
+        if (labPairs.length < 2) continue; // only merge when there are ≥2 lab pairs
+        compoundKeys.add(`${row.course_code}_${row.faculty_name}_${row.compound_slot}`);
+        for (const p of labPairs) {
+          mergedCoverage.set(`${row.course_code}_${row.faculty_name}_${p}`, row.compound_slot);
+        }
+      }
+      // Bare (non-compound) lab-pair registrations — used to defend against the
+      // hybrid case (same pair has both compound and bare batches).
+      if (mergedCoverage.size > 0) {
+        const bareResult = await db.query(`
+          SELECT DISTINCT sr.course_code, sr.faculty_name, sr.slot_name AS bare_slot
+          FROM student_registrations sr
+          WHERE sr.slot_year = $1 AND sr.semester_type = $2
+            AND sr.slot_name NOT LIKE '%,%'
+            AND sr.slot_name ~ '^L\\d+\\+L\\d+$'
+            AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+        `, [slot_year, semester_type]);
+        for (const row of bareResult.rows) {
+          barePairsWithStudents.add(`${row.course_code}_${row.faculty_name}_${row.bare_slot}`);
+        }
+      }
+
+      // ─── Fallback merge for SUMMER: empty lab-pair allocations ───────
+      // For (course, faculty) combos in SUMMER with ≥2 lab-pair fa rows that
+      // have neither compound SR coverage nor any bare SR, collapse the pair
+      // rows into a single virtual compound row so the summary reads
+      // consistently with the real compound-merged rows shown elsewhere.
+      // Empty allocations still appear (Not Configured / 0 students) but as
+      // ONE row per course-faculty, not N.
+      if (semester_type === "SUMMER") {
+        const labPairsByCF = new Map();
+        for (const alloc of allocationResult.rows) {
+          if (!/^L\d+\+L\d+$/.test(alloc.slot_name)) continue;
+          const pairKey = `${alloc.course_code}_${alloc.faculty_name}_${alloc.slot_name}`;
+          if (mergedCoverage.has(pairKey)) continue;         // already in a real compound
+          if (barePairsWithStudents.has(pairKey)) continue;  // has bare SR — keep as its own row
+          const cf = `${alloc.course_code}|${alloc.faculty_name}`; // '|' separator (safe: neither course_code nor faculty_name contains it)
+          if (!labPairsByCF.has(cf)) labPairsByCF.set(cf, new Set());
+          labPairsByCF.get(cf).add(alloc.slot_name);
+        }
+        for (const [cf, pairSet] of labPairsByCF.entries()) {
+          const pairs = Array.from(pairSet);
+          if (pairs.length < 2) continue;
+          // Sort pairs by their leading numeric slot index (L5+L6 before L25+L26).
+          pairs.sort((a, b) => {
+            const na = parseInt((a.match(/^L(\d+)/) || [0, "0"])[1], 10);
+            const nb = parseInt((b.match(/^L(\d+)/) || [0, "0"])[1], 10);
+            return na - nb;
+          });
+          const compound_slot = pairs.join(",");
+          const sepIdx = cf.indexOf("|");
+          const course_code = cf.slice(0, sepIdx);
+          const faculty_name = cf.slice(sepIdx + 1);
+          compoundKeys.add(`${course_code}_${faculty_name}_${compound_slot}`);
+          for (const p of pairs) {
+            mergedCoverage.set(`${course_code}_${faculty_name}_${p}`, compound_slot);
+          }
+        }
+      }
+    }
+
     const summary = [];
     const processedKeys = new Set();
 
@@ -497,6 +670,13 @@ exports.getMarksEntrySummary = async (req, res) => {
       const groupKey = `${alloc.course_code}_${alloc.slot_name}_${alloc.employee_id}`;
       if (processedKeys.has(groupKey)) continue;
       processedKeys.add(groupKey);
+
+      // Skip lab-pair rows that are represented by a merged compound row below.
+      // Only skip when the pair has NO separate bare-registration batch (hybrid case).
+      const pairCoverageKey = `${alloc.course_code}_${alloc.faculty_name}_${alloc.slot_name}`;
+      if (mergedCoverage.has(pairCoverageKey) && !barePairsWithStudents.has(pairCoverageKey)) {
+        continue;
+      }
 
       // Derive assessment type
       const assessmentType = deriveAssessmentType(alloc.course_code, alloc.course_type, alloc.theory, alloc.practical);
@@ -681,6 +861,196 @@ exports.getMarksEntrySummary = async (req, res) => {
       });
     }
 
+    // ─── Emit merged rows for compound-registered lab batches ───────────
+    // For each compound (course, faculty, compound_slot), aggregate pieces
+    // across all constituent pair-configs and produce a single summary row.
+    for (const compoundKey of compoundKeys) {
+      // compoundKey = `${course}_${faculty}_${compound_slot}` — split from the right
+      // so faculty names with underscores don't break parsing.
+      const lastUnderscore = compoundKey.lastIndexOf("_");
+      if (lastUnderscore < 0) continue;
+      const compound_slot = compoundKey.slice(lastUnderscore + 1);
+      const beforeCompound = compoundKey.slice(0, lastUnderscore);
+      const firstUnderscore = beforeCompound.indexOf("_");
+      if (firstUnderscore < 0) continue;
+      const course_code = beforeCompound.slice(0, firstUnderscore);
+      const faculty_name = beforeCompound.slice(firstUnderscore + 1);
+
+      // Find the alloc rows this compound covers so we know the pieces to fetch.
+      const pairs = decomposeCompoundSlot(compound_slot).filter(p => /^L\d+\+L\d+$/.test(p));
+      const relatedAllocs = allocationResult.rows.filter(
+        a => a.course_code === course_code
+          && a.faculty_name === faculty_name
+          && pairs.includes(a.slot_name)
+      );
+      if (relatedAllocs.length === 0) continue;
+      const sampleAlloc = relatedAllocs[0];
+      const employee_id = sampleAlloc.employee_id;
+
+      // Collect LAB configs (component_type === 'LAB') for every constituent pair.
+      const mergedConfigs = [];
+      for (const pair of pairs) {
+        const configs = configMap[`${course_code}_${pair}_${employee_id}`] || [];
+        for (const cfg of configs) {
+          if (cfg.component_type === "LAB") mergedConfigs.push(cfg);
+        }
+      }
+
+      const assessmentType = deriveAssessmentType(course_code, sampleAlloc.course_type, sampleAlloc.theory, sampleAlloc.practical);
+      let status = "Not Configured";
+      let totalStudents = 0;
+      let studentsWithMarks = 0;
+      let studentsPartial = 0;
+      let studentsMissing = 0;
+      let partialDetail = [];
+      let missingDetail = [];
+
+      if (mergedConfigs.length > 0) {
+        // Concatenate pieces (LAB_SESSION entries) across all merged configs,
+        // tagging each with the config_id so identical (assess_type, num, q_id)
+        // triples from different pair-configs stay distinct.
+        const taggedPieces = [];
+        for (const cfg of mergedConfigs) {
+          const cfgPieces = extractConfiguredPieces(component, cfg, /* isLabSlot */ true);
+          for (const p of cfgPieces) {
+            taggedPieces.push({ ...p, config_id: cfg.id });
+          }
+        }
+        if (taggedPieces.length > 0) {
+          const enrollmentResult = await db.query(`
+            SELECT DISTINCT sr.enrollment_number
+            FROM student_registrations sr
+            WHERE sr.slot_year = $1 AND sr.semester_type = $2
+              AND sr.course_code = $3
+              AND sr.slot_name = $4
+              AND sr.faculty_name = $5
+              AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+          `, [slot_year, semester_type, course_code, compound_slot, faculty_name]);
+          const enrollments = enrollmentResult.rows.map(r => r.enrollment_number);
+          totalStudents = enrollments.length;
+
+          if (totalStudents === 0) {
+            status = "Not Entered";
+          } else {
+            // Coverage across all merged configs — the 4-tuple (config_id +
+            // triple) uniquely identifies a piece. Same triple across two
+            // configs represents two DIFFERENT physical sessions at different
+            // slot times; both must be filled for the student to be "done".
+            const coverageResult = await db.query(`
+              WITH filled AS (
+                SELECT sm.enrollment_number, COUNT(*) AS c
+                FROM student_marks sm
+                JOIN unnest($1::int[], $2::text[], $3::int[], $4::text[])
+                     AS p(config_id, assessment_type, assessment_number, question_id)
+                  ON p.config_id = sm.assessment_config_id
+                 AND p.assessment_type = sm.assessment_type
+                 AND p.assessment_number = sm.assessment_number
+                 AND p.question_id = sm.question_id
+                WHERE sm.marks_obtained IS NOT NULL
+                  AND sm.enrollment_number = ANY($5::text[])
+                GROUP BY sm.enrollment_number
+              )
+              SELECT
+                COALESCE(COUNT(*) FILTER (WHERE c = $6), 0)::int AS fully_done,
+                COALESCE(COUNT(*) FILTER (WHERE c > 0 AND c < $6), 0)::int AS partial,
+                COALESCE(SUM(c), 0)::int AS filled_cells
+              FROM filled
+            `, [
+              taggedPieces.map(p => p.config_id),
+              taggedPieces.map(p => p.assessment_type),
+              taggedPieces.map(p => p.assessment_number),
+              taggedPieces.map(p => p.question_id),
+              enrollments,
+              taggedPieces.length,
+            ]);
+            const fullyDone = parseInt(coverageResult.rows[0].fully_done);
+            const partialCount = parseInt(coverageResult.rows[0].partial);
+            const filledCells = parseInt(coverageResult.rows[0].filled_cells);
+            studentsWithMarks = fullyDone;
+            studentsPartial = partialCount;
+            studentsMissing = totalStudents - fullyDone - partialCount;
+            if (filledCells === 0) status = "Not Entered";
+            else if (fullyDone === totalStudents) status = "Complete";
+            else status = "Partial";
+
+            if (studentsPartial > 0 || studentsMissing > 0) {
+              const detailResult = await db.query(`
+                WITH req AS (
+                  SELECT config_id, assessment_type, assessment_number, question_id,
+                         config_id || ':' || assessment_type || ':' || assessment_number || ':' || question_id AS piece_key
+                  FROM unnest($1::int[], $2::text[], $3::int[], $4::text[])
+                       AS p(config_id, assessment_type, assessment_number, question_id)
+                ),
+                sps AS (
+                  SELECT e.enrollment_number, r.piece_key,
+                         CASE WHEN sm.marks_obtained IS NOT NULL THEN 1 ELSE 0 END AS is_filled
+                  FROM unnest($5::text[]) AS e(enrollment_number)
+                  CROSS JOIN req r
+                  LEFT JOIN student_marks sm
+                    ON sm.assessment_config_id = r.config_id
+                   AND sm.enrollment_number = e.enrollment_number
+                   AND sm.assessment_type = r.assessment_type
+                   AND sm.assessment_number = r.assessment_number
+                   AND sm.question_id = r.question_id
+                )
+                SELECT sps.enrollment_number,
+                       SUM(sps.is_filled)::int AS filled,
+                       COALESCE(
+                         array_agg(sps.piece_key ORDER BY sps.piece_key)
+                           FILTER (WHERE sps.is_filled = 0),
+                         ARRAY[]::text[]
+                       ) AS missing_pieces
+                FROM sps
+                GROUP BY sps.enrollment_number
+                HAVING SUM(sps.is_filled) < $6
+                ORDER BY SUM(sps.is_filled), sps.enrollment_number
+              `, [
+                taggedPieces.map(p => p.config_id),
+                taggedPieces.map(p => p.assessment_type),
+                taggedPieces.map(p => p.assessment_number),
+                taggedPieces.map(p => p.question_id),
+                enrollments,
+                taggedPieces.length,
+              ]);
+              for (const r of detailResult.rows) {
+                if (r.filled === 0) {
+                  missingDetail.push({ enrollment_number: r.enrollment_number });
+                } else {
+                  partialDetail.push({
+                    enrollment_number: r.enrollment_number,
+                    missing_pieces: r.missing_pieces || [],
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      summary.push({
+        course_code,
+        course_name: sampleAlloc.course_name,
+        course_type: sampleAlloc.course_type,
+        slot_name: compound_slot,
+        venue: sampleAlloc.venue,
+        employee_id,
+        faculty_name,
+        assessment_type: assessmentType,
+        total_students: totalStudents,
+        students_with_marks: studentsWithMarks,
+        students_done: studentsWithMarks,
+        students_partial: studentsPartial,
+        students_missing: studentsMissing,
+        partial_detail: partialDetail,
+        missing_detail: missingDetail,
+        status,
+        theory: sampleAlloc.theory,
+        practical: sampleAlloc.practical,
+        credits: sampleAlloc.credits,
+        is_merged: true,
+      });
+    }
+
     res.json(summary);
   } catch (error) {
     console.error("Error fetching marks entry summary:", error);
@@ -779,13 +1149,22 @@ exports.getStudentMarksReport = async (req, res) => {
     const semLabel = `${semester_type.charAt(0)}${semester_type.slice(1).toLowerCase()} Semester ${slot_year}`;
 
     // Parse items filter for bulk admin downloads (format: "CSE2008:E1:313117,CSE5028:D1:313117")
+    // Also build a list of "requested slots" (single-item or bulk) so we can
+    // detect compound slot_name values (SUMMER lab merges) and route their
+    // constituent pair-configs into a single merged group.
     let itemsFilter = null;
+    let requestedSlots = [];
     if (items) {
       itemsFilter = new Set(items.split(",").map(i => {
         const [c, s, e] = i.split(":");
         return `${c}_${s}_${e}`;
       }));
+      requestedSlots = items.split(",").map(i => {
+        const [c, s, e] = i.split(":");
+        return { course_code: c, slot_name: s, employee_id: parseInt(e) };
+      });
     }
+    // Non-bulk single-item requestedSlots is populated after facultyEmployeeId is resolved (below).
 
     // Determine faculty filter and (for HoIs) whether to restrict configs to
     // the HoI's schools.
@@ -830,6 +1209,33 @@ exports.getStudentMarksReport = async (req, res) => {
       }
     }
 
+    // Populate requestedSlots for single-item mode (bulk mode already filled it above).
+    if (!items && course_code && facultyEmployeeId) {
+      requestedSlots.push({
+        course_code,
+        slot_name: slot_name || null,
+        employee_id: facultyEmployeeId,
+      });
+    }
+
+    // Build a compound-group map: for each requested compound slot_name, map
+    // every constituent pair-slot back to the compound "target group key" so
+    // the pair-configs all land in one merged group during the grouping loop.
+    const compoundGroupMap = new Map(); // pairKey → { targetKey, compound_slot }
+    for (const rs of requestedSlots) {
+      if (rs.slot_name && isCompoundSlot(rs.slot_name)) {
+        const pairs = decomposeCompoundSlot(rs.slot_name).filter(p => /^L\d+\+L\d+$/.test(p));
+        if (pairs.length < 2) continue;
+        const targetKey = `${rs.course_code}_${rs.slot_name}_${rs.employee_id}`;
+        for (const p of pairs) {
+          compoundGroupMap.set(
+            `${rs.course_code}_${p}_${rs.employee_id}`,
+            { targetKey, compound_slot: rs.slot_name }
+          );
+        }
+      }
+    }
+
     // Get assessment configs matching the filters
     let configQuery = `
       SELECT ac.id, ac.slot_year, ac.semester_type, ac.course_code, ac.employee_id,
@@ -848,8 +1254,13 @@ exports.getStudentMarksReport = async (req, res) => {
       configQuery += ` AND ac.course_code = $${configParams.length}`;
     }
     if (slot_name) {
-      configParams.push(slot_name);
-      configQuery += ` AND ac.slot_name = $${configParams.length}`;
+      // Compound slot: expand to all pair-slots so the query fetches every
+      // constituent pair-config in one shot. Non-compound falls back to = via ANY([single]).
+      const slotFilterList = isCompoundSlot(slot_name)
+        ? decomposeCompoundSlot(slot_name)
+        : [slot_name];
+      configParams.push(slotFilterList);
+      configQuery += ` AND ac.slot_name = ANY($${configParams.length})`;
     }
     if (facultyEmployeeId) {
       configParams.push(facultyEmployeeId);
@@ -867,19 +1278,29 @@ exports.getStudentMarksReport = async (req, res) => {
       return res.status(404).json({ message: "No assessment configurations found for the selected filters" });
     }
 
-    // Group configs by course_code + slot_name + employee_id (unique combo for a sheet)
+    // Group configs by course_code + slot_name + employee_id — with pair-configs
+    // belonging to a compound-requested slot collapsed under the compound key.
+    // labConfigs is an ARRAY so merged groups can hold multiple pair LAB configs.
     const groupedConfigs = {};
     for (const cfg of configResult.rows) {
-      const key = `${cfg.course_code}_${cfg.slot_name}_${cfg.employee_id}`;
-      // If items filter is active, skip configs not in the selected items
+      const pairKey = `${cfg.course_code}_${cfg.slot_name}_${cfg.employee_id}`;
+      const compound = compoundGroupMap.get(pairKey);
+      const key = compound ? compound.targetKey : pairKey;
+      // If items filter is active, skip configs not in the selected items.
       if (itemsFilter && !itemsFilter.has(key)) continue;
       if (!groupedConfigs[key]) {
-        groupedConfigs[key] = { theoryConfig: null, labConfig: null, info: cfg };
+        groupedConfigs[key] = {
+          theoryConfig: null,
+          labConfigs: [],
+          info: cfg,
+          isCompound: !!compound,
+          compoundSlot: compound ? compound.compound_slot : null,
+        };
       }
       if (cfg.component_type === "THEORY") {
         groupedConfigs[key].theoryConfig = cfg;
       } else if (cfg.component_type === "LAB") {
-        groupedConfigs[key].labConfig = cfg;
+        groupedConfigs[key].labConfigs.push(cfg);
       }
     }
 
@@ -890,14 +1311,14 @@ exports.getStudentMarksReport = async (req, res) => {
       // Prefer THEORY config for CA components: a slot may have both LAB and
       // THEORY configs (theory course taught in a lab-format slot); picking the
       // LAB config's assessment_type would wrongly reject CA1/CA2/CA3 downloads.
-      const info = (component !== "IM" && group.theoryConfig) ? group.theoryConfig : group.info;
+      const info = (component !== "IM" && group.theoryConfig)
+        ? group.theoryConfig
+        : (group.labConfigs.length ? group.labConfigs[0] : group.info);
       const assessmentType = info.assessment_type;
 
-      // Check if the requested component is valid for this slot's configs
-      // Lab-only slots (only labConfig) should only allow IM
-      // Theory-only slots should allow CAs + IM
+      // Check if the requested component is valid for this slot's configs.
       const hasTheory = !!group.theoryConfig;
-      const hasLab = !!group.labConfig;
+      const hasLab = group.labConfigs.length > 0;
 
       if (component === "IM") {
         // IM is valid for all slots
@@ -908,25 +1329,59 @@ exports.getStudentMarksReport = async (req, res) => {
         if (!validComponents.includes(component)) continue;
       }
 
-      // Get students registered for this course-slot-faculty with school info
-      const studentsResult = await db.query(`
-        SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
-               s.school_short_name as school
-        FROM student_registrations sr
-        LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
-        LEFT JOIN program p ON st.program_id = p.program_id
-        LEFT JOIN school s ON p.school_id = s.school_id
-        WHERE sr.slot_year = $1 AND sr.semester_type = $2
-          AND sr.course_code = $3
-          AND ( sr.slot_name = $4
-             OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
-                   LIKE '%,' || REPLACE($4, ' ', '') || ',%' )
-          AND sr.faculty_name = $5
-          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
-        ORDER BY sr.enrollment_number
-      `, [slot_year, semester_type, info.course_code, info.slot_name, info.faculty_name]);
+      // Display slot_name for merged groups is the compound; for non-merged, the pair.
+      const displaySlot = group.isCompound && group.compoundSlot ? group.compoundSlot : info.slot_name;
+
+      // Students query — for merged groups, exact-match on the compound; for
+      // non-merged, keep the SUMMER-tolerant matching.
+      let studentsSql;
+      let studentsParams;
+      if (group.isCompound) {
+        studentsSql = `
+          SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
+                 s.school_short_name as school
+          FROM student_registrations sr
+          LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
+          LEFT JOIN program p ON st.program_id = p.program_id
+          LEFT JOIN school s ON p.school_id = s.school_id
+          WHERE sr.slot_year = $1 AND sr.semester_type = $2
+            AND sr.course_code = $3
+            AND sr.slot_name = $4
+            AND sr.faculty_name = $5
+            AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+          ORDER BY sr.enrollment_number
+        `;
+        studentsParams = [slot_year, semester_type, info.course_code, group.compoundSlot, info.faculty_name];
+      } else {
+        studentsSql = `
+          SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
+                 s.school_short_name as school
+          FROM student_registrations sr
+          LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
+          LEFT JOIN program p ON st.program_id = p.program_id
+          LEFT JOIN school s ON p.school_id = s.school_id
+          WHERE sr.slot_year = $1 AND sr.semester_type = $2
+            AND sr.course_code = $3
+            AND ( sr.slot_name = $4
+               OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                     LIKE '%,' || REPLACE($4, ' ', '') || ',%' )
+            AND sr.faculty_name = $5
+            AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+          ORDER BY sr.enrollment_number
+        `;
+        studentsParams = [slot_year, semester_type, info.course_code, info.slot_name, info.faculty_name];
+      }
+      const studentsResult = await db.query(studentsSql, studentsParams);
 
       if (studentsResult.rows.length === 0) continue;
+
+      // For merged lab groups, look up slot start-times so lab sessions across
+      // pair-configs can be ordered chronologically (date, then real slot time).
+      let slotStartTimes = null;
+      if (group.isCompound && group.labConfigs.length > 0) {
+        const pairNames = group.labConfigs.map(c => c.slot_name);
+        slotStartTimes = await getSlotStartTimeMap(slot_year, semester_type, pairNames);
+      }
 
       // Fetch marks based on component type
       let students;
@@ -939,7 +1394,7 @@ exports.getStudentMarksReport = async (req, res) => {
       // Build the worksheet
       const creditStr = `${info.theory || 0}:${info.practical || 0}:${info.credits || 0}`;
       const headerInfo = {
-        slotName: info.slot_name,
+        slotName: displaySlot,
         facultyName: info.faculty_name,
         courseCode: info.course_code,
         courseName: info.course_name,
@@ -948,15 +1403,23 @@ exports.getStudentMarksReport = async (req, res) => {
         assessmentType: assessmentType,
         semesterLabel: semLabel,
         hasTheoryConfig: !!group.theoryConfig,
-        hasLabConfig: !!group.labConfig,
+        hasLabConfig: hasLab,
         theoryConfigJson: group.theoryConfig ? (typeof group.theoryConfig.config_json === "string" ? JSON.parse(group.theoryConfig.config_json) : group.theoryConfig.config_json) : null,
-        labConfigJson: group.labConfig ? (typeof group.labConfig.config_json === "string" ? JSON.parse(group.labConfig.config_json) : group.labConfig.config_json) : null
+        // Merged: pass all labConfigs so buildCoEWorksheet can render per-pair columns.
+        // Non-merged: single-element array works too; buildCoEWorksheet handles both.
+        labConfigs: group.labConfigs.map(c => ({
+          id: c.id,
+          slot_name: c.slot_name,
+          config_json: typeof c.config_json === "string" ? JSON.parse(c.config_json) : c.config_json,
+        })),
+        isMerged: !!group.isCompound,
+        slotStartTimes,
       };
 
       const ws = buildCoEWorksheet(headerInfo, students, component);
 
       // Sheet name (max 31 chars for Excel)
-      let sheetName = `${info.slot_name}-${info.course_code}-${component}`;
+      let sheetName = `${displaySlot}-${info.course_code}-${component}`;
       if (sheetName.length > 31) {
         sheetName = sheetName.substring(0, 31);
       }
@@ -984,7 +1447,9 @@ exports.getStudentMarksReport = async (req, res) => {
     if (fInfo && course_code && slot_name) {
       const cleanName = fInfo.faculty_name.replace(/\./g, "").replace(/\s+/g, "_");
       const cleanYear = slot_year.replace(/-/g, "_");
-      filename = `${semPrefix}${cleanYear}_${slot_name}_${course_code}_${cleanName}_${component}.xlsx`;
+      // Compound slot_names contain commas/spaces — normalize for the filename.
+      const cleanSlot = slot_name.replace(/,\s*/g, "_").replace(/\s+/g, "");
+      filename = `${semPrefix}${cleanYear}_${cleanSlot}_${course_code}_${cleanName}_${component}.xlsx`;
     } else {
       const cleanYear = slot_year.replace(/-/g, "_");
       filename = `${semPrefix}${cleanYear}_${component}_marks.xlsx`;
@@ -1033,11 +1498,12 @@ async function fetchCAMarks(group, students, component) {
   }));
 }
 
-// Helper: Fetch IM marks (Assignment + Lab) for students
+// Helper: Fetch IM marks (Assignment + Lab) for students.
+// Supports multiple LAB configs per group (SUMMER compound-slot merge) — lab
+// session marks are keyed by (config_id, assessment_number) so same-numbered
+// sessions across pair-configs remain distinct.
 async function fetchIMMarks(group, students, assessmentType) {
   const results = {};
-  let assignmentMaxMarks = null;
-  let labMaxMarks = null;
 
   students.forEach(s => {
     results[s.enrollment_number] = { ...s };
@@ -1061,20 +1527,23 @@ async function fetchIMMarks(group, students, assessmentType) {
     }
   }
 
-  // Get individual lab session marks from LAB config
-  if (group.labConfig && (assessmentType.endsWith("_INTEGRATED") || assessmentType.endsWith("_LAB"))) {
+  // Get individual lab session marks across ALL lab configs in the group.
+  const labConfigIds = (group.labConfigs || []).map(c => c.id);
+  if (labConfigIds.length > 0 && (assessmentType.endsWith("_INTEGRATED") || assessmentType.endsWith("_LAB"))) {
     const labResult = await db.query(`
-      SELECT sm.enrollment_number, sm.assessment_number,
+      SELECT sm.enrollment_number, sm.assessment_config_id, sm.assessment_number,
              SUM(sm.marks_obtained) as marks
       FROM student_marks sm
-      WHERE sm.assessment_config_id = $1
+      WHERE sm.assessment_config_id = ANY($1::int[])
         AND sm.assessment_type = 'LAB_SESSION'
-      GROUP BY sm.enrollment_number, sm.assessment_number
-    `, [group.labConfig.id]);
+      GROUP BY sm.enrollment_number, sm.assessment_config_id, sm.assessment_number
+    `, [labConfigIds]);
 
     for (const m of labResult.rows) {
       if (results[m.enrollment_number]) {
-        results[m.enrollment_number][`lab_${m.assessment_number}`] = parseFloat(m.marks);
+        // Compound key so same-numbered sessions from different pair-configs
+        // don't overwrite each other.
+        results[m.enrollment_number][`lab_${m.assessment_config_id}_${m.assessment_number}`] = parseFloat(m.marks);
       }
     }
   }
