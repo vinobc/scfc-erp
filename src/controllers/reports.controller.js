@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const XLSX = require("xlsx");
+const marksController = require("./marks.controller");
 
 // ─── Helpers for SUMMER lab compound-slot merge ─────────────────────────────
 // In SUMMER, student_registrations.slot_name is comma-separated for compound
@@ -471,10 +472,11 @@ exports.getStudentRegistrations = async (req, res) => {
   }
 };
 
-// Get courses available for marks report (faculty sees own, admin sees all)
+// Get courses available for marks report (faculty sees own, admin sees all,
+// HoI can opt-in to see their school's courses via hoi_scope=true).
 exports.getMarksReportCourses = async (req, res) => {
   try {
-    const { slot_year, semester_type } = req.query;
+    const { slot_year, semester_type, hoi_scope } = req.query;
     if (!slot_year || !semester_type) {
       return res.status(400).json({ message: "slot_year and semester_type are required" });
     }
@@ -482,7 +484,21 @@ exports.getMarksReportCourses = async (req, res) => {
     let query;
     const params = [slot_year, semester_type];
 
-    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
+    const hoiScoped = hoi_scope === "true" && Array.isArray(req.hoiSchoolIds) && req.hoiSchoolIds.length > 0;
+
+    if (hoiScoped) {
+      // HoI mode: return courses whose faculty is in the HoI's school(s).
+      params.push(req.hoiSchoolIds);
+      query = `
+        SELECT DISTINCT ac.course_code, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+               ac.assessment_type, ac.employee_id, f.name as faculty_name
+        FROM assessment_config ac
+        JOIN course c ON ac.course_code = c.course_code
+        JOIN faculty f ON ac.employee_id = f.employee_id
+        WHERE ac.slot_year = $1 AND ac.semester_type = $2 AND f.school_id = ANY($3)
+        ORDER BY ac.course_code
+      `;
+    } else if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
       // Get faculty's/coordinator's employee_id
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
@@ -1061,7 +1077,7 @@ exports.getMarksEntrySummary = async (req, res) => {
 // Get available slots for a course in marks report
 exports.getMarksReportSlots = async (req, res) => {
   try {
-    const { slot_year, semester_type, course_code, employee_id } = req.query;
+    const { slot_year, semester_type, course_code, employee_id, hoi_scope } = req.query;
     if (!slot_year || !semester_type || !course_code) {
       return res.status(400).json({ message: "slot_year, semester_type, and course_code are required" });
     }
@@ -1069,7 +1085,20 @@ exports.getMarksReportSlots = async (req, res) => {
     const params = [slot_year, semester_type, course_code];
     let empFilter = "";
 
-    if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
+    const hoiScoped = hoi_scope === "true" && Array.isArray(req.hoiSchoolIds) && req.hoiSchoolIds.length > 0;
+
+    if (hoiScoped) {
+      // HoI mode: restrict slots to faculty in the HoI's school(s). An explicit
+      // employee_id further narrows the set (used when HoI picks a specific
+      // faculty from the school-wide list).
+      if (employee_id) {
+        params.push(parseInt(employee_id));
+        empFilter = ` AND ac.employee_id = $${params.length}`;
+      } else {
+        params.push(req.hoiSchoolIds);
+        empFilter = ` AND ac.employee_id IN (SELECT employee_id FROM faculty WHERE school_id = ANY($${params.length}))`;
+      }
+    } else if (req.userRole === "faculty" || req.userRole === "timetable_coordinator") {
       const userResult = await db.query(
         'SELECT employee_id FROM "user" WHERE user_id = $1',
         [req.userId]
@@ -1550,6 +1579,290 @@ async function fetchIMMarks(group, students, assessmentType) {
 
   return students.map(s => results[s.enrollment_number]);
 }
+
+// ============ CONSOLIDATED MARKS & GRADE REPORT (XLSX) ============
+
+// Download Consolidated Marks & Grade Report as XLSX. Shape mirrors the
+// Consolidated card on the faculty View Summary panel: one row per student
+// with per-CA (Actual + Converted) sub-columns, IM, Lab, Grand Total (/100),
+// Grade. Reuses marks.controller._computeConsolidatedReport so the numbers
+// are identical to the on-screen view.
+// Build one Consolidated worksheet for a single (course_code, slot_name,
+// employee_id) offering. Returns { ws, sheetName, headerInfo } — or null when
+// no config or roster exists for the offering.
+async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_code, employee_id, slot_name, venue }) {
+  // Resolve venue if not supplied (typical for bulk downloads where the caller
+  // only knows course/slot/faculty).
+  if (!venue) {
+    const venueRes = await db.query(
+      `SELECT ac.venue FROM assessment_config ac
+       WHERE ac.slot_year = $1 AND ac.semester_type = $2
+         AND ac.course_code = $3 AND ac.employee_id = $4 AND ac.slot_name = $5
+       LIMIT 1`,
+      [slot_year, semester_type, course_code, employee_id, slot_name]
+    );
+    if (!venueRes.rows.length) return null;
+    venue = venueRes.rows[0].venue;
+  }
+
+  const primaryConfigRes = await db.query(
+    `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+            f.name as faculty_name
+     FROM assessment_config ac
+     JOIN course c ON ac.course_code = c.course_code
+     JOIN faculty f ON ac.employee_id = f.employee_id
+     WHERE ac.slot_year = $1 AND ac.semester_type = $2
+       AND ac.course_code = $3 AND ac.employee_id = $4
+       AND ac.slot_name = $5 AND ac.venue = $6`,
+    [slot_year, semester_type, course_code, employee_id, slot_name, venue]
+  );
+  if (!primaryConfigRes.rows.length) return null;
+  const info = primaryConfigRes.rows[0];
+
+  const rosterRes = await db.query(
+    `SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
+            sc.school_short_name AS school
+     FROM student_registrations sr
+     LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
+     LEFT JOIN program p ON st.program_id = p.program_id
+     LEFT JOIN school sc ON p.school_id = sc.school_id
+     WHERE sr.slot_year = $1 AND sr.semester_type = $2
+       AND sr.course_code = $3 AND sr.faculty_name = $4
+       AND ( sr.slot_name = $5
+          OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                LIKE '%,' || REPLACE($5, ' ', '') || ',%' )
+       AND sr.venue = $6
+       AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+     ORDER BY sr.enrollment_number`,
+    [slot_year, semester_type, course_code, info.faculty_name, slot_name, venue]
+  );
+  const roster = rosterRes.rows;
+
+  // Sibling configs — cross-slot merge (TEL theory+lab across separate slots).
+  let allConfigs = [...primaryConfigRes.rows];
+  if (roster.length) {
+    const enrollments = roster.map((r) => r.enrollment_number);
+    const siblingRegsRes = await db.query(
+      `SELECT DISTINCT sr.slot_name, sr.venue, sr.faculty_name
+       FROM student_registrations sr
+       WHERE sr.slot_year = $1 AND sr.semester_type = $2
+         AND sr.course_code = $3
+         AND sr.enrollment_number = ANY($4::text[])
+         AND (sr.withdrawn IS NULL OR sr.withdrawn = false)`,
+      [slot_year, semester_type, course_code, enrollments]
+    );
+    const siblingTuples = siblingRegsRes.rows.filter(
+      (t) => !(t.slot_name === slot_name && t.venue === venue && t.faculty_name === info.faculty_name)
+    );
+    if (siblingTuples.length) {
+      const slotNames = siblingTuples.map((t) => t.slot_name);
+      const venues = siblingTuples.map((t) => t.venue);
+      const facultyNames = siblingTuples.map((t) => t.faculty_name);
+      const siblingConfigsRes = await db.query(
+        `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+                f.name as faculty_name
+         FROM assessment_config ac
+         JOIN course c ON ac.course_code = c.course_code
+         JOIN faculty f ON ac.employee_id = f.employee_id
+         JOIN UNNEST($4::text[], $5::text[], $6::text[]) AS t(sn, vn, fn)
+           ON ac.slot_name = t.sn AND ac.venue = t.vn AND f.name = t.fn
+         WHERE ac.slot_year = $1 AND ac.semester_type = $2
+           AND ac.course_code = $3`,
+        [slot_year, semester_type, course_code, slotNames, venues, facultyNames]
+      );
+      const seenIds = new Set(allConfigs.map((c) => c.id));
+      for (const cfg of siblingConfigsRes.rows) {
+        if (!seenIds.has(cfg.id)) {
+          allConfigs.push(cfg);
+          seenIds.add(cfg.id);
+        }
+      }
+    }
+  }
+
+  const report = await marksController._computeConsolidatedReport(allConfigs, roster);
+
+  // Build worksheet rows.
+  const caKeys = Object.keys(report.weightages).filter((k) => k.startsWith("CA"))
+    .sort((a, b) => parseInt(a.slice(2)) - parseInt(b.slice(2)));
+  const hasIM = (report.weightages.IM || 0) > 0;
+  const hasLAB = (report.weightages.LAB || 0) > 0;
+  const isPureLab = !caKeys.length && !hasIM && hasLAB;
+
+  const rows = [];
+  rows.push(["CONSOLIDATED MARKS & GRADE REPORT"]);
+  rows.push([]);
+  rows.push(["Course Code", info.course_code, "", "Slot", slot_name]);
+  rows.push(["Course Name", info.course_name, "", "Venue", venue]);
+  rows.push(["Credit", `${info.theory || 0}:${info.practical || 0}:${info.credits || 0}`, "", "Faculty", info.faculty_name]);
+  rows.push(["Course Type", `${info.course_type} (${report.assessment_type || ""})`, "", "Semester", `${semester_type} ${slot_year}`]);
+  rows.push(["Grading Type", "[—]"]);
+  rows.push([]);
+  rows.push([
+    "Class Strength", report.stats.total_count,
+    "Class Average", report.stats.avg,
+    "Class Standard Deviation", report.stats.stddev_pop != null ? report.stats.stddev_pop : report.stats.stddev,
+  ]);
+  rows.push([]);
+
+  if (isPureLab) {
+    rows.push(["S.No.", "SEN", "Name", "School", "Program", "Sessions Done", "Actual/Max", "Grand Total (100)", "Grade"]);
+  } else {
+    const header1 = ["S.No.", "SEN", "Name", "School", "Program"];
+    const header2 = ["", "", "", "", ""];
+    for (const k of caKeys) {
+      header1.push(k, "");
+      header2.push(`Actual (${report.ca_actual_max[k] || 0})`, `Converted (${report.weightages[k]})`);
+    }
+    if (hasIM) { header1.push("IM"); header2.push(`(${report.weightages.IM})`); }
+    if (hasLAB) { header1.push("Lab"); header2.push(`(${report.weightages.LAB})`); }
+    header1.push("Grand Total (100)"); header2.push("");
+    header1.push("Grade"); header2.push("");
+    rows.push(header1);
+    rows.push(header2);
+  }
+
+  report.students.forEach((s, idx) => {
+    const row = [idx + 1, s.enrollment_number, s.student_name, s.school || "", s.program_code || ""];
+    if (isPureLab) {
+      const lab = s.components.LAB;
+      row.push(lab ? `${lab.sessions_done}/${lab.sessions_total}` : "0/0");
+      row.push(lab && lab.entered ? `${lab.actual}/${lab.actual_max}` : "-");
+    } else {
+      for (const k of caKeys) {
+        const c = s.components[k];
+        if (c && c.entered) { row.push(c.actual, c.converted); } else { row.push("-", "-"); }
+      }
+      if (hasIM) {
+        const c = s.components.IM;
+        row.push(c && c.entered ? c.converted : "-");
+      }
+      if (hasLAB) {
+        const c = s.components.LAB;
+        row.push(c && c.entered ? c.converted : "-");
+      }
+    }
+    row.push(s.grand_total);
+    row.push("[—]");
+    rows.push(row);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  return { ws, info, slot_name, venue };
+}
+
+// Sheet-name sanitizer + de-duplicator for the workbook.
+function safeUniqueSheetName(base, existing) {
+  let name = String(base).replace(/[^a-zA-Z0-9_\-+]/g, "_");
+  if (name.length > 31) name = name.substring(0, 31);
+  let final = name;
+  let n = 1;
+  while (existing.has(final)) {
+    final = `${name.substring(0, 28)}_${n++}`;
+  }
+  return final;
+}
+
+exports.getConsolidatedReportXlsx = async (req, res) => {
+  try {
+    const { slot_year, semester_type, items } = req.query;
+
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "slot_year and semester_type are required" });
+    }
+
+    // Bulk mode: items = "course:slot:emp,course:slot:emp,..." (mirrors the
+    // per-component report's bulk format).
+    let itemList;
+    if (items) {
+      itemList = items.split(",").map((entry) => {
+        const [course_code, slot_name, empRaw] = entry.split(":");
+        return { course_code, slot_name, employee_id: parseInt(empRaw) };
+      }).filter((i) => i.course_code && i.slot_name && i.employee_id);
+    } else {
+      const { course_code, employee_id, slot_name, venue } = req.query;
+      if (!course_code || !employee_id || !slot_name) {
+        return res.status(400).json({ message: "Required parameters missing (course_code, employee_id, slot_name) or use items= for bulk" });
+      }
+      itemList = [{ course_code, employee_id: parseInt(employee_id), slot_name, venue }];
+    }
+
+    // Access control: admin/coe unrestricted. HoIs unrestricted within their
+    // school(s). Faculty/coordinator can only download their own offerings.
+    const isPrivileged = ["admin", "coe"].includes(req.userRole);
+    if (!isPrivileged) {
+      const userRes = await db.query('SELECT employee_id FROM "user" WHERE user_id = $1', [req.userId]);
+      const ownEmpId = userRes.rows.length ? userRes.rows[0].employee_id : null;
+      const hoiSchoolIds = Array.isArray(req.hoiSchoolIds) ? req.hoiSchoolIds : [];
+      const isHoi = hoiSchoolIds.length > 0;
+
+      // Employee_ids that DON'T belong to the caller.
+      const foreignEmpIds = Array.from(new Set(itemList.map((it) => it.employee_id).filter((e) => e !== ownEmpId)));
+
+      if (foreignEmpIds.length > 0) {
+        if (!isHoi) {
+          return res.status(403).json({ message: "You can only download reports for your own courses" });
+        }
+        // Verify every foreign employee_id belongs to the HoI's school(s).
+        const schoolCheck = await db.query(
+          `SELECT employee_id, school_id FROM faculty WHERE employee_id = ANY($1::int[])`,
+          [foreignEmpIds]
+        );
+        const facSchoolMap = new Map(schoolCheck.rows.map((r) => [r.employee_id, r.school_id]));
+        for (const empId of foreignEmpIds) {
+          const facSchool = facSchoolMap.get(empId);
+          if (!facSchool || !hoiSchoolIds.includes(facSchool)) {
+            return res.status(403).json({ message: `Faculty ${empId} is not in your school` });
+          }
+        }
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    const usedNames = new Set();
+    let sheetsAdded = 0;
+    let firstInfo = null;
+
+    for (const it of itemList) {
+      const built = await buildConsolidatedSheetForItem({
+        slot_year, semester_type,
+        course_code: it.course_code,
+        employee_id: it.employee_id,
+        slot_name: it.slot_name,
+        venue: it.venue,
+      });
+      if (!built) continue;
+      const name = safeUniqueSheetName(`${it.slot_name}-${it.course_code}`, usedNames);
+      usedNames.add(name);
+      XLSX.utils.book_append_sheet(wb, built.ws, name);
+      sheetsAdded += 1;
+      if (!firstInfo) firstInfo = built;
+    }
+
+    if (sheetsAdded === 0) {
+      return res.status(404).json({ message: "No assessment configuration found for the selected items" });
+    }
+
+    const semPrefix = semester_type === "WINTER" ? "WS" : semester_type === "FALL" ? "FS" : "SS";
+    const cleanYear = slot_year.replace(/-/g, "_");
+    let filename;
+    if (sheetsAdded === 1 && firstInfo) {
+      const cleanFac = String(firstInfo.info.faculty_name || "").replace(/\./g, "").replace(/\s+/g, "_");
+      const cleanSlot = String(firstInfo.slot_name).replace(/,\s*/g, "_").replace(/\s+/g, "");
+      filename = `${semPrefix}${cleanYear}_${cleanSlot}_${firstInfo.info.course_code}_${cleanFac}_CONSOLIDATED.xlsx`;
+    } else {
+      filename = `${semPrefix}${cleanYear}_CONSOLIDATED_${sheetsAdded}sheets.xlsx`;
+    }
+
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Consolidated report XLSX error:", error);
+    res.status(500).json({ message: "Error generating consolidated report", error: error.message });
+  }
+};
 
 // ============ ATTENDANCE REPORT ============
 
