@@ -1232,6 +1232,542 @@ exports.getMyMarks = async (req, res) => {
   }
 };
 
+// ================== CONSOLIDATED MARKS & GRADE REPORT ==================
+
+// Safely parse config_json which may already be an object.
+function parseConfigJson(cfg) {
+  if (!cfg) return {};
+  const raw = cfg.config_json;
+  if (!raw) return {};
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+
+// Decompose a compound slot_name like "L5+L6, L31+L32" into ["L5+L6","L31+L32"].
+// Non-compound slot_name returns [slot_name].
+function decomposeSlot(slot_name) {
+  if (typeof slot_name !== "string") return [];
+  if (slot_name.includes(",")) {
+    return slot_name.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return [slot_name];
+}
+
+// Build the per-student component breakdown for a course-slot (may include a
+// THEORY config + one or more LAB configs, e.g. for TEL or SUMMER compound labs).
+//
+// Returns { assessment_type, weightages, ca_actual_max, im_actual_max, lab_actual_max,
+//           lab_sessions_total, students: [ { enrollment_number, student_name, school,
+//           program_code, components: {CA1|CA2|CA3|IM|LAB: {entered, actual, actual_max,
+//           converted, weightage, sessions_done?, sessions_total?}}, grand_total, pending: []
+//           } ], stats: {...} }.
+async function computeConsolidatedReport(configs, students) {
+  const theoryConfig = configs.find((c) => c.component_type === "THEORY");
+  const labConfigs = configs.filter((c) => c.component_type === "LAB");
+
+  // Assessment type: prefer THEORY, fall back to any LAB config.
+  const assessmentType =
+    (theoryConfig && theoryConfig.assessment_type) ||
+    (labConfigs[0] && labConfigs[0].assessment_type) ||
+    null;
+
+  const theoryJson = theoryConfig ? parseConfigJson(theoryConfig) : {};
+  const labJsons = labConfigs.map((c) => parseConfigJson(c));
+  // Defaults are only used as a fallback for scaled totals (assignmentTotal /
+  // labTotal / CA scaledTo) when a config exists but a field is missing on it.
+  // Never used to invent columns that shouldn't exist.
+  const defaults = assessmentType ? getDefaultAssessmentStructure(assessmentType) : { cas: [], assignmentTotal: 0, labTotal: 0 };
+
+  // CA structure comes strictly from THEORY config — no defaults fallback so
+  // a LAB-only view doesn't hallucinate CA columns. If scaledTo is missing on
+  // a CA, fall back to the default for that CA number.
+  const caList = (theoryJson.cas || []).filter((c) => c && c.number);
+  const caWeightages = {};
+  const caActualMax = {}; // per CA: sum of question max_marks
+  for (const ca of caList) {
+    const key = `CA${ca.number}`;
+    let scaledTo = Number(ca.scaledTo);
+    if (!scaledTo) {
+      const dCa = (defaults.cas || []).find((d) => d.number === ca.number);
+      scaledTo = dCa ? Number(dCa.scaledTo) : 0;
+    }
+    caWeightages[key] = scaledTo;
+    caActualMax[key] = (ca.questions || []).reduce(
+      (sum, q) => sum + (Number(q.maxMarks) || 0),
+      0
+    );
+  }
+
+  // Assignment (IM) — visible only when THEORY config exists AND has assignments.
+  // Weightage: prefer config's assignmentTotal; fall back to defaults for this
+  // assessment type (some older configs don't persist assignmentTotal).
+  const hasAssignments = theoryConfig && Array.isArray(theoryJson.assignments) && theoryJson.assignments.length > 0;
+  const assignmentTotal = hasAssignments
+    ? (Number(theoryJson.assignmentTotal) || Number(defaults.assignmentTotal) || 0)
+    : 0;
+  const imActualMax = ((theoryJson.assignments || []).reduce(
+    (sum, a) => {
+      const qMax = (a.questions || []).reduce((s, q) => s + (Number(q.maxMarks) || 0), 0);
+      // If assignment has no questions listed, fall back to its maxMarks field.
+      return sum + (qMax > 0 ? qMax : (Number(a.maxMarks) || 0));
+    },
+    0
+  ));
+
+  // Lab — visible only when LAB config(s) exist AND have sessions. Weightage:
+  // prefer first LAB config's labTotal; fall back to defaults.
+  const hasAnyLabSessions = labJsons.some((lj) => Array.isArray(lj.labSessions) && lj.labSessions.length > 0);
+  const labTotal = hasAnyLabSessions
+    ? (Number(labJsons[0].labTotal) || Number(defaults.labTotal) || 0)
+    : 0;
+  let labActualMax = 0;
+  let labSessionsTotal = 0;
+  for (const lj of labJsons) {
+    for (const s of (lj.labSessions || [])) {
+      labActualMax += Number(s.maxMarks) || 0;
+      labSessionsTotal += 1;
+    }
+  }
+
+  const weightages = { ...caWeightages, IM: assignmentTotal, LAB: labTotal };
+
+  // Fetch marks for every config in one query.
+  const configIds = configs.map((c) => c.id);
+  const marksRes = configIds.length
+    ? await db.query(
+        `SELECT sm.enrollment_number, sm.assessment_config_id, sm.assessment_type,
+                sm.assessment_number, sm.question_id, sm.marks_obtained, sm.max_marks
+         FROM student_marks sm
+         WHERE sm.assessment_config_id = ANY($1::int[])`,
+        [configIds]
+      )
+    : { rows: [] };
+
+  const labConfigIdSet = new Set(labConfigs.map((c) => c.id));
+
+  // Per-student accumulator.
+  const perStudent = {};
+  for (const s of students) {
+    perStudent[s.enrollment_number] = {
+      enrollment_number: s.enrollment_number,
+      student_name: s.student_name,
+      school: s.school || null,
+      program_code: s.program_code || null,
+      _ca: {},           // key CA1|CA2|CA3 → { obt, max, hasEntry }
+      _im: { obt: 0, max: 0, hasEntry: false },
+      _lab: { obt: 0, max: 0, sessions_done: 0, sessions_recorded: 0 },
+    };
+  }
+
+  for (const m of marksRes.rows) {
+    const rec = perStudent[m.enrollment_number];
+    if (!rec) continue;
+    const obtained = m.marks_obtained !== null ? parseFloat(m.marks_obtained) : null;
+    const max = m.max_marks !== null ? parseFloat(m.max_marks) : 0;
+
+    if (m.assessment_type === "CA1" || m.assessment_type === "CA2" || m.assessment_type === "CA3") {
+      const key = m.assessment_type;
+      if (!rec._ca[key]) rec._ca[key] = { obt: 0, max: 0, hasEntry: false };
+      if (obtained !== null) {
+        rec._ca[key].obt += obtained;
+        rec._ca[key].hasEntry = true;
+      }
+      rec._ca[key].max += max;
+    } else if (m.assessment_type === "ASSIGNMENT") {
+      if (obtained !== null) {
+        rec._im.obt += obtained;
+        rec._im.hasEntry = true;
+      }
+      rec._im.max += max;
+    } else if (m.assessment_type === "LAB_SESSION" && labConfigIdSet.has(m.assessment_config_id)) {
+      rec._lab.sessions_recorded += 1;
+      if (obtained !== null) {
+        rec._lab.obt += obtained;
+        rec._lab.sessions_done += 1;
+      }
+      rec._lab.max += max;
+    }
+  }
+
+  // Build final per-student component payload.
+  const studentsOut = students.map((s) => {
+    const rec = perStudent[s.enrollment_number];
+    const components = {};
+    const pending = [];
+
+    // CA columns — only include CA numbers present in caList.
+    // Use per-student bucket.max as denominator so cross-section merges compute
+    // correctly (student may not have records for every question in the config).
+    for (const ca of caList) {
+      const key = `CA${ca.number}`;
+      const w = caWeightages[key] || 0;
+      const bucket = rec._ca[key];
+      const perStudentMax = bucket ? bucket.max : 0;
+      const entered = bucket && bucket.hasEntry && perStudentMax > 0;
+      const actual = entered ? bucket.obt : null;
+      const converted = entered
+        ? Number(((bucket.obt / perStudentMax) * w).toFixed(2))
+        : null;
+      components[key] = {
+        entered,
+        actual,
+        actual_max: perStudentMax || caActualMax[key] || 0,
+        converted,
+        weightage: w,
+      };
+      if (!entered && w > 0) pending.push(key);
+    }
+
+    // IM — only if there's an assignment weightage; scale by per-student max.
+    if (assignmentTotal > 0) {
+      const bucket = rec._im;
+      const entered = bucket.hasEntry && bucket.max > 0;
+      const converted = entered
+        ? Number(((bucket.obt / bucket.max) * assignmentTotal).toFixed(2))
+        : null;
+      components.IM = {
+        entered,
+        actual: entered ? bucket.obt : null,
+        actual_max: bucket.max || imActualMax,
+        converted,
+        weightage: assignmentTotal,
+      };
+      if (!entered) pending.push("IM");
+    }
+
+    // LAB — only if there's a lab weightage; scale by per-student max.
+    // sessions_total is per-student too (how many session records exist for
+    // THIS student), so cross-section merges don't inflate the denominator.
+    if (labTotal > 0) {
+      const bucket = rec._lab;
+      const entered = bucket.sessions_done > 0 && bucket.max > 0;
+      const converted = entered
+        ? Number(((bucket.obt / bucket.max) * labTotal).toFixed(2))
+        : null;
+      components.LAB = {
+        entered,
+        actual: entered ? bucket.obt : null,
+        actual_max: bucket.max,
+        sessions_done: bucket.sessions_done,
+        sessions_total: bucket.sessions_recorded,
+        converted,
+        weightage: labTotal,
+      };
+      if (!entered) pending.push("LAB");
+    }
+
+    const grand_total = Object.values(components).reduce(
+      (sum, c) => sum + (c.converted != null ? c.converted : 0),
+      0
+    );
+
+    return {
+      enrollment_number: s.enrollment_number,
+      student_name: s.student_name,
+      school: s.school || null,
+      program_code: s.program_code || null,
+      components,
+      grand_total: Number(grand_total.toFixed(2)),
+      pending,
+    };
+  });
+
+  // Class stats (only students with at least one component entered count as "filled").
+  const filled = studentsOut.filter((s) => s.pending.length < Object.keys(s.components).length);
+  const nonZeroTotals = studentsOut.filter((s) => Object.values(s.components).some((c) => c.entered)).map((s) => s.grand_total);
+  const n = nonZeroTotals.length;
+  const avg = n ? nonZeroTotals.reduce((a, b) => a + b, 0) / n : 0;
+  const sumSqDev = n ? nonZeroTotals.reduce((sum, t) => sum + Math.pow(t - avg, 2), 0) : 0;
+  // Population SD (÷N) — mathematically correct when the class IS the full population.
+  // Sample SD (÷(N-1)) — matches Excel STDEV / STDEV.S. Report both.
+  const stddevPop = n ? Math.sqrt(sumSqDev / n) : 0;
+  const stddevSample = n > 1 ? Math.sqrt(sumSqDev / (n - 1)) : 0;
+  const stats = {
+    total_count: studentsOut.length,
+    filled_count: filled.length,
+    avg: Number(avg.toFixed(2)),
+    stddev: Number(stddevPop.toFixed(2)),           // population (kept for back-compat)
+    stddev_pop: Number(stddevPop.toFixed(2)),
+    stddev_sample: Number(stddevSample.toFixed(2)),
+    highest: n ? Number(Math.max(...nonZeroTotals).toFixed(2)) : 0,
+    lowest: n ? Number(Math.min(...nonZeroTotals).toFixed(2)) : 0,
+  };
+
+  return {
+    assessment_type: assessmentType,
+    weightages,
+    ca_actual_max: caActualMax,
+    im_actual_max: imActualMax,
+    lab_actual_max: labActualMax,
+    lab_sessions_total: labSessionsTotal,
+    students: studentsOut,
+    stats,
+  };
+}
+
+// GET /marks/consolidated — Faculty/Coordinator/Admin view: full class roster with
+// grand-total-out-of-100 breakdown for one course-slot-faculty.
+// Handles TEL (THEORY + LAB configs merged). Does NOT expand compound slots
+// (faculty allocations are pair-level; compound expansion happens in the student
+// endpoint and the COE report endpoint).
+exports.getConsolidatedReport = async (req, res) => {
+  try {
+    const { slot_year, semester_type, course_code, employee_id, slot_name, venue } = req.query;
+
+    if (!slot_year || !semester_type || !course_code || !employee_id || !slot_name || !venue) {
+      return res.status(400).json({ message: "Required parameters missing (slot_year, semester_type, course_code, employee_id, slot_name, venue)" });
+    }
+
+    // Primary config for the exact slot+venue the faculty clicked.
+    const primaryConfigRes = await db.query(
+      `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+              f.name as faculty_name
+       FROM assessment_config ac
+       JOIN course c ON ac.course_code = c.course_code
+       JOIN faculty f ON ac.employee_id = f.employee_id
+       WHERE ac.slot_year = $1 AND ac.semester_type = $2
+         AND ac.course_code = $3 AND ac.employee_id = $4
+         AND ac.slot_name = $5 AND ac.venue = $6`,
+      [slot_year, semester_type, course_code, employee_id, slot_name, venue]
+    );
+
+    if (!primaryConfigRes.rows.length) {
+      return res.status(404).json({ message: "No assessment configuration found for this course-slot" });
+    }
+
+    const info = primaryConfigRes.rows[0];
+
+    // Roster for this slot — SUMMER-tolerant: student compound registration includes this pair.
+    const studentsRes = await db.query(
+      `SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
+              sc.school_short_name AS school
+       FROM student_registrations sr
+       LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
+       LEFT JOIN program p ON st.program_id = p.program_id
+       LEFT JOIN school sc ON p.school_id = sc.school_id
+       WHERE sr.slot_year = $1 AND sr.semester_type = $2
+         AND sr.course_code = $3 AND sr.faculty_name = $4
+         AND ( sr.slot_name = $5
+            OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                  LIKE '%,' || REPLACE($5, ' ', '') || ',%' )
+         AND sr.venue = $6
+         AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+       ORDER BY sr.enrollment_number`,
+      [slot_year, semester_type, course_code, info.faculty_name, slot_name, venue]
+    );
+
+    const roster = studentsRes.rows;
+
+    // Sibling configs — for TEL courses the same student may be registered in a
+    // separate slot (e.g. theory in E1 / lab in L19+L20) with its own assessment
+    // config. Look up every distinct (slot_name, venue, faculty_name) tuple the
+    // roster students are registered under for this course, then fetch matching
+    // assessment_configs. Dedupe by config.id against the primary.
+    let allConfigs = [...primaryConfigRes.rows];
+    if (roster.length) {
+      const enrollments = roster.map((r) => r.enrollment_number);
+      const siblingRegsRes = await db.query(
+        `SELECT DISTINCT sr.slot_name, sr.venue, sr.faculty_name
+         FROM student_registrations sr
+         WHERE sr.slot_year = $1 AND sr.semester_type = $2
+           AND sr.course_code = $3
+           AND sr.enrollment_number = ANY($4::text[])
+           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)`,
+        [slot_year, semester_type, course_code, enrollments]
+      );
+
+      const siblingTuples = siblingRegsRes.rows.filter(
+        (t) => !(t.slot_name === slot_name && t.venue === venue && t.faculty_name === info.faculty_name)
+      );
+
+      if (siblingTuples.length) {
+        // Query configs for each sibling (slot, venue, faculty) tuple using
+        // multi-arg UNNEST as a table function — the reliable pg way to zip
+        // three parallel arrays into rows and JOIN on them.
+        const slotNames = siblingTuples.map((t) => t.slot_name);
+        const venues = siblingTuples.map((t) => t.venue);
+        const facultyNames = siblingTuples.map((t) => t.faculty_name);
+        const siblingConfigsRes = await db.query(
+          `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+                  f.name as faculty_name
+           FROM assessment_config ac
+           JOIN course c ON ac.course_code = c.course_code
+           JOIN faculty f ON ac.employee_id = f.employee_id
+           JOIN UNNEST($4::text[], $5::text[], $6::text[]) AS t(sn, vn, fn)
+             ON ac.slot_name = t.sn AND ac.venue = t.vn AND f.name = t.fn
+           WHERE ac.slot_year = $1 AND ac.semester_type = $2
+             AND ac.course_code = $3`,
+          [slot_year, semester_type, course_code, slotNames, venues, facultyNames]
+        );
+
+        const seenIds = new Set(allConfigs.map((c) => c.id));
+        for (const cfg of siblingConfigsRes.rows) {
+          if (!seenIds.has(cfg.id)) {
+            allConfigs.push(cfg);
+            seenIds.add(cfg.id);
+          }
+        }
+      }
+    }
+
+    const report = await computeConsolidatedReport(allConfigs, roster);
+
+    // Sibling info surfaced so the UI can inform faculty which slots were merged.
+    const siblingSlots = allConfigs
+      .filter((c) => !(c.slot_name === slot_name && c.venue === venue))
+      .map((c) => ({
+        slot_name: c.slot_name,
+        venue: c.venue,
+        component_type: c.component_type,
+        faculty_name: c.faculty_name,
+      }));
+
+    return res.status(200).json({
+      course: {
+        course_code: info.course_code,
+        course_name: info.course_name,
+        course_type: info.course_type,
+        theory: info.theory,
+        practical: info.practical,
+        credits: info.credits,
+        slot_name,
+        venue,
+        faculty_name: info.faculty_name,
+        employee_id: info.employee_id,
+        slot_year,
+        semester_type,
+      },
+      sibling_slots: siblingSlots,
+      ...report,
+    });
+  } catch (error) {
+    console.error("Get consolidated report error:", error);
+    res.status(500).json({ message: "Server error while fetching consolidated report" });
+  }
+};
+
+// GET /marks/student/my-consolidated?slot_year=&semester_type=&course_code=&slot_name=
+// Student self-view of their consolidated marks for one course.
+// slot_name may be compound (e.g. "L5+L6, L31+L32" for SUMMER labs) — decompose
+// and fetch all matching pair-configs so lab sessions merge across pairs.
+exports.getMyConsolidatedReport = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { slot_year, semester_type, course_code, slot_name } = req.query;
+
+    if (!slot_year || !semester_type || !course_code || !slot_name) {
+      return res.status(400).json({ message: "Required parameters missing (slot_year, semester_type, course_code, slot_name)" });
+    }
+
+    const stuRes = await db.query(
+      `SELECT enrollment_no FROM student WHERE user_id = $1`,
+      [userId]
+    );
+    if (!stuRes.rows.length) {
+      return res.status(404).json({ message: "Student record not found" });
+    }
+    const enrollmentNo = stuRes.rows[0].enrollment_no;
+
+    // Resolve student's registration for this course/slot to identify faculty and venue.
+    const regRes = await db.query(
+      `SELECT sr.faculty_name, sr.venue, sr.slot_name AS reg_slot_name, sr.student_name, sr.program_code,
+              sc.school_short_name AS school
+       FROM student_registrations sr
+       LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
+       LEFT JOIN program p ON st.program_id = p.program_id
+       LEFT JOIN school sc ON p.school_id = sc.school_id
+       WHERE sr.enrollment_number = $1
+         AND sr.slot_year = $2 AND sr.semester_type = $3
+         AND sr.course_code = $4
+         AND ( sr.slot_name = $5
+            OR ',' || REPLACE(sr.slot_name, ' ', '') || ','
+                  LIKE '%,' || REPLACE($5, ' ', '') || ',%' )
+         AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+       LIMIT 1`,
+      [enrollmentNo, slot_year, semester_type, course_code, slot_name]
+    );
+    if (!regRes.rows.length) {
+      return res.status(404).json({ message: "Registration not found for this course-slot" });
+    }
+    const reg = regRes.rows[0];
+
+    // Get ALL of this student's registrations for this course in this semester —
+    // for TEL the theory (E1) and lab (L19+L20) are separate registration rows.
+    const allRegsRes = await db.query(
+      `SELECT DISTINCT sr.slot_name, sr.venue, sr.faculty_name
+       FROM student_registrations sr
+       WHERE sr.enrollment_number = $1
+         AND sr.slot_year = $2 AND sr.semester_type = $3
+         AND sr.course_code = $4
+         AND (sr.withdrawn IS NULL OR sr.withdrawn = false)`,
+      [enrollmentNo, slot_year, semester_type, course_code]
+    );
+
+    // For each registration, decompose the slot_name (may be compound for SUMMER
+    // labs), and collect (slot, venue, faculty) tuples for the config lookup.
+    const slotNames = [];
+    const venues = [];
+    const facultyNames = [];
+    for (const r of allRegsRes.rows) {
+      for (const sn of decomposeSlot(r.slot_name)) {
+        slotNames.push(sn);
+        venues.push(r.venue);
+        facultyNames.push(r.faculty_name);
+      }
+    }
+
+    const configRes = await db.query(
+      `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+              f.name as faculty_name
+       FROM assessment_config ac
+       JOIN course c ON ac.course_code = c.course_code
+       JOIN faculty f ON ac.employee_id = f.employee_id
+       JOIN UNNEST($4::text[], $5::text[], $6::text[]) AS t(sn, vn, fn)
+         ON ac.slot_name = t.sn AND ac.venue = t.vn AND f.name = t.fn
+       WHERE ac.slot_year = $1 AND ac.semester_type = $2
+         AND ac.course_code = $3`,
+      [slot_year, semester_type, course_code, slotNames, venues, facultyNames]
+    );
+
+    if (!configRes.rows.length) {
+      return res.status(404).json({ message: "No assessment configuration found" });
+    }
+
+    const info = configRes.rows[0];
+    const students = [{
+      enrollment_number: enrollmentNo,
+      student_name: reg.student_name,
+      program_code: reg.program_code,
+      school: reg.school,
+    }];
+
+    const report = await computeConsolidatedReport(configRes.rows, students);
+
+    return res.status(200).json({
+      course: {
+        course_code: info.course_code,
+        course_name: info.course_name,
+        course_type: info.course_type,
+        theory: info.theory,
+        practical: info.practical,
+        credits: info.credits,
+        slot_name: reg.reg_slot_name,
+        venue: reg.venue,
+        faculty_name: info.faculty_name,
+        slot_year,
+        semester_type,
+      },
+      ...report,
+    });
+  } catch (error) {
+    console.error("Get my consolidated report error:", error);
+    res.status(500).json({ message: "Server error while fetching consolidated report" });
+  }
+};
+
+// Export the shared helper so reports.controller.js can reuse the exact math for XLSX.
+exports._computeConsolidatedReport = computeConsolidatedReport;
+exports._decomposeSlot = decomposeSlot;
+
 // Reset marks for a specific component (delete marks when resetting config)
 exports.resetMarks = async (req, res) => {
   try {

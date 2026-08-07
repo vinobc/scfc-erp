@@ -1665,17 +1665,17 @@ async function viewMarksSummary() {
   `;
 
   try {
-    const response = await fetch(
-      `${window.API_URL}/marks/summary?slot_year=${slot_year}&semester_type=${semester_type}&course_code=${selectedCourse.course_code}&employee_id=${selectedCourse.employee_id}&slot_name=${encodeURIComponent(selectedCourse.slot_name)}&venue=${encodeURIComponent(selectedCourse.venue)}`,
-      { headers: { "x-access-token": localStorage.getItem("token") } }
-    );
+    const qs = `slot_year=${slot_year}&semester_type=${semester_type}&course_code=${selectedCourse.course_code}&employee_id=${selectedCourse.employee_id}&slot_name=${encodeURIComponent(selectedCourse.slot_name)}&venue=${encodeURIComponent(selectedCourse.venue)}`;
+    const headers = { "x-access-token": localStorage.getItem("token") };
 
-    if (!response.ok) {
+    const summaryRes = await fetch(`${window.API_URL}/marks/summary?${qs}`, { headers });
+    if (!summaryRes.ok) {
       throw new Error("Failed to load summary");
     }
-
-    const data = await response.json();
-    renderMarksSummary(data);
+    const summaryData = await summaryRes.json();
+    // Consolidated Marks & Grade Report has moved to the "View Grades" sidebar
+    // item; View Summary now only shows raw per-component marks.
+    renderMarksSummary(summaryData);
   } catch (error) {
     console.error("Error loading summary:", error);
     configContent.innerHTML = `
@@ -1687,7 +1687,180 @@ async function viewMarksSummary() {
   }
 }
 
-// Render marks summary
+// Render the Consolidated Marks & Grade Report section (faculty view).
+// Returns HTML string; the caller stitches it above the existing raw summary.
+function renderConsolidatedFacultyPanel(data) {
+  if (!data || !data.students) return "";
+
+  const { course, weightages, ca_actual_max, stats, students } = data;
+  const caKeys = Object.keys(weightages).filter((k) => k.startsWith("CA"))
+    .sort((a, b) => parseInt(a.slice(2)) - parseInt(b.slice(2)));
+  const hasIM = (weightages.IM || 0) > 0;
+  const hasLAB = (weightages.LAB || 0) > 0;
+  const isPureLab = !caKeys.length && !hasIM && hasLAB;
+
+  // Header row with class stats. Standard Deviation shown is the population SD
+  // (÷N) — mathematically correct when the class IS the full population.
+  const sdPop = stats.stddev_pop != null ? stats.stddev_pop : stats.stddev;
+  const statsHtml = `
+    <div class="d-flex flex-wrap gap-3 small text-muted mb-2">
+      <span><strong>Grading Type:</strong> [—]</span>
+      <span><strong>Class Strength:</strong> ${stats.total_count}</span>
+      <span><strong>Class Average:</strong> ${stats.avg}</span>
+      <span><strong>Class Standard Deviation:</strong> ${sdPop}</span>
+    </div>
+  `;
+
+  // Table header — pure-lab uses collapsed layout; others use per-CA sub-columns
+  let theadHtml;
+  if (isPureLab) {
+    theadHtml = `
+      <tr>
+        <th rowspan="2">Enrollment</th>
+        <th rowspan="2">Name</th>
+        <th rowspan="2">Sessions Done</th>
+        <th rowspan="2">Actual / Max</th>
+        <th rowspan="2">Grand Total <br>(100)</th>
+        <th rowspan="2">Grade</th>
+      </tr>
+      <tr></tr>
+    `;
+  } else {
+    const caHeaders = caKeys.map((k) => `<th colspan="2" class="text-center">${k}</th>`).join("");
+    const caSubHeaders = caKeys.map((k) => {
+      const actMax = ca_actual_max[k] || 0;
+      const conv = weightages[k];
+      return `<th class="text-center">Actual<br>(${actMax})</th><th class="text-center">Converted<br>(${conv})</th>`;
+    }).join("");
+    const imHeader = hasIM ? `<th rowspan="2">IM<br>(${weightages.IM})</th>` : "";
+    const labHeader = hasLAB ? `<th rowspan="2">Lab<br>(${weightages.LAB})</th>` : "";
+    theadHtml = `
+      <tr>
+        <th rowspan="2">Enrollment</th>
+        <th rowspan="2">Name</th>
+        ${caHeaders}
+        ${imHeader}
+        ${labHeader}
+        <th rowspan="2">Grand Total <br>(100)</th>
+        <th rowspan="2">Grade</th>
+      </tr>
+      <tr>${caSubHeaders}</tr>
+    `;
+  }
+
+  // Body rows
+  const rowsHtml = students.map((s) => {
+    const cellDash = `<td class="text-muted text-center">–</td>`;
+
+    let cells;
+    if (isPureLab) {
+      const lab = s.components.LAB;
+      const sessionsCell = lab ? `${lab.sessions_done}/${lab.sessions_total}` : "0/0";
+      const actualCell = lab && lab.entered ? `${lab.actual}/${lab.actual_max}` : "–";
+      cells = `
+        <td class="text-center">${sessionsCell}</td>
+        <td class="text-center">${actualCell}</td>
+      `;
+    } else {
+      const caCells = caKeys.map((k) => {
+        const c = s.components[k];
+        if (!c || !c.entered) return cellDash + cellDash;
+        return `<td class="text-center">${c.actual}</td><td class="text-center fw-bold">${c.converted.toFixed(2)}</td>`;
+      }).join("");
+      const imCell = hasIM
+        ? (s.components.IM && s.components.IM.entered
+            ? `<td class="text-center fw-bold">${s.components.IM.converted.toFixed(2)}</td>`
+            : cellDash)
+        : "";
+      const labCell = hasLAB
+        ? (s.components.LAB && s.components.LAB.entered
+            ? `<td class="text-center fw-bold">${s.components.LAB.converted.toFixed(2)}</td>`
+            : cellDash)
+        : "";
+      cells = caCells + imCell + labCell;
+    }
+
+    const pending = (s.pending || []).length;
+    const totalCell = `<td class="text-center fw-bold">${s.grand_total.toFixed(2)}${pending ? ` <span class="badge bg-warning text-dark ms-1" title="Pending: ${s.pending.join(", ")}">⚠${pending}</span>` : ''}</td>`;
+    const gradeCell = `<td class="text-center text-muted">[—]</td>`;
+
+    return `<tr>
+      <td><code>${s.enrollment_number}</code></td>
+      <td>${s.student_name}</td>
+      ${cells}
+      ${totalCell}
+      ${gradeCell}
+    </tr>`;
+  }).join("");
+
+  return `
+    <div class="card mb-3 border-success">
+      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-award me-2"></i>Consolidated Marks &amp; Grade Report — ${course.course_code}
+          <span class="badge bg-light text-dark ms-2">${course.slot_name}</span>
+          <span class="badge bg-light text-dark ms-1">${course.venue}</span>
+          <span class="badge bg-light text-dark ms-1">${data.assessment_type || ""}</span>
+        </h6>
+        <button class="btn btn-light btn-sm" onclick="downloadConsolidatedReport()">
+          <i class="fas fa-file-excel me-1"></i>Export XLSX
+        </button>
+      </div>
+      <div class="card-body">
+        ${statsHtml}
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm align-middle">
+            <thead class="table-success">${theadHtml}</thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+        <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Actual = raw marks conducted; Converted = scaled to weightage. Grand Total is out of 100.</small>
+      </div>
+    </div>
+  `;
+}
+
+// Download the Consolidated Marks & Grade Report XLSX for the current course-slot.
+async function downloadConsolidatedReport() {
+  const semesterSelect = document.getElementById("marks-semester-select");
+  const [slot_year, semester_type] = semesterSelect.value.split("|");
+  const qs = new URLSearchParams({
+    slot_year,
+    semester_type,
+    course_code: selectedCourse.course_code,
+    employee_id: selectedCourse.employee_id,
+    slot_name: selectedCourse.slot_name,
+    venue: selectedCourse.venue,
+  }).toString();
+
+  try {
+    const res = await fetch(`${window.API_URL}/reports/consolidated?${qs}`, {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || "Failed to download report");
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    let filename = "consolidated_report.xlsx";
+    const match = cd.match(/filename="?(.+?)"?$/);
+    if (match) filename = match[1];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("Download failed: " + e.message);
+  }
+}
+window.downloadConsolidatedReport = downloadConsolidatedReport;
+
+// Render marks summary — raw per-component only. The Consolidated Marks &
+// Grade Report has moved to the dedicated "View Grades" sidebar item.
 function renderMarksSummary(data) {
   const configContent = document.getElementById("config-entry-content");
   const students = data.students;
@@ -1780,7 +1953,7 @@ function renderMarksSummary(data) {
   configContent.innerHTML = `
     <div class="card">
       <div class="card-header">
-        <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Marks Summary - ${selectedCourse.course_code}
+        <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Component-wise Raw Marks - ${selectedCourse.course_code}
           <span class="badge bg-info ms-2">${selectedCourse.slot_name}</span>
           <span class="badge bg-secondary ms-1">${selectedCourse.venue}</span>
         </h6>
@@ -2139,18 +2312,22 @@ async function showCourseMarks(courseCode, slotName, venue, slotYear, semesterTy
   marksDetail.style.display = "block";
 
   try {
-    // Fetch marks for this specific course
-    const response = await fetch(
-      `${window.API_URL}/marks/student/my-marks?slot_year=${slotYear}&semester_type=${semesterType}&course_code=${courseCode}&slot_name=${encodeURIComponent(slotName)}`,
-      { headers: { "x-access-token": localStorage.getItem("token") } }
-    );
+    // Fetch existing per-component marks AND the new consolidated view in parallel.
+    const qs = `slot_year=${slotYear}&semester_type=${semesterType}&course_code=${courseCode}&slot_name=${encodeURIComponent(slotName)}`;
+    const headers = { "x-access-token": localStorage.getItem("token") };
 
-    if (!response.ok) {
+    const [marksRes, consolidatedRes] = await Promise.all([
+      fetch(`${window.API_URL}/marks/student/my-marks?${qs}`, { headers }),
+      fetch(`${window.API_URL}/marks/student/my-consolidated?${qs}`, { headers }),
+    ]);
+
+    if (!marksRes.ok) {
       throw new Error("Failed to load marks");
     }
 
-    const data = await response.json();
-    renderCourseMarksDetail(data, courseCode, slotName, slotYear, semesterType);
+    const data = await marksRes.json();
+    const consolidatedData = consolidatedRes.ok ? await consolidatedRes.json() : null;
+    renderCourseMarksDetail(data, courseCode, slotName, slotYear, semesterType, consolidatedData);
   } catch (error) {
     console.error("Error loading course marks:", error);
     marksDetail.innerHTML = `
@@ -2163,8 +2340,121 @@ async function showCourseMarks(courseCode, slotName, venue, slotYear, semesterTy
   }
 }
 
+// Render the Consolidated Marks & Grade Report section (student view — vertical
+// layout, one row per component, personal only).
+function renderConsolidatedStudentPanel(data) {
+  if (!data || !data.students || !data.students.length) return "";
+
+  const { course, weightages } = data;
+  const student = data.students[0];
+  const caKeys = Object.keys(weightages).filter((k) => k.startsWith("CA"))
+    .sort((a, b) => parseInt(a.slice(2)) - parseInt(b.slice(2)));
+  const hasIM = (weightages.IM || 0) > 0;
+  const hasLAB = (weightages.LAB || 0) > 0;
+
+  const cellDash = `<td class="text-muted text-center">–</td>`;
+
+  const componentRows = [];
+  for (const k of caKeys) {
+    const c = student.components[k];
+    if (!c) continue;
+    componentRows.push({
+      name: k,
+      actual: c.entered ? c.actual : null,
+      converted: c.entered ? c.converted : null,
+      actual_max: c.actual_max,
+      weightage: c.weightage,
+      pending: !c.entered,
+    });
+  }
+  if (hasIM) {
+    const c = student.components.IM;
+    componentRows.push({
+      name: "Internal Marks (IM)",
+      actual: c && c.entered ? c.actual : null,
+      converted: c && c.entered ? c.converted : null,
+      actual_max: c ? c.actual_max : 0,
+      weightage: c ? c.weightage : weightages.IM,
+      pending: !(c && c.entered),
+    });
+  }
+  if (hasLAB) {
+    const c = student.components.LAB;
+    componentRows.push({
+      name: `Lab Evaluation${c && c.sessions_total ? ` (${c.sessions_done}/${c.sessions_total} sessions)` : ""}`,
+      actual: c && c.entered ? c.actual : null,
+      converted: c && c.entered ? c.converted : null,
+      actual_max: c ? c.actual_max : 0,
+      weightage: c ? c.weightage : weightages.LAB,
+      pending: !(c && c.entered),
+    });
+  }
+
+  const rowsHtml = componentRows.map((r) => {
+    const pendingBadge = r.pending ? ` <span class="badge bg-warning text-dark ms-1">Pending</span>` : "";
+    return `
+      <tr>
+        <td>${r.name}${pendingBadge}</td>
+        ${r.actual != null ? `<td class="text-center">${r.actual}</td>` : cellDash}
+        ${r.converted != null ? `<td class="text-center fw-bold">${r.converted.toFixed(2)}</td>` : cellDash}
+        <td class="text-center text-muted">${r.weightage}</td>
+      </tr>`;
+  }).join("");
+
+  const enteredCount = componentRows.filter((r) => !r.pending).length;
+  const totalComponents = componentRows.length;
+  const completeness = totalComponents
+    ? (enteredCount === totalComponents ? `All ${totalComponents} components entered ✓` : `${enteredCount} of ${totalComponents} entered`)
+    : "";
+
+  return `
+    <div class="card mb-3 border-success">
+      <div class="card-header bg-success text-white">
+        <h6 class="mb-0"><i class="fas fa-award me-2"></i>Consolidated Marks &amp; Grade Report</h6>
+      </div>
+      <div class="card-body">
+        <div class="small text-muted mb-2">
+          <strong>Course:</strong> ${course.course_code} — ${course.course_name}
+          &nbsp;|&nbsp; <strong>Slot:</strong> ${course.slot_name}
+          &nbsp;|&nbsp; <strong>Faculty:</strong> ${course.faculty_name || "—"}
+          &nbsp;|&nbsp; <strong>Type:</strong> ${data.assessment_type || course.course_type || ""}
+          &nbsp;|&nbsp; <strong>Grading Type:</strong> [—]
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm align-middle">
+            <thead class="table-success">
+              <tr>
+                <th>Component</th>
+                <th class="text-center">Actual</th>
+                <th class="text-center">Converted</th>
+                <th class="text-center">Weightage /Max</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot>
+              <tr class="table-success">
+                <td class="fw-bold">GRAND TOTAL</td>
+                <td></td>
+                <td class="text-center fw-bold fs-5">${student.grand_total.toFixed(2)}</td>
+                <td class="text-center fw-bold">100</td>
+              </tr>
+              <tr>
+                <td class="fw-bold">GRADE</td>
+                <td></td>
+                <td class="text-center text-muted">[—]</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <small class="text-muted"><i class="fas fa-info-circle me-1"></i>${completeness}. Grand Total is out of 100.</small>
+      </div>
+    </div>
+  `;
+}
+
 // Render marks detail for a course
-function renderCourseMarksDetail(data, courseCode, slotName, slotYear, semesterType) {
+function renderCourseMarksDetail(data, courseCode, slotName, slotYear, semesterType, consolidatedData) {
   const marksDetail = document.getElementById("student-marks-detail");
 
   let html = `
@@ -2173,6 +2463,7 @@ function renderCourseMarksDetail(data, courseCode, slotName, slotYear, semesterT
         <i class="fas fa-arrow-left"></i> Back to Courses
       </button>
     </div>
+    ${renderConsolidatedStudentPanel(consolidatedData)}
   `;
 
   // Find the course in the data
@@ -2271,3 +2562,6 @@ window.loadStudentSemesters = loadStudentSemesters;
 window.loadStudentCoursesForMarks = loadStudentCoursesForMarks;
 window.showCourseMarks = showCourseMarks;
 window.backToCoursesList = backToCoursesList;
+
+// Exposed for the View Grades page (grades.js) to reuse the same renderer.
+window.renderConsolidatedFacultyPanel = renderConsolidatedFacultyPanel;

@@ -60,6 +60,15 @@ router.get(
   reportsController.getStudentMarksReport
 );
 
+// Download Consolidated Marks & Grade Report (per course-slot XLSX)
+router.get(
+  "/consolidated",
+  verifyToken,
+  isAdminOrFaculty,
+  attachHoiSchools,
+  reportsController.getConsolidatedReportXlsx
+);
+
 // Get courses for attendance report
 router.get(
   "/student-attendance/courses",

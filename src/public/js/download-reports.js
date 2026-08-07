@@ -279,10 +279,12 @@ function displayDownloadReportsInterface() {
             </div>
           </div>
 
-          <!-- Student Marks Report — unified section with optional scope toggle -->
+          <!-- Student Marks Report — hidden for COE (their own report section will
+               be defined later); still shown to faculty/coordinator/admin/HoI. -->
           ${(() => {
+            if (currentUserRole === "coe") return "";
             const showMyCourses = currentUserRole === "faculty" || currentUserRole === "timetable_coordinator";
-            const showMySchool = currentUserRole === "admin" || currentUserRole === "coe" || currentUserIsHoi;
+            const showMySchool = currentUserRole === "admin" || currentUserIsHoi;
             if (!showMyCourses && !showMySchool) return "";
             const showToggle = showMyCourses && showMySchool;
             const defaultScope = showMySchool ? "my-school" : "my-courses";
@@ -360,9 +362,12 @@ function displayDownloadReportsInterface() {
                   </div>
                 </div>
                 <div class="row">
-                  <div class="col-md-6">
+                  <div class="col-md-6 d-flex gap-2">
                     <button type="button" class="btn btn-success" onclick="downloadMarksReport()">
                       <i class="fas fa-file-excel me-2"></i>Download Marks Report (.xlsx)
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="downloadConsolidatedFromFilters()" title="One workbook with all components + grand total per student">
+                      <i class="fas fa-award me-2"></i>Download Consolidated Marks &amp; Grade Report
                     </button>
                   </div>
                 </div>
@@ -1596,9 +1601,14 @@ async function loadMarksSummary() {
             <i class="fas fa-file-excel me-1"></i>Download Status Report
           </button>
         </div>
-        <button class="btn btn-success" onclick="downloadSelectedMarks()">
-          <i class="fas fa-download me-2"></i>Download Selected Marks
-        </button>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary" onclick="downloadSelectedConsolidated()" title="One workbook, one sheet per selected offering, each with Consolidated Marks & Grade Report">
+            <i class="fas fa-award me-2"></i>Download Selected Consolidated
+          </button>
+          <button class="btn btn-success" onclick="downloadSelectedMarks()">
+            <i class="fas fa-download me-2"></i>Download Selected Marks
+          </button>
+        </div>
       </div>
 
       <!-- Table -->
@@ -1649,9 +1659,14 @@ async function loadMarksSummary() {
           <td>${enteredCell}</td>
           <td>${statusBadge}</td>
           <td>
-            ${canDownload ? `<button class="btn btn-sm btn-outline-success" onclick="downloadSingleMarks(${idx})" title="Download">
-              <i class="fas fa-download"></i>
-            </button>` : `<button class="btn btn-sm btn-outline-secondary" disabled title="Not configured">
+            ${canDownload ? `
+              <button class="btn btn-sm btn-outline-success me-1" onclick="downloadSingleMarks(${idx})" title="Download per-component report">
+                <i class="fas fa-download"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-primary" onclick="downloadSingleConsolidated(${idx})" title="Download Consolidated Marks & Grade Report">
+                <i class="fas fa-award"></i>
+              </button>
+            ` : `<button class="btn btn-sm btn-outline-secondary" disabled title="Not configured">
               <i class="fas fa-download"></i>
             </button>`}
           </td>
@@ -1759,6 +1774,171 @@ async function downloadSingleMarks(idx) {
   const component = document.getElementById("admin-marks-component").value;
 
   await doMarksDownload(year, semester, component, row.course_code, row.slot_name, row.employee_id);
+}
+
+// Download Consolidated Marks & Grade Report for one (course, slot, faculty).
+// Component-independent — the report always covers all components for that
+// offering. Uses the same row data as the per-component download.
+async function downloadSingleConsolidated(idx) {
+  const row = marksSummaryData[idx];
+  if (!row) return;
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+  await doConsolidatedDownload(year, semester, row.course_code, row.slot_name, row.employee_id);
+}
+
+// Bulk consolidated download — one XLSX with one sheet per selected offering.
+// Uses the same "items=course:slot:emp,..." format as the per-component bulk
+// download, but the backend ignores the component (consolidated is course-wide).
+async function downloadSelectedConsolidated() {
+  const statusDiv = document.getElementById("marks-download-status");
+  const checkboxes = Array.from(document.querySelectorAll(".summary-row-check:checked"))
+    .filter((cb) => cb.closest("tr").style.display !== "none");
+  if (checkboxes.length === 0) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select at least one row to download.
+      </div>
+    `;
+    return;
+  }
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+
+  if (checkboxes.length === 1) {
+    const row = marksSummaryData[parseInt(checkboxes[0].dataset.idx)];
+    await doConsolidatedDownload(year, semester, row.course_code, row.slot_name, row.employee_id);
+    return;
+  }
+
+  if (statusDiv) statusDiv.innerHTML = `
+    <div class="alert alert-info">
+      <i class="fas fa-spinner fa-spin me-2"></i>Preparing Consolidated Marks & Grade Report for ${checkboxes.length} selected offerings...
+    </div>
+  `;
+
+  const items = checkboxes.map((cb) => {
+    const row = marksSummaryData[parseInt(cb.dataset.idx)];
+    return `${row.course_code}:${row.slot_name}:${row.employee_id}`;
+  }).join(",");
+
+  try {
+    const params = new URLSearchParams({ slot_year: year, semester_type: semester, items });
+    const res = await fetch(`${window.API_URL}/reports/consolidated?${params}`, {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || "Failed to download");
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    let filename = "consolidated_bulk.xlsx";
+    const m = cd.match(/filename="?(.+?)"?$/);
+    if (m) filename = m[1];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Consolidated report downloaded (${checkboxes.length} sheets).
+      </div>
+    `;
+  } catch (e) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${e.message}
+      </div>
+    `;
+  }
+}
+
+// Shared XLSX-download helper for the Consolidated report.
+async function doConsolidatedDownload(slot_year, semester_type, course_code, slot_name, employee_id) {
+  const statusDiv = document.getElementById("marks-download-status");
+  if (statusDiv) statusDiv.innerHTML = `
+    <div class="alert alert-info">
+      <i class="fas fa-spinner fa-spin me-2"></i>Preparing Consolidated Marks & Grade Report...
+    </div>
+  `;
+  try {
+    const params = new URLSearchParams({ slot_year, semester_type, course_code, slot_name, employee_id: String(employee_id) });
+    const res = await fetch(`${window.API_URL}/reports/consolidated?${params}`, {
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || "Failed to download");
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    let filename = "consolidated_report.xlsx";
+    const m = cd.match(/filename="?(.+?)"?$/);
+    if (m) filename = m[1];
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>Consolidated report downloaded.
+      </div>
+    `;
+  } catch (e) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-exclamation-circle me-2"></i>Error: ${e.message}
+      </div>
+    `;
+  }
+}
+
+// Called by the faculty/coordinator "Download Consolidated" button in the
+// my-courses filter view. Resolves employee_id from marksReportCoursesCache
+// which is populated when year/semester are chosen (each entry has
+// course_code, slot_name, employee_id, faculty_name).
+async function downloadConsolidatedFromFilters() {
+  const year = document.getElementById("marks-filter-year").value;
+  const semester = document.getElementById("marks-filter-semester").value;
+  const course = document.getElementById("marks-filter-course").value;
+  const slot = document.getElementById("marks-filter-slot").value;
+  const facSelect = document.getElementById("marks-filter-faculty");
+  const explicitEmpId = facSelect ? facSelect.value : "";
+  const statusDiv = document.getElementById("marks-download-status");
+
+  if (!year || !semester || !course || !slot) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>Please select Academic Year, Semester, Course, and Slot.
+      </div>
+    `;
+    return;
+  }
+
+  let empId = explicitEmpId;
+  if (!empId) {
+    // For faculty/coordinator, marksReportCoursesCache is already scoped to
+    // their own courses server-side, so any entry matching the course code has
+    // their employee_id. (For admin, empId is explicit via the Faculty dropdown.)
+    const match = marksReportCoursesCache.find((c) => c.course_code === course);
+    if (match) empId = match.employee_id;
+  }
+  if (!empId) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-warning">Could not resolve faculty for this course. Try re-selecting the semester.</div>
+    `;
+    return;
+  }
+  await doConsolidatedDownload(year, semester, course, slot, empId);
 }
 
 // Download marks for all selected rows
@@ -2405,6 +2585,9 @@ window.filterSummaryByStatus = filterSummaryByStatus;
 window.downloadStatusReport = downloadStatusReport;
 window.toggleAllSummaryRows = toggleAllSummaryRows;
 window.downloadSingleMarks = downloadSingleMarks;
+window.downloadSingleConsolidated = downloadSingleConsolidated;
+window.downloadConsolidatedFromFilters = downloadConsolidatedFromFilters;
+window.downloadSelectedConsolidated = downloadSelectedConsolidated;
 window.downloadSelectedMarks = downloadSelectedMarks;
 window.onAttYearSemesterChange = onAttYearSemesterChange;
 window.onAttCourseChange = onAttCourseChange;

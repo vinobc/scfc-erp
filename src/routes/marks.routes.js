@@ -26,6 +26,15 @@ router.get("/students", isFacultyOrCoordinator, marksController.getEnrolledStude
 router.get("/entry", isFacultyOrCoordinator, marksController.getMarksEntryData);
 router.post("/entry", isFacultyOrCoordinator, marksController.saveMarks);
 router.get("/summary", isFacultyOrCoordinator, marksController.getMarksSummary);
+// Consolidated is also read-access for COE (used by the View Grades page)
+router.get(
+  "/consolidated",
+  (req, res, next) => {
+    if (["faculty", "timetable_coordinator", "admin", "coe"].includes(req.userRole)) return next();
+    return res.status(403).json({ message: "Require Faculty, Coordinator, Admin, or CoE Role" });
+  },
+  marksController.getConsolidatedReport
+);
 router.delete("/reset-marks", isFacultyOrCoordinator, marksController.resetMarks);
 
 // ================== ADMIN ROUTES ==================
@@ -39,5 +48,6 @@ router.post("/admin/unlock", isAdmin, marksController.unlockComponent);
 // ================== STUDENT ROUTES ==================
 // Student marks view
 router.get("/student/my-marks", isStudent, marksController.getMyMarks);
+router.get("/student/my-consolidated", isStudent, marksController.getMyConsolidatedReport);
 
 module.exports = router;

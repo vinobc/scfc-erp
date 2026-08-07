@@ -186,6 +186,7 @@ function updateNavigationByRole(userRole) {
     projectAllocation: document.getElementById("project-allocation-link"),
     attendance: document.getElementById("attendance-link"),
     marks: document.getElementById("marks-link"),
+    viewGrades: document.getElementById("view-grades-link"),
     od: document.getElementById("od-link"),
     systemConfig: document.getElementById("system-config-link"),
     downloadReports: document.getElementById("download-reports-link"),
@@ -213,8 +214,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "timetable_coordinator":
-      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, OD, Marks, Download Reports, Change Password, Logout
-      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.od, navItems.marks, navItems.downloadReports, navItems.changePassword, navItems.logout].forEach(
+      // Coordinator sees: Dashboard, Courses (view only), Students, TimeTable, Project Allocation, Attendance, OD, Marks, View Grades, Download Reports, Change Password, Logout
+      [navItems.dashboard, navItems.courses, navItems.students, navItems.timetable, navItems.projectAllocation, navItems.attendance, navItems.od, navItems.marks, navItems.viewGrades, navItems.downloadReports, navItems.changePassword, navItems.logout].forEach(
         (item) => {
           if (item && item.parentElement) {
             item.parentElement.style.display = "block";
@@ -230,8 +231,8 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "faculty":
-      // Faculty sees: Dashboard, Courses (view only), Attendance, OD, Marks, Download Reports, TimeTable (VIEW ONLY), Change Password, Logout
-      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.od, navItems.marks, navItems.downloadReports, navItems.changePassword, navItems.logout].forEach((item) => {
+      // Faculty sees: Dashboard, Courses (view only), Attendance, OD, Marks, View Grades, Download Reports, TimeTable (VIEW ONLY), Change Password, Logout
+      [navItems.dashboard, navItems.courses, navItems.attendance, navItems.od, navItems.marks, navItems.viewGrades, navItems.downloadReports, navItems.changePassword, navItems.logout].forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
         }
@@ -562,6 +563,10 @@ function setupNavigation() {
             window.initializeOD();
           } else if (typeof initializeOD === "function") {
             initializeOD();
+          }
+        } else if (targetPage === "view-grades-page") {
+          if (typeof window.initializeViewGrades === "function") {
+            window.initializeViewGrades();
           }
         }
         // Add other page data loading as needed
