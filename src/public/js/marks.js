@@ -628,10 +628,15 @@ function renderCAConfigForm(caType, caNumber, componentType, existingConfig) {
     caData = existingConfig.config_json.cas.find((c) => c.number === caNumber);
   }
 
-  // Pre-populate form fields with existing data or defaults
+  // Pre-populate form fields with existing data or defaults.
+  // Max marks is fixed at 50 and duration is fixed by program level (UG=90,
+  // PG=120). Faculty cannot edit these — they're locked policy inputs, not
+  // per-CA choices. RESEARCH (rare / not typically configured with CAs)
+  // defaults to UG timing.
   const dateValue = caData?.date || "";
-  const maxMarksValue = caData?.maxMarks || 50;
-  const durationValue = caData?.duration || "";
+  const FIXED_MAX_MARKS = 50;
+  const programLevel = deriveProgramLevelFromCode(selectedCourse.course_code);
+  const fixedDuration = programLevel === "PG" ? 120 : 90;
 
   configContent.innerHTML = `
     <div class="card">
@@ -647,11 +652,11 @@ function renderCAConfigForm(caType, caNumber, componentType, existingConfig) {
             </div>
             <div class="col-md-4">
               <label class="form-label">Max Marks (conducted for)</label>
-              <input type="number" class="form-control" id="ca-max-marks" value="${maxMarksValue}" min="1" required>
+              <input type="number" class="form-control bg-light" id="ca-max-marks" value="${FIXED_MAX_MARKS}" readonly>
             </div>
             <div class="col-md-4">
               <label class="form-label">Duration (mins)</label>
-              <input type="number" class="form-control" id="ca-duration" value="${durationValue}" placeholder="60" min="1">
+              <input type="number" class="form-control bg-light" id="ca-duration" value="${fixedDuration}" readonly>
             </div>
           </div>
 
@@ -812,8 +817,12 @@ async function saveCAConfig(caType, caNumber, componentType) {
   const [slot_year, semester_type] = semesterSelect.value.split("|");
 
   const date = document.getElementById("ca-date").value;
-  const maxMarks = parseInt(document.getElementById("ca-max-marks").value);
-  const duration = document.getElementById("ca-duration").value;
+  // Max marks and duration are policy-fixed (see renderCAConfigForm): 50 marks,
+  // 90 min for UG, 120 min for PG. Derive here rather than reading DOM so a
+  // client-side tamper can't sneak past.
+  const maxMarks = 50;
+  const programLevel = deriveProgramLevelFromCode(selectedCourse.course_code);
+  const duration = programLevel === "PG" ? 120 : 90;
 
   // Collect questions
   const questions = [];
@@ -1897,9 +1906,11 @@ function renderMarksSummary(data) {
     return numA - numB;
   });
 
-  // Build component header labels (short format for compact columns)
+  // Build component header labels (short format for compact columns).
+  // Component keys have shape "TYPE_NUMBER" — for CAs the number is always 1
+  // (there's only one CA1 exam), so drop it: "CA1_1" → "CA1".
   const getComponentLabel = (key) => {
-    if (key.startsWith("CA")) return key; // CA1, CA2, CA3
+    if (key.startsWith("CA")) return key.split("_")[0]; // CA1, CA2, CA3
     if (key.startsWith("ASSIGNMENT_")) {
       const num = key.split("_")[1];
       return `Assign ${num}`;
@@ -1911,7 +1922,9 @@ function renderMarksSummary(data) {
     return key;
   };
 
-  // Build header row (with date tooltip for lab sessions)
+  // Build header row (with date tooltip for lab sessions).
+  // No Total / % columns — the Consolidated Marks & Grade Report (View Grades)
+  // is the source of truth for aggregate scaled totals.
   let headerRow = `<th>Enrollment</th><th>Name</th>`;
   sortedKeys.forEach((key) => {
     const label = getComponentLabel(key);
@@ -1920,7 +1933,6 @@ function renderMarksSummary(data) {
       ? `<th title="${tooltip}">${label}</th>`
       : `<th>${label}</th>`;
   });
-  headerRow += `<th>Total</th><th>% (so far)</th>`;
 
   // Build student rows
   let studentRows = students
@@ -1940,11 +1952,6 @@ function renderMarksSummary(data) {
         }
       });
 
-      // Add total and percentage
-      const percentage =
-        student.total_max > 0 ? ((student.total_obtained / student.total_max) * 100).toFixed(1) : "0.0";
-      row += `<td class="fw-bold">${student.total_obtained.toFixed(1)}</td>`;
-      row += `<td>${percentage}%</td>`;
       row += `</tr>`;
       return row;
     })

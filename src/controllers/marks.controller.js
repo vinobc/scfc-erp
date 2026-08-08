@@ -395,6 +395,26 @@ exports.saveAssessmentConfig = async (req, res) => {
       courseResult.rows[0].practical
     );
 
+    // Policy guard: every CA is conducted for exactly 50 marks; duration is
+    // fixed by program level (UG=90 min, PG=120 min). Reject any config that
+    // tries to sneak in different values. Applies only when the config carries
+    // CA entries (LAB-only configs have no cas array).
+    const programLevel = deriveProgramLevel(course_code);
+    const requiredDuration = programLevel === "PG" ? 120 : 90;
+    const casToCheck = Array.isArray(config_json?.cas) ? config_json.cas : [];
+    for (const ca of casToCheck) {
+      if (Number(ca.maxMarks) !== 50) {
+        return res.status(400).json({
+          message: `CA${ca.number} maxMarks must be 50 (received ${ca.maxMarks}).`,
+        });
+      }
+      if (Number(ca.duration) !== requiredDuration) {
+        return res.status(400).json({
+          message: `CA${ca.number} duration must be ${requiredDuration} minutes for ${programLevel} courses (received ${ca.duration}).`,
+        });
+      }
+    }
+
     // Check if config already exists (to detect question structure changes)
     const existingConfig = await db.query(
       `SELECT id, config_json FROM assessment_config
