@@ -204,6 +204,45 @@ async function renderAttendanceLockControls(slot_year, semester_type) {
       `;
     };
 
+    // Date-range locks: fetch active ranges for this semester
+    let rangeRowsHtml = "";
+    try {
+      const rr = await fetch(
+        `${window.API_URL}/attendance/admin/lock-ranges?slot_year=${slot_year}&semester_type=${semester_type}`,
+        { headers: { "x-access-token": localStorage.getItem("token") } }
+      );
+      if (rr.ok) {
+        const ranges = await rr.json();
+        if (ranges.length === 0) {
+          rangeRowsHtml = `<tr><td colspan="5" class="text-center text-muted small">No date-range locks active.</td></tr>`;
+        } else {
+          rangeRowsHtml = ranges
+            .map((r) => {
+              const levelLabel = r.program_level === "ALL" ? "Both" : r.program_level;
+              const locked = r.locked_at ? new Date(r.locked_at).toLocaleString() : "";
+              return `
+                <tr>
+                  <td>${r.start_date}</td>
+                  <td>${r.end_date}</td>
+                  <td>${levelLabel}</td>
+                  <td class="small text-muted">${locked}</td>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteAttendanceLockRange(${r.id}, '${slot_year}', '${semester_type}')">
+                      <i class="fas fa-trash me-1"></i>Remove
+                    </button>
+                  </td>
+                </tr>`;
+            })
+            .join("");
+        }
+      } else {
+        rangeRowsHtml = `<tr><td colspan="5" class="text-danger small">Failed to load date-range locks.</td></tr>`;
+      }
+    } catch (e) {
+      console.error("Error loading attendance lock ranges:", e);
+      rangeRowsHtml = `<tr><td colspan="5" class="text-danger small">Failed to load date-range locks.</td></tr>`;
+    }
+
     panel.innerHTML = `
       <div class="card border-warning">
         <div class="card-header bg-warning text-dark">
@@ -211,7 +250,7 @@ async function renderAttendanceLockControls(slot_year, semester_type) {
         </div>
         <div class="card-body">
           <p class="text-muted small mb-3">Lock/unlock attendance marking per program level. The "Both" toggle locks BOTH UG and PG regardless of the UG/PG individual toggles. When locked, faculty cannot mark, edit, or clear attendance for that program level. RESEARCH-tier courses are not affected by any lock.</p>
-          <table class="table table-bordered table-sm mb-0 align-middle">
+          <table class="table table-bordered table-sm mb-3 align-middle">
             <thead class="table-light">
               <tr>
                 <th class="text-center">UG</th>
@@ -226,6 +265,46 @@ async function renderAttendanceLockControls(slot_year, semester_type) {
                 <td class="text-center">${cell("ALL")}</td>
               </tr>
             </tbody>
+          </table>
+
+          <hr class="my-3">
+
+          <h6 class="mb-2"><i class="fas fa-calendar-alt me-2"></i>Date-range Locks</h6>
+          <p class="text-muted small mb-2">Lock attendance for a specific date window (both endpoints inclusive). Multiple ranges are allowed; a save is blocked if the attendance date falls inside ANY active range OR the whole-semester lock above is on. RESEARCH courses bypass all locks.</p>
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-auto">
+              <label class="form-label small mb-1">Start date</label>
+              <input type="date" id="attn-lock-range-start" class="form-control form-control-sm">
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-1">End date</label>
+              <input type="date" id="attn-lock-range-end" class="form-control form-control-sm">
+            </div>
+            <div class="col-auto">
+              <label class="form-label small mb-1">Program level</label>
+              <select id="attn-lock-range-level" class="form-select form-select-sm">
+                <option value="UG">UG</option>
+                <option value="PG">PG</option>
+                <option value="ALL">Both</option>
+              </select>
+            </div>
+            <div class="col-auto">
+              <button class="btn btn-sm btn-warning" onclick="addAttendanceLockRange('${slot_year}', '${semester_type}')">
+                <i class="fas fa-plus me-1"></i>Add Lock
+              </button>
+            </div>
+          </div>
+          <table class="table table-bordered table-sm mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Start</th>
+                <th>End</th>
+                <th>Program Level</th>
+                <th>Locked At</th>
+                <th class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody>${rangeRowsHtml}</tbody>
           </table>
         </div>
       </div>
@@ -257,6 +336,59 @@ async function toggleAttendanceLock(slot_year, semester_type, program_level, cur
   } catch (error) {
     console.error(`Error ${action}ing attendance:`, error);
     alert(`Failed to ${action} attendance for ${program_level}`);
+  }
+}
+
+async function addAttendanceLockRange(slot_year, semester_type) {
+  const start = document.getElementById("attn-lock-range-start")?.value;
+  const end = document.getElementById("attn-lock-range-end")?.value;
+  const level = document.getElementById("attn-lock-range-level")?.value;
+  if (!start || !end) {
+    alert("Please pick both start and end dates.");
+    return;
+  }
+  if (start > end) {
+    alert("Start date must be on or before end date.");
+    return;
+  }
+  try {
+    const response = await fetch(`${window.API_URL}/attendance/admin/lock-range`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({
+        slot_year,
+        semester_type,
+        program_level: level,
+        start_date: start,
+        end_date: end,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Failed to add date-range lock");
+    }
+    renderAttendanceLockControls(slot_year, semester_type);
+  } catch (error) {
+    console.error("Error adding attendance lock range:", error);
+    alert(error.message || "Failed to add date-range lock");
+  }
+}
+
+async function deleteAttendanceLockRange(id, slot_year, semester_type) {
+  if (!confirm("Remove this date-range lock?")) return;
+  try {
+    const response = await fetch(`${window.API_URL}/attendance/admin/lock-range/${id}`, {
+      method: "DELETE",
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!response.ok) throw new Error("Failed to remove date-range lock");
+    renderAttendanceLockControls(slot_year, semester_type);
+  } catch (error) {
+    console.error("Error deleting attendance lock range:", error);
+    alert("Failed to remove date-range lock");
   }
 }
 

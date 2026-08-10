@@ -11,15 +11,16 @@ function deriveProgramLevel(courseCode) {
 }
 
 // Returns { locked: bool, level: 'UG'|'PG'|'RESEARCH', reason: string }.
-// A lock applies if any attendance_entry_lock row matches (slot_year,
-// semester_type, program_level IN ('ALL', <derived>)) and is_locked=true.
+// Lock applies if EITHER a whole-semester attendance_entry_lock row is on
+// for this program level, OR (when attendance_date is supplied) any
+// attendance_lock_range row covers that date for this program level.
 // RESEARCH courses always return locked=false.
-async function checkAttendanceLock(slot_year, semester_type, course_code) {
+async function checkAttendanceLock(slot_year, semester_type, course_code, attendance_date = null) {
   const level = deriveProgramLevel(course_code);
   if (level !== "UG" && level !== "PG") {
     return { locked: false, level, reason: "" };
   }
-  const r = await db.query(
+  const wholeSem = await db.query(
     `SELECT 1 FROM attendance_entry_lock
      WHERE slot_year = $1 AND semester_type = $2
        AND program_level IN ('ALL', $3)
@@ -27,12 +28,29 @@ async function checkAttendanceLock(slot_year, semester_type, course_code) {
      LIMIT 1`,
     [slot_year, semester_type, level]
   );
-  if (r.rows.length > 0) {
+  if (wholeSem.rows.length > 0) {
     return {
       locked: true,
       level,
       reason: `Attendance marking is locked for ${level} courses this semester`,
     };
+  }
+  if (attendance_date) {
+    const rangeHit = await db.query(
+      `SELECT 1 FROM attendance_lock_range
+       WHERE slot_year = $1 AND semester_type = $2
+         AND program_level IN ('ALL', $3)
+         AND $4::date BETWEEN start_date AND end_date
+       LIMIT 1`,
+      [slot_year, semester_type, level, attendance_date]
+    );
+    if (rangeHit.rows.length > 0) {
+      return {
+        locked: true,
+        level,
+        reason: `Attendance for ${attendance_date} is admin-locked for ${level} courses`,
+      };
+    }
   }
   return { locked: false, level, reason: "" };
 }
@@ -249,15 +267,15 @@ exports.markAttendance = async (req, res) => {
       return res.status(400).json({ message: "attendance_records array is required" });
     }
 
-    // Program-level lock check: reject the whole batch if any course in the
-    // records is locked for its program level. Batches typically share one
-    // course, so a single check is usually enough; loop covers mixed cases.
+    // Program-level lock check: reject the whole batch if any (course, date)
+    // combination is locked. Dedupe by (year|sem|course|date) — a batch may
+    // span multiple dates, and date-range locks apply per attendance_date.
     const seen = new Set();
     for (const rec of attendance_records) {
-      const key = `${rec.slot_year}|${rec.semester_type}|${rec.course_code}`;
+      const key = `${rec.slot_year}|${rec.semester_type}|${rec.course_code}|${rec.attendance_date}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const gate = await checkAttendanceLock(rec.slot_year, rec.semester_type, rec.course_code);
+      const gate = await checkAttendanceLock(rec.slot_year, rec.semester_type, rec.course_code, rec.attendance_date);
       if (gate.locked) {
         return res.status(403).json({ message: gate.reason });
       }
@@ -302,8 +320,8 @@ exports.clearAttendance = async (req, res) => {
       return res.status(400).json({ message: "All parameters are required" });
     }
 
-    // Program-level lock check
-    const gate = await checkAttendanceLock(slot_year, semester_type, course_code);
+    // Program-level lock check (whole-semester + date-range)
+    const gate = await checkAttendanceLock(slot_year, semester_type, course_code, attendance_date);
     if (gate.locked) {
       return res.status(403).json({ message: gate.reason });
     }
@@ -948,5 +966,82 @@ exports.unlockAttendance = async (req, res) => {
   } catch (error) {
     console.error("Unlock attendance error:", error);
     res.status(500).json({ message: "Server error while unlocking attendance" });
+  }
+};
+
+// ─── Attendance date-range lock admin controllers ─────────────────────────
+
+exports.getAttendanceLockRanges = async (req, res) => {
+  try {
+    const { slot_year, semester_type } = req.query;
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "slot_year and semester_type are required" });
+    }
+    // Return DATE columns as 'YYYY-MM-DD' text to avoid the JS-Date-in-UTC
+    // display drift (a DATE stored as 2026-07-20 was coming back as
+    // 2026-07-19T18:30:00Z when serialized from IST-local midnight).
+    const result = await db.query(
+      `SELECT r.id, r.slot_year, r.semester_type, r.program_level,
+              TO_CHAR(r.start_date, 'YYYY-MM-DD') AS start_date,
+              TO_CHAR(r.end_date, 'YYYY-MM-DD') AS end_date,
+              r.locked_by, r.locked_at,
+              u.username AS locked_by_username
+       FROM attendance_lock_range r
+       LEFT JOIN "user" u ON u.user_id = r.locked_by
+       WHERE r.slot_year = $1 AND r.semester_type = $2
+       ORDER BY r.start_date DESC, r.id DESC`,
+      [slot_year, semester_type]
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Get attendance lock ranges error:", error);
+    res.status(500).json({ message: "Server error while fetching attendance lock ranges" });
+  }
+};
+
+exports.addAttendanceLockRange = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { slot_year, semester_type, program_level, start_date, end_date } = req.body;
+    if (!slot_year || !semester_type || !program_level || !start_date || !end_date) {
+      return res.status(400).json({ message: "Required parameters missing" });
+    }
+    if (!["UG", "PG", "ALL"].includes(program_level)) {
+      return res.status(400).json({ message: "program_level must be UG, PG, or ALL" });
+    }
+    if (start_date > end_date) {
+      return res.status(400).json({ message: "start_date must be on or before end_date" });
+    }
+    const result = await db.query(
+      `INSERT INTO attendance_lock_range
+        (slot_year, semester_type, program_level, start_date, end_date, locked_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [slot_year, semester_type, program_level, start_date, end_date, userId]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Add attendance lock range error:", error);
+    res.status(500).json({ message: "Server error while adding attendance lock range" });
+  }
+};
+
+exports.deleteAttendanceLockRange = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "id is required" });
+    }
+    const result = await db.query(
+      `DELETE FROM attendance_lock_range WHERE id = $1`,
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Attendance lock range not found" });
+    }
+    res.status(200).json({ message: "Attendance lock range removed" });
+  } catch (error) {
+    console.error("Delete attendance lock range error:", error);
+    res.status(500).json({ message: "Server error while deleting attendance lock range" });
   }
 };
