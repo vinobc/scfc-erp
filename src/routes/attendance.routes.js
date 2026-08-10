@@ -29,6 +29,12 @@ router.get("/admin/locks", isFacultyOrCoordinator, attendanceController.getAtten
 router.post("/admin/lock", isAdmin, attendanceController.lockAttendance);
 router.post("/admin/unlock", isAdmin, attendanceController.unlockAttendance);
 
+// Date-range attendance locks — GET open to faculty/coordinator for parity
+// with /admin/locks; write operations are admin-only.
+router.get("/admin/lock-ranges", isFacultyOrCoordinator, attendanceController.getAttendanceLockRanges);
+router.post("/admin/lock-range", isAdmin, attendanceController.addAttendanceLockRange);
+router.delete("/admin/lock-range/:id", isAdmin, attendanceController.deleteAttendanceLockRange);
+
 // Student attendance routes - protected by isStudent middleware
 router.get("/student/semesters", isStudent, attendanceController.getStudentSemesters);
 router.get("/student/courses", isStudent, attendanceController.getStudentCourses);
