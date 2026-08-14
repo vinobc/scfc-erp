@@ -50,7 +50,7 @@ app.use(
 // Security headers with CSP configured
 app.use(cors()); // Enable CORS
 app.use(morgan("dev")); // Logging
-app.use(express.json()); // Parse JSON bodies
+app.use(express.json({ limit: "10mb" })); // Parse JSON bodies (marks-entry payloads for large classes exceed the 100kb default)
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // Static files
