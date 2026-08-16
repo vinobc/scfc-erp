@@ -289,6 +289,12 @@ function buildCoEWorksheet(headerInfo, students, component) {
       let rowTotal = 0;
       let hasAnyMark = false;
       imColumns.forEach(col => {
+        // For lab columns, check the OD sentinel first — an OD session shows
+        // "OD" text and does not contribute to the row total.
+        if (col.type === "lab" && s[`lab_od_${col.config_id}_${col.number}`]) {
+          row.push("OD");
+          return;
+        }
         const key = col.type === "assignment"
           ? `assignment_${col.number}`
           : `lab_${col.config_id}_${col.number}`;
@@ -1557,12 +1563,30 @@ async function fetchIMMarks(group, students, assessmentType) {
   }
 
   // Get individual lab session marks across ALL lab configs in the group.
+  // LEFT JOIN attendance so we can identify OD sessions per (student, session)
+  // and let the Excel render "OD" instead of a numeric value — those cells are
+  // excluded from the row total (see buildCoEWorksheet IM data-row loop).
   const labConfigIds = (group.labConfigs || []).map(c => c.id);
   if (labConfigIds.length > 0 && (assessmentType.endsWith("_INTEGRATED") || assessmentType.endsWith("_LAB"))) {
     const labResult = await db.query(`
       SELECT sm.enrollment_number, sm.assessment_config_id, sm.assessment_number,
-             SUM(sm.marks_obtained) as marks
+             SUM(sm.marks_obtained) as marks,
+             BOOL_OR(COALESCE(a.is_od, FALSE)) AS is_od
       FROM student_marks sm
+      JOIN assessment_config ac ON ac.id = sm.assessment_config_id
+      LEFT JOIN student st ON st.enrollment_no = sm.enrollment_number
+      LEFT JOIN attendance a
+        ON sm.assessment_type = 'LAB_SESSION'
+       AND a.student_id = st.user_id
+       AND a.slot_year = ac.slot_year
+       AND a.semester_type = ac.semester_type
+       AND a.course_code = ac.course_code
+       AND a.employee_id = ac.employee_id
+       AND a.slot_name = ac.slot_name
+       AND a.venue = ac.venue
+       AND a.attendance_date = (
+             (ac.config_json -> 'labSessions' -> (sm.assessment_number - 1) ->> 'date')::date
+           )
       WHERE sm.assessment_config_id = ANY($1::int[])
         AND sm.assessment_type = 'LAB_SESSION'
       GROUP BY sm.enrollment_number, sm.assessment_config_id, sm.assessment_number
@@ -1572,7 +1596,13 @@ async function fetchIMMarks(group, students, assessmentType) {
       if (results[m.enrollment_number]) {
         // Compound key so same-numbered sessions from different pair-configs
         // don't overwrite each other.
-        results[m.enrollment_number][`lab_${m.assessment_config_id}_${m.assessment_number}`] = parseFloat(m.marks);
+        if (m.is_od) {
+          // Sentinel: presence of this flag tells buildCoEWorksheet to render
+          // "OD" and skip the cell from the row total. No numeric value stored.
+          results[m.enrollment_number][`lab_od_${m.assessment_config_id}_${m.assessment_number}`] = true;
+        } else {
+          results[m.enrollment_number][`lab_${m.assessment_config_id}_${m.assessment_number}`] = parseFloat(m.marks);
+        }
       }
     }
   }

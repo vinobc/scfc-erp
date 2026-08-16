@@ -1519,10 +1519,17 @@ function renderMarksEntryForm(data, assessmentType, assessmentNumber, componentT
     questions.forEach((q) => {
       const existingMark = student.marks[q.id];
       const markValue = existingMark?.marks_obtained ?? "";
-      const isAbsent = assessmentType === "LAB_SESSION" && student.attendance_status === "absent";
-      const noAttendance = assessmentType === "LAB_SESSION" && !student.attendance_status;
+      // OD lab sessions are excluded from this student's total (student was
+      // on official duty). Renders as a locked "OD" cell — no numeric value,
+      // no contribution to rowTotal, denominator effectively shrinks by this
+      // session's max_marks for this student.
+      const isOd = assessmentType === "LAB_SESSION" && student.attendance_is_od === true;
+      const isAbsent = !isOd && assessmentType === "LAB_SESSION" && student.attendance_status === "absent";
+      const noAttendance = !isOd && assessmentType === "LAB_SESSION" && !student.attendance_status;
 
-      if (isAbsent) {
+      if (isOd) {
+        rowCells += `<td><input type="text" class="form-control form-control-sm marks-input bg-info-subtle text-center fw-bold" value="OD" disabled data-enrollment="${student.enrollment_number}" data-student-id="${student.student_id}" data-question="${q.id}" data-max="${q.maxMarks}" data-od="true" title="On Duty - excluded from total"></td>`;
+      } else if (isAbsent) {
         rowCells += `<td><input type="number" class="form-control form-control-sm marks-input" value="0" disabled data-enrollment="${student.enrollment_number}" data-student-id="${student.student_id}" data-question="${q.id}" data-max="${q.maxMarks}" title="Absent - Auto 0"></td>`;
       } else if (noAttendance) {
         rowCells += `<td><input type="number" class="form-control form-control-sm marks-input bg-warning" placeholder="?" disabled data-enrollment="${student.enrollment_number}" data-student-id="${student.student_id}" data-question="${q.id}" data-max="${q.maxMarks}" title="Attendance not marked"></td>`;
@@ -1530,7 +1537,9 @@ function renderMarksEntryForm(data, assessmentType, assessmentNumber, componentT
         rowCells += `<td><input type="number" class="form-control form-control-sm marks-input" value="${markValue}" min="0" max="${q.maxMarks}" step="0.5" ${isLocked ? "disabled" : ""} data-enrollment="${student.enrollment_number}" data-student-id="${student.student_id}" data-question="${q.id}" data-max="${q.maxMarks}" onchange="validateMarkInput(this); updateRowTotal(this)"></td>`;
       }
 
-      if (markValue !== "" && !isNaN(parseFloat(markValue))) {
+      if (isOd) {
+        // OD contributes nothing to the row total.
+      } else if (markValue !== "" && !isNaN(parseFloat(markValue))) {
         rowTotal += parseFloat(markValue);
       } else if (isAbsent) {
         rowTotal += 0;
