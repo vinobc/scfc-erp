@@ -709,7 +709,7 @@ exports.getMarksEntryData = async (req, res) => {
 
       if (session && session.date) {
         const attendanceResult = await db.query(
-          `SELECT s.enrollment_no, a.status
+          `SELECT s.enrollment_no, a.status, a.is_od
            FROM student s
            JOIN attendance a ON s.user_id = a.student_id
            WHERE a.slot_year = $1 AND a.semester_type = $2
@@ -720,17 +720,23 @@ exports.getMarksEntryData = async (req, res) => {
         );
 
         attendanceResult.rows.forEach((record) => {
-          attendanceMap[record.enrollment_no] = record.status;
+          attendanceMap[record.enrollment_no] = { status: record.status, is_od: record.is_od };
         });
       }
     }
 
-    // Combine students with their marks and attendance
-    const studentsWithMarks = studentsResult.rows.map((student) => ({
-      ...student,
-      marks: marksMap[student.enrollment_number] || {},
-      attendance_status: attendanceMap[student.enrollment_number] || null,
-    }));
+    // Combine students with their marks and attendance. Surface both status and
+    // is_od so the frontend can distinguish a plain absent (auto-0) from an
+    // OD session (must be excluded from the student's lab total).
+    const studentsWithMarks = studentsResult.rows.map((student) => {
+      const att = attendanceMap[student.enrollment_number];
+      return {
+        ...student,
+        marks: marksMap[student.enrollment_number] || {},
+        attendance_status: att ? att.status : null,
+        attendance_is_od: att ? !!att.is_od : false,
+      };
+    });
 
     res.status(200).json({
       config: config,
@@ -903,12 +909,28 @@ exports.getMarksSummary = async (req, res) => {
       [slot_year, semester_type, course_code, facultyName, slot_name, venue]
     );
 
-    // Get all marks for all configs
+    // Get all marks for all configs.
+    // For LAB_SESSION rows, LEFT JOIN attendance so we can identify OD sessions
+    // (attendance.is_od=TRUE) and exclude them from per-student totals below.
     const configIds = configResult.rows.map((c) => c.id);
     const marksResult = await db.query(
-      `SELECT sm.*, ac.component_type, ac.config_json, ac.assessment_type as course_assessment_type
+      `SELECT sm.*, ac.component_type, ac.config_json, ac.assessment_type as course_assessment_type,
+              COALESCE(a.is_od, FALSE) AS is_od
        FROM student_marks sm
        JOIN assessment_config ac ON sm.assessment_config_id = ac.id
+       LEFT JOIN student st ON st.enrollment_no = sm.enrollment_number
+       LEFT JOIN attendance a
+         ON sm.assessment_type = 'LAB_SESSION'
+        AND a.student_id = st.user_id
+        AND a.slot_year = ac.slot_year
+        AND a.semester_type = ac.semester_type
+        AND a.course_code = ac.course_code
+        AND a.employee_id = ac.employee_id
+        AND a.slot_name = ac.slot_name
+        AND a.venue = ac.venue
+        AND a.attendance_date = (
+              (ac.config_json -> 'labSessions' -> (sm.assessment_number - 1) ->> 'date')::date
+            )
        WHERE sm.assessment_config_id = ANY($1)`,
       [configIds]
     );
@@ -929,6 +951,10 @@ exports.getMarksSummary = async (req, res) => {
     marksResult.rows.forEach((mark) => {
       const student = summaryMap[mark.enrollment_number];
       if (student) {
+        // OD lab sessions must not count towards this student's totals — the
+        // student was on official duty; the auto-0 (from being marked absent)
+        // should be excluded from both numerator and denominator.
+        if (mark.assessment_type === "LAB_SESSION" && mark.is_od) return;
         const key = `${mark.assessment_type}_${mark.assessment_number}`;
         if (!student.components[key]) {
           student.components[key] = {
@@ -1351,12 +1377,29 @@ async function computeConsolidatedReport(configs, students) {
   const weightages = { ...caWeightages, IM: assignmentTotal, LAB: labTotal };
 
   // Fetch marks for every config in one query.
+  // For LAB_SESSION rows, LEFT JOIN attendance so we can identify OD sessions
+  // (attendance.is_od=TRUE) and skip them from the LAB aggregation below.
   const configIds = configs.map((c) => c.id);
   const marksRes = configIds.length
     ? await db.query(
         `SELECT sm.enrollment_number, sm.assessment_config_id, sm.assessment_type,
-                sm.assessment_number, sm.question_id, sm.marks_obtained, sm.max_marks
+                sm.assessment_number, sm.question_id, sm.marks_obtained, sm.max_marks,
+                COALESCE(a.is_od, FALSE) AS is_od
          FROM student_marks sm
+         JOIN assessment_config ac ON ac.id = sm.assessment_config_id
+         LEFT JOIN student st ON st.enrollment_no = sm.enrollment_number
+         LEFT JOIN attendance a
+           ON sm.assessment_type = 'LAB_SESSION'
+          AND a.student_id = st.user_id
+          AND a.slot_year = ac.slot_year
+          AND a.semester_type = ac.semester_type
+          AND a.course_code = ac.course_code
+          AND a.employee_id = ac.employee_id
+          AND a.slot_name = ac.slot_name
+          AND a.venue = ac.venue
+          AND a.attendance_date = (
+                (ac.config_json -> 'labSessions' -> (sm.assessment_number - 1) ->> 'date')::date
+              )
          WHERE sm.assessment_config_id = ANY($1::int[])`,
         [configIds]
       )
@@ -1399,6 +1442,10 @@ async function computeConsolidatedReport(configs, students) {
       }
       rec._im.max += max;
     } else if (m.assessment_type === "LAB_SESSION" && labConfigIdSet.has(m.assessment_config_id)) {
+      // Skip OD lab sessions — student was on official duty, auto-0 must not
+      // count against them. Neither the denominator (sessions_recorded, max)
+      // nor the numerator (sessions_done, obt) should include this row.
+      if (m.is_od) continue;
       rec._lab.sessions_recorded += 1;
       if (obtained !== null) {
         rec._lab.obt += obtained;
