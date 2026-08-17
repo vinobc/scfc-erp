@@ -1712,6 +1712,20 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
 
   const report = await marksController._computeConsolidatedReport(allConfigs, roster);
 
+  // Grading Type: same helper as the on-screen view uses. Header value, and
+  // per-student values for TEL lab views only.
+  const gradingResult = await marksController._computeGradingType({
+    course_type: info.course_type,
+    assessment_type: report.assessment_type,
+    primary_component_type: info.component_type,
+    class_strength: roster.length,
+    slot_year,
+    semester_type,
+    course_code,
+    enrollment_numbers: roster.map((r) => r.enrollment_number),
+  });
+  const perStudentGrading = gradingResult.per_student || null;
+
   // Build worksheet rows.
   const caKeys = Object.keys(report.weightages).filter((k) => k.startsWith("CA"))
     .sort((a, b) => parseInt(a.slice(2)) - parseInt(b.slice(2)));
@@ -1726,7 +1740,7 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
   rows.push(["Course Name", info.course_name, "", "Venue", venue]);
   rows.push(["Credit", `${info.theory || 0}:${info.practical || 0}:${info.credits || 0}`, "", "Faculty", info.faculty_name]);
   rows.push(["Course Type", `${info.course_type} (${report.assessment_type || ""})`, "", "Semester", `${semester_type} ${slot_year}`]);
-  rows.push(["Grading Type", "[—]"]);
+  rows.push(["Grading Type", gradingResult.header || "[—]"]);
   rows.push([]);
   rows.push([
     "Class Strength", report.stats.total_count,
@@ -1736,7 +1750,10 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
   rows.push([]);
 
   if (isPureLab) {
-    rows.push(["S.No.", "SEN", "Name", "School", "Program", "Sessions Done", "Actual/Max", "Grand Total (100)", "Grade"]);
+    const row = ["S.No.", "SEN", "Name", "School", "Program", "Sessions Done", "Actual/Max", "Grand Total (100)"];
+    if (perStudentGrading) row.push("Grading Type");
+    row.push("Grade");
+    rows.push(row);
   } else {
     const header1 = ["S.No.", "SEN", "Name", "School", "Program"];
     const header2 = ["", "", "", "", ""];
@@ -1747,6 +1764,7 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
     if (hasIM) { header1.push("IM"); header2.push(`(${report.weightages.IM})`); }
     if (hasLAB) { header1.push("Lab"); header2.push(`(${report.weightages.LAB})`); }
     header1.push("Grand Total (100)"); header2.push("");
+    if (perStudentGrading) { header1.push("Grading Type"); header2.push(""); }
     header1.push("Grade"); header2.push("");
     rows.push(header1);
     rows.push(header2);
@@ -1773,6 +1791,7 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
       }
     }
     row.push(s.grand_total);
+    if (perStudentGrading) row.push(perStudentGrading[s.enrollment_number] || "N/A");
     row.push("[—]");
     rows.push(row);
   });
