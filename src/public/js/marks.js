@@ -1720,17 +1720,24 @@ function renderConsolidatedFacultyPanel(data) {
   // Header row with class stats. Standard Deviation shown is the population SD
   // (÷N) — mathematically correct when the class IS the full population.
   const sdPop = stats.stddev_pop != null ? stats.stddev_pop : stats.stddev;
+  const gradingHeader = stats.grading_type || "[—]";
+  // Per-student Grading Type only appears on TEL lab views (backend attaches
+  // s.grading_type in that case). Header label reflects that too.
+  const perStudentGrading = students.some((s) => s.grading_type);
+
   const statsHtml = `
     <div class="d-flex flex-wrap gap-3 small text-muted mb-2">
-      <span><strong>Grading Type:</strong> [—]</span>
+      <span><strong>Grading Type:</strong> ${gradingHeader}</span>
       <span><strong>Class Strength:</strong> ${stats.total_count}</span>
       <span><strong>Class Average:</strong> ${stats.avg}</span>
       <span><strong>Class Standard Deviation:</strong> ${sdPop}</span>
     </div>
   `;
 
-  // Table header — pure-lab uses collapsed layout; others use per-CA sub-columns
+  // Table header — pure-lab uses collapsed layout; others use per-CA sub-columns.
+  // For TEL lab views we insert a per-student "Grading Type" column just before Grade.
   let theadHtml;
+  const gradingCol = perStudentGrading ? `<th rowspan="2">Grading Type</th>` : "";
   if (isPureLab) {
     theadHtml = `
       <tr>
@@ -1739,6 +1746,7 @@ function renderConsolidatedFacultyPanel(data) {
         <th rowspan="2">Sessions Done</th>
         <th rowspan="2">Actual / Max</th>
         <th rowspan="2">Grand Total <br>(100)</th>
+        ${gradingCol}
         <th rowspan="2">Grade</th>
       </tr>
       <tr></tr>
@@ -1760,6 +1768,7 @@ function renderConsolidatedFacultyPanel(data) {
         ${imHeader}
         ${labHeader}
         <th rowspan="2">Grand Total <br>(100)</th>
+        ${gradingCol}
         <th rowspan="2">Grade</th>
       </tr>
       <tr>${caSubHeaders}</tr>
@@ -1800,6 +1809,7 @@ function renderConsolidatedFacultyPanel(data) {
 
     const pending = (s.pending || []).length;
     const totalCell = `<td class="text-center fw-bold">${s.grand_total.toFixed(2)}${pending ? ` <span class="badge bg-warning text-dark ms-1" title="Pending: ${s.pending.join(", ")}">⚠${pending}</span>` : ''}</td>`;
+    const gradingCell = perStudentGrading ? `<td class="text-center small">${s.grading_type || "N/A"}</td>` : "";
     const gradeCell = `<td class="text-center text-muted">[—]</td>`;
 
     return `<tr>
@@ -1807,6 +1817,7 @@ function renderConsolidatedFacultyPanel(data) {
       <td>${s.student_name}</td>
       ${cells}
       ${totalCell}
+      ${gradingCell}
       ${gradeCell}
     </tr>`;
   }).join("");
@@ -2423,6 +2434,14 @@ function renderConsolidatedStudentPanel(data) {
     ? (enteredCount === totalComponents ? `All ${totalComponents} components entered ✓` : `${enteredCount} of ${totalComponents} entered`)
     : "";
 
+  // Grading Type for the student: prefer per-student value if backend attached
+  // one (TEL case), else fall back to stats.grading_type. Always fall back to
+  // [—] so the label stays consistent when unknown.
+  const gradingTypeForStudent =
+    (student && student.grading_type) ||
+    (data.stats && data.stats.grading_type) ||
+    "[—]";
+
   return `
     <div class="card mb-3 border-success">
       <div class="card-header bg-success text-white">
@@ -2434,7 +2453,7 @@ function renderConsolidatedStudentPanel(data) {
           &nbsp;|&nbsp; <strong>Slot:</strong> ${course.slot_name}
           &nbsp;|&nbsp; <strong>Faculty:</strong> ${course.faculty_name || "—"}
           &nbsp;|&nbsp; <strong>Type:</strong> ${data.assessment_type || course.course_type || ""}
-          &nbsp;|&nbsp; <strong>Grading Type:</strong> [—]
+          &nbsp;|&nbsp; <strong>Grading Type:</strong> ${gradingTypeForStudent}
         </div>
         <div class="table-responsive">
           <table class="table table-bordered table-sm align-middle">

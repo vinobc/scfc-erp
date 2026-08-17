@@ -1298,6 +1298,89 @@ function decomposeSlot(slot_name) {
   return [slot_name];
 }
 
+// Compute Grading Type per CoE policy:
+//   • Standalone Lab (course_type='P'), Non-credit ('NC'), Project ('PRJ') → always Absolute
+//   • Pure Theory ('T'): this theory slot's roster ≥30 → Relative, else Absolute
+//   • TEL — THEORY slot view: this theory slot's roster ≥30 → Relative, else Absolute
+//   • TEL — LAB slot view: each student's grading follows THEIR theory section
+//     (returned as a per-student map; header shows a note instead of one label)
+//   • RESEARCH / unknown → 'N/A'
+//
+// Returns { header, per_student }.  `per_student` is either null or a map
+// { enrollment_number → 'Relative' | 'Absolute' }.
+async function computeGradingType({
+  course_type,
+  assessment_type,
+  primary_component_type,   // 'THEORY' | 'LAB'
+  class_strength,           // this slot's roster count
+  slot_year,
+  semester_type,
+  course_code,
+  enrollment_numbers,       // for TEL lab views, needed to look up theory sections
+}) {
+  // Absolute-always types.
+  if (course_type === "P" || course_type === "NC" || course_type === "PRJ") {
+    return { header: "Absolute", per_student: null };
+  }
+
+  const isTel = assessment_type === "UG_INTEGRATED" || assessment_type === "PG_INTEGRATED";
+  const isTheory = assessment_type === "UG_THEORY" || assessment_type === "PG_THEORY";
+
+  // Pure Theory OR TEL viewing the theory slot: use this slot's roster.
+  if (isTheory || (isTel && primary_component_type === "THEORY")) {
+    return {
+      header: class_strength >= 30 ? "Relative" : "Absolute",
+      per_student: null,
+    };
+  }
+
+  // TEL viewing the LAB slot: per-student, based on their theory section's strength.
+  if (isTel && primary_component_type === "LAB") {
+    if (!enrollment_numbers || enrollment_numbers.length === 0) {
+      return { header: "Per student's theory section", per_student: {} };
+    }
+    // For each student on the lab roster, find their THEORY registration for
+    // this course-semester (via the assessment_config with component_type='THEORY'
+    // matching the (slot, venue) they registered under), and how many peers are
+    // in that theory slot.
+    const res = await db.query(
+      `WITH sr_theory AS (
+         SELECT sr.enrollment_number, ac.slot_name, ac.venue
+         FROM student_registrations sr
+         JOIN assessment_config ac
+           ON  ac.slot_year     = sr.slot_year
+           AND ac.semester_type = sr.semester_type
+           AND ac.course_code   = sr.course_code
+           AND ac.slot_name     = sr.slot_name
+           AND ac.venue         = sr.venue
+           AND ac.component_type = 'THEORY'
+         WHERE sr.slot_year = $1 AND sr.semester_type = $2
+           AND sr.course_code = $3
+           AND sr.enrollment_number = ANY($4::text[])
+           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+       )
+       SELECT srt.enrollment_number,
+              (SELECT COUNT(DISTINCT sr2.enrollment_number)
+                 FROM student_registrations sr2
+                WHERE sr2.slot_year = $1 AND sr2.semester_type = $2
+                  AND sr2.course_code = $3
+                  AND sr2.slot_name = srt.slot_name
+                  AND sr2.venue     = srt.venue
+                  AND (sr2.withdrawn IS NULL OR sr2.withdrawn = false)) AS theory_strength
+       FROM sr_theory srt`,
+      [slot_year, semester_type, course_code, enrollment_numbers]
+    );
+    const per_student = {};
+    for (const r of res.rows) {
+      per_student[r.enrollment_number] = Number(r.theory_strength) >= 30 ? "Relative" : "Absolute";
+    }
+    return { header: "Per student's theory section", per_student };
+  }
+
+  // RESEARCH or anything else not covered by policy.
+  return { header: "N/A", per_student: null };
+}
+
 // Build the per-student component breakdown for a course-slot (may include a
 // THEORY config + one or more LAB configs, e.g. for TEL or SUMMER compound labs).
 //
@@ -1678,6 +1761,26 @@ exports.getConsolidatedReport = async (req, res) => {
 
     const report = await computeConsolidatedReport(allConfigs, roster);
 
+    // Grading Type per CoE policy: theory-slot roster ≥30 for T/TEL-theory
+    // views; per-student (based on theory section) for TEL-lab views; Absolute
+    // for standalone Lab/NC/PRJ.
+    const gradingResult = await computeGradingType({
+      course_type: info.course_type,
+      assessment_type: report.assessment_type,
+      primary_component_type: info.component_type,
+      class_strength: roster.length,
+      slot_year,
+      semester_type,
+      course_code,
+      enrollment_numbers: roster.map((r) => r.enrollment_number),
+    });
+    report.stats.grading_type = gradingResult.header;
+    if (gradingResult.per_student) {
+      for (const s of report.students) {
+        s.grading_type = gradingResult.per_student[s.enrollment_number] || "N/A";
+      }
+    }
+
     // Sibling info surfaced so the UI can inform faculty which slots were merged.
     const siblingSlots = allConfigs
       .filter((c) => !(c.slot_name === slot_name && c.venue === venue))
@@ -1809,6 +1912,50 @@ exports.getMyConsolidatedReport = async (req, res) => {
 
     const report = await computeConsolidatedReport(configRes.rows, students);
 
+    // Grading Type per CoE policy. A student in a TEL course belongs to exactly
+    // one theory section — we always compute via that theory section (treat the
+    // student's view as if primary_component_type='LAB' so the helper looks up
+    // per-student theory strength). For pure Theory / P / NC / PRJ, the header
+    // rule is fine.
+    // Pick the primary component_type as THEORY if there's a theory config in
+    // the fetched set (typical for T and TEL), else LAB (pure lab courses).
+    const hasTheoryConfig = configRes.rows.some((c) => c.component_type === "THEORY");
+    const gradingResult = await computeGradingType({
+      course_type: info.course_type,
+      assessment_type: report.assessment_type,
+      // For TEL always resolve per-student (student's theory section), regardless
+      // of which slot they clicked. Otherwise theory-slot rules apply.
+      primary_component_type: (report.assessment_type === "UG_INTEGRATED" || report.assessment_type === "PG_INTEGRATED")
+        ? "LAB"
+        : (hasTheoryConfig ? "THEORY" : "LAB"),
+      class_strength: 1,   // unused for TEL-lab branch; unused for Absolute types
+      slot_year,
+      semester_type,
+      course_code,
+      enrollment_numbers: [enrollmentNo],
+    });
+    report.stats.grading_type = gradingResult.header;
+    if (gradingResult.per_student) {
+      for (const s of report.students) {
+        s.grading_type = gradingResult.per_student[s.enrollment_number] || "N/A";
+      }
+    }
+
+    // For pure Theory (T type), the student's grading type is also this theory
+    // slot's strength — recompute since class_strength=1 above was a placeholder.
+    if (report.assessment_type === "UG_THEORY" || report.assessment_type === "PG_THEORY") {
+      const strengthRes = await db.query(
+        `SELECT COUNT(DISTINCT sr.enrollment_number)::int AS n
+         FROM student_registrations sr
+         WHERE sr.slot_year = $1 AND sr.semester_type = $2
+           AND sr.course_code = $3 AND sr.slot_name = $4 AND sr.venue = $5
+           AND (sr.withdrawn IS NULL OR sr.withdrawn = false)`,
+        [slot_year, semester_type, course_code, reg.reg_slot_name, reg.venue]
+      );
+      const theoryStrength = strengthRes.rows[0] ? strengthRes.rows[0].n : 0;
+      report.stats.grading_type = theoryStrength >= 30 ? "Relative" : "Absolute";
+    }
+
     return res.status(200).json({
       course: {
         course_code: info.course_code,
@@ -1833,6 +1980,7 @@ exports.getMyConsolidatedReport = async (req, res) => {
 
 // Export the shared helper so reports.controller.js can reuse the exact math for XLSX.
 exports._computeConsolidatedReport = computeConsolidatedReport;
+exports._computeGradingType = computeGradingType;
 exports._decomposeSlot = decomposeSlot;
 
 // Reset marks for a specific component (delete marks when resetting config)
