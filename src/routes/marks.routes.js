@@ -37,6 +37,11 @@ router.get(
 );
 router.delete("/reset-marks", isFacultyOrCoordinator, marksController.resetMarks);
 
+// Publish gate — faculty/coord toggle per-component visibility to students.
+router.get("/publish-status", isFacultyOrCoordinator, marksController.getPublishStatus);
+router.post("/publish", isFacultyOrCoordinator, marksController.publishComponent);
+router.post("/unpublish", isFacultyOrCoordinator, marksController.unpublishComponent);
+
 // ================== ADMIN ROUTES ==================
 // Lock control endpoints
 // GET locks is accessible to faculty/coordinator (to check if entry is locked)
