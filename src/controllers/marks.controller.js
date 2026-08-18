@@ -1136,6 +1136,9 @@ exports.getMyMarks = async (req, res) => {
     // single slots. LEFT JOIN student_registrations so we surface the student's
     // own registration slot_name and the frontend (which keys on the registration
     // card's slot label) can find the matching course entry.
+    // Publish gate: student only sees marks whose (config, type, number) has
+    // an entry in marks_publish_state. Faculty controls this via the Publish
+    // button on the entry form.
     let query = `SELECT
          sm.*,
          ac.course_code,
@@ -1152,6 +1155,10 @@ exports.getMyMarks = async (req, res) => {
        FROM student_marks sm
        JOIN assessment_config ac ON sm.assessment_config_id = ac.id
        JOIN course c ON ac.course_code = c.course_code
+       JOIN marks_publish_state mps
+         ON  mps.assessment_config_id = sm.assessment_config_id
+         AND mps.assessment_type      = sm.assessment_type
+         AND mps.assessment_number    = sm.assessment_number
        LEFT JOIN student_registrations sr
          ON sr.enrollment_number = sm.enrollment_number
         AND sr.slot_year         = ac.slot_year
@@ -1488,6 +1495,41 @@ async function computeConsolidatedReport(configs, students) {
       )
     : { rows: [] };
 
+  // Publish gate: only marks belonging to a (config_id, assessment_type,
+  // assessment_number) that has a marks_publish_state row are considered.
+  // Unpublished marks are hidden from students AND from the Consolidated card
+  // (both student self-view and faculty View Grades).
+  const publishedKeys = await fetchPublishedKeySet(configIds);
+  const isPublished = (m) =>
+    publishedKeys.has(`${m.assessment_config_id}|${m.assessment_type}|${m.assessment_number}`);
+
+  // Per-component published flags (used by the frontend to distinguish
+  // "Not published yet" from "Not entered").
+  // A "component" here maps to the UI column: CA1 / CA2 / CA3 / IM / LAB.
+  // CAs: single entry per theory config (assessment_number always 1).
+  // IM:  published if ANY assignment is published.
+  // LAB: published if ANY lab session (across all lab configs) is published.
+  const componentPublished = {};
+  const theoryConfigId = theoryConfig ? theoryConfig.id : null;
+  for (const ca of caList) {
+    componentPublished[`CA${ca.number}`] =
+      theoryConfigId != null &&
+      publishedKeys.has(`${theoryConfigId}|CA${ca.number}|1`);
+  }
+  if (hasAssignments) {
+    componentPublished.IM = Array.from(publishedKeys).some((k) => {
+      const [cid, type] = k.split("|");
+      return Number(cid) === theoryConfigId && type === "ASSIGNMENT";
+    });
+  }
+  const labConfigIds = new Set(labConfigs.map((c) => c.id));
+  if (labTotal > 0) {
+    componentPublished.LAB = Array.from(publishedKeys).some((k) => {
+      const [cid, type] = k.split("|");
+      return labConfigIds.has(Number(cid)) && type === "LAB_SESSION";
+    });
+  }
+
   const labConfigIdSet = new Set(labConfigs.map((c) => c.id));
 
   // Per-student accumulator.
@@ -1507,6 +1549,9 @@ async function computeConsolidatedReport(configs, students) {
   for (const m of marksRes.rows) {
     const rec = perStudent[m.enrollment_number];
     if (!rec) continue;
+    // Publish gate: silently drop unpublished marks so downstream aggregation
+    // reflects only what students are meant to see.
+    if (!isPublished(m)) continue;
     const obtained = m.marks_obtained !== null ? parseFloat(m.marks_obtained) : null;
     const max = m.max_marks !== null ? parseFloat(m.max_marks) : 0;
 
@@ -1563,6 +1608,7 @@ async function computeConsolidatedReport(configs, students) {
         actual_max: perStudentMax || caActualMax[key] || 0,
         converted,
         weightage: w,
+        published: !!componentPublished[key],
       };
       if (!entered && w > 0) pending.push(key);
     }
@@ -1580,6 +1626,7 @@ async function computeConsolidatedReport(configs, students) {
         actual_max: bucket.max || imActualMax,
         converted,
         weightage: assignmentTotal,
+        published: !!componentPublished.IM,
       };
       if (!entered) pending.push("IM");
     }
@@ -1601,6 +1648,7 @@ async function computeConsolidatedReport(configs, students) {
         sessions_total: bucket.sessions_recorded,
         converted,
         weightage: labTotal,
+        published: !!componentPublished.LAB,
       };
       if (!entered) pending.push("LAB");
     }
@@ -1631,6 +1679,12 @@ async function computeConsolidatedReport(configs, students) {
   // Sample SD (÷(N-1)) — matches Excel STDEV / STDEV.S. Report both.
   const stddevPop = n ? Math.sqrt(sumSqDev / n) : 0;
   const stddevSample = n > 1 ? Math.sqrt(sumSqDev / (n - 1)) : 0;
+  // Component-level publish summary — used by frontend to show a hint like
+  // "N of M components published" and to render "Not published yet" cells.
+  const componentKeys = Object.keys(componentPublished);
+  const publishedCount = componentKeys.filter((k) => componentPublished[k]).length;
+  const totalComponents = componentKeys.length;
+
   const stats = {
     total_count: studentsOut.length,
     filled_count: filled.length,
@@ -1638,6 +1692,8 @@ async function computeConsolidatedReport(configs, students) {
     stddev: Number(stddevPop.toFixed(2)),           // population (kept for back-compat)
     stddev_pop: Number(stddevPop.toFixed(2)),
     stddev_sample: Number(stddevSample.toFixed(2)),
+    published_components: publishedCount,
+    total_components: totalComponents,
     highest: n ? Number(Math.max(...nonZeroTotals).toFixed(2)) : 0,
     lowest: n ? Number(Math.min(...nonZeroTotals).toFixed(2)) : 0,
   };
@@ -2016,3 +2072,118 @@ exports.resetMarks = async (req, res) => {
     res.status(500).json({ message: "Server error while resetting marks" });
   }
 };
+
+// ================== PUBLISH GATE ==================
+// Faculty saves marks (drafts). Students see nothing until faculty explicitly
+// publishes each component. Publish is per-component-instance:
+//   • CA1 / CA2 / CA3  → assessment_number = 1
+//   • ASSIGNMENT       → per assignment number
+//   • LAB_SESSION      → per session index
+// Presence of a marks_publish_state row = published. Absence = draft.
+
+// Helper: ensure the caller can publish/unpublish this config.
+// Admin: any config. Faculty/Coordinator: must be the config's owner (employee_id).
+async function assertCanTogglePublish(req, assessment_config_id) {
+  const configRes = await db.query(
+    `SELECT employee_id FROM assessment_config WHERE id = $1`,
+    [assessment_config_id]
+  );
+  if (!configRes.rows.length) return { ok: false, code: 404, message: "Configuration not found" };
+  if (req.userRole === "admin") return { ok: true };
+
+  const userRes = await db.query('SELECT employee_id FROM "user" WHERE user_id = $1', [req.userId]);
+  const ownEmpId = userRes.rows.length ? userRes.rows[0].employee_id : null;
+  if (ownEmpId !== configRes.rows[0].employee_id) {
+    return { ok: false, code: 403, message: "You can only publish marks for your own courses" };
+  }
+  return { ok: true };
+}
+
+// POST /marks/publish { assessment_config_id, assessment_type, assessment_number }
+exports.publishComponent = async (req, res) => {
+  try {
+    const { assessment_config_id, assessment_type } = req.body;
+    const assessment_number = req.body.assessment_number || 1;
+    if (!assessment_config_id || !assessment_type) {
+      return res.status(400).json({ message: "assessment_config_id and assessment_type are required" });
+    }
+    const guard = await assertCanTogglePublish(req, assessment_config_id);
+    if (!guard.ok) return res.status(guard.code).json({ message: guard.message });
+
+    await db.query(
+      `INSERT INTO marks_publish_state (assessment_config_id, assessment_type, assessment_number, published_by, published_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       ON CONFLICT (assessment_config_id, assessment_type, assessment_number)
+       DO UPDATE SET published_by = $4, published_at = CURRENT_TIMESTAMP`,
+      [assessment_config_id, assessment_type, assessment_number, req.userId]
+    );
+    res.status(200).json({ message: "Published", published: true });
+  } catch (error) {
+    console.error("Publish component error:", error);
+    res.status(500).json({ message: "Server error while publishing" });
+  }
+};
+
+// POST /marks/unpublish { assessment_config_id, assessment_type, assessment_number }
+exports.unpublishComponent = async (req, res) => {
+  try {
+    const { assessment_config_id, assessment_type } = req.body;
+    const assessment_number = req.body.assessment_number || 1;
+    if (!assessment_config_id || !assessment_type) {
+      return res.status(400).json({ message: "assessment_config_id and assessment_type are required" });
+    }
+    const guard = await assertCanTogglePublish(req, assessment_config_id);
+    if (!guard.ok) return res.status(guard.code).json({ message: guard.message });
+
+    const result = await db.query(
+      `DELETE FROM marks_publish_state
+       WHERE assessment_config_id = $1 AND assessment_type = $2 AND assessment_number = $3`,
+      [assessment_config_id, assessment_type, assessment_number]
+    );
+    res.status(200).json({ message: "Unpublished", published: false, deleted: result.rowCount });
+  } catch (error) {
+    console.error("Unpublish component error:", error);
+    res.status(500).json({ message: "Server error while unpublishing" });
+  }
+};
+
+// GET /marks/publish-status?assessment_config_id=…
+// Returns all publish rows for one config: [{ assessment_type, assessment_number, published_at, published_by }]
+exports.getPublishStatus = async (req, res) => {
+  try {
+    const { assessment_config_id } = req.query;
+    if (!assessment_config_id) {
+      return res.status(400).json({ message: "assessment_config_id is required" });
+    }
+    const result = await db.query(
+      `SELECT assessment_type, assessment_number, published_at, published_by
+       FROM marks_publish_state
+       WHERE assessment_config_id = $1`,
+      [assessment_config_id]
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Get publish status error:", error);
+    res.status(500).json({ message: "Server error while fetching publish status" });
+  }
+};
+
+// Helper used by the read paths (student endpoints and Consolidated report):
+// given a set of assessment_config_ids, fetch the published component
+// instances. Returns a Set<string> of keys "config_id|assessment_type|number"
+// so callers can filter their marks rows in JS.
+async function fetchPublishedKeySet(config_ids) {
+  if (!Array.isArray(config_ids) || config_ids.length === 0) return new Set();
+  const res = await db.query(
+    `SELECT assessment_config_id, assessment_type, assessment_number
+     FROM marks_publish_state
+     WHERE assessment_config_id = ANY($1::int[])`,
+    [config_ids]
+  );
+  const set = new Set();
+  for (const r of res.rows) {
+    set.add(`${r.assessment_config_id}|${r.assessment_type}|${r.assessment_number}`);
+  }
+  return set;
+}
+exports._fetchPublishedKeySet = fetchPublishedKeySet;

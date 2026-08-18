@@ -351,7 +351,28 @@ async function loadComponentsDashboard(slot_year, semester_type, course_code, em
       lockStatus = await lockResponse.json();
     }
 
-    renderComponentsDashboard(theoryConfig, labConfig, lockStatus);
+    // Publish status for each configured component-instance. Set of keys
+    // "config_id|assessment_type|assessment_number" — presence = published.
+    const publishedKeys = new Set();
+    const configIdsToCheck = [];
+    if (theoryConfig?.exists && theoryConfig.id) configIdsToCheck.push(theoryConfig.id);
+    if (labConfig?.exists && labConfig.id) configIdsToCheck.push(labConfig.id);
+    for (const cid of configIdsToCheck) {
+      try {
+        const psRes = await fetch(
+          `${window.API_URL}/marks/publish-status?assessment_config_id=${cid}`,
+          { headers: { "x-access-token": localStorage.getItem("token") } }
+        );
+        if (psRes.ok) {
+          const rows = await psRes.json();
+          for (const r of rows) {
+            publishedKeys.add(`${cid}|${r.assessment_type}|${r.assessment_number}`);
+          }
+        }
+      } catch {}
+    }
+
+    renderComponentsDashboard(theoryConfig, labConfig, lockStatus, publishedKeys);
   } catch (error) {
     console.error("Error loading components dashboard:", error);
     dashboard.innerHTML = `
@@ -385,9 +406,18 @@ function isComponentLockedForCourse(lockStatus, componentType, courseCode) {
 }
 
 // Render components dashboard
-function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
+function renderComponentsDashboard(theoryConfig, labConfig, lockStatus, publishedKeys) {
   const dashboard = document.getElementById("components-dashboard");
   const structure = selectedCourse.assessment_structure;
+  const pubSet = publishedKeys instanceof Set ? publishedKeys : new Set();
+  // Small helper: badge for the Status column reflecting publish state.
+  const publishBadge = (configId, type, num) => {
+    if (!configId) return "";
+    const isPub = pubSet.has(`${configId}|${type}|${num || 1}`);
+    return isPub
+      ? '<span class="badge bg-info ms-1" title="Students can see these marks">Published</span>'
+      : '<span class="badge bg-secondary ms-1" title="Not yet visible to students">Not published</span>';
+  };
 
   // Determine which components to show based on course type and slot type
   const courseType = selectedCourse.course_type;
@@ -450,6 +480,7 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
           <td>
             ${isConfigured ? '<span class="badge bg-success">Configured</span>' : '<span class="badge bg-warning">Not Configured</span>'}
             ${isLocked ? '<span class="badge bg-danger ms-1">Locked</span>' : ''}
+            ${isConfigured ? publishBadge(theoryConfig.id, `CA${caNum}`, 1) : ''}
           </td>
           <td>
             ${isConfigured
@@ -501,6 +532,7 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
             <td>
               <span class="badge bg-success">Configured</span>
               ${isLocked ? '<span class="badge bg-danger ms-1">Locked</span>' : ''}
+              ${publishBadge(theoryConfig.id, 'ASSIGNMENT', assignNum)}
             </td>
             <td>
               <button class="btn btn-sm btn-primary me-1" onclick="openMarksEntry('ASSIGNMENT', ${assignNum}, 'THEORY')" ${isLocked ? 'disabled' : ''}>
@@ -548,6 +580,7 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus) {
             <td>
               <span class="badge bg-success">Configured</span>
               ${isLocked ? '<span class="badge bg-danger ms-1">Locked</span>' : ''}
+              ${publishBadge(labConfig?.id, 'LAB_SESSION', sessionNum)}
             </td>
             <td>
               <button class="btn btn-sm btn-primary me-1" onclick="openMarksEntry('LAB_SESSION', ${sessionNum}, 'LAB')" ${isLocked ? 'disabled' : ''}>
@@ -1449,7 +1482,24 @@ async function openMarksEntry(assessmentType, assessmentNumber, componentType) {
     currentConfig = data.config;
     enrolledStudents = data.students;
 
-    renderMarksEntryForm(data, assessmentType, assessmentNumber, componentType);
+    // Publish state for this component-instance (drives Publish/Unpublish button).
+    let publishInfo = { published: false, published_at: null };
+    try {
+      const psRes = await fetch(
+        `${window.API_URL}/marks/publish-status?assessment_config_id=${data.config.id}`,
+        { headers: { "x-access-token": localStorage.getItem("token") } }
+      );
+      if (psRes.ok) {
+        const rows = await psRes.json();
+        const match = rows.find(
+          (r) => r.assessment_type === assessmentType &&
+                 Number(r.assessment_number) === Number(assessmentNumber)
+        );
+        if (match) publishInfo = { published: true, published_at: match.published_at };
+      }
+    } catch {}
+
+    renderMarksEntryForm(data, assessmentType, assessmentNumber, componentType, publishInfo);
   } catch (error) {
     console.error("Error loading marks entry:", error);
     configContent.innerHTML = `
@@ -1462,11 +1512,12 @@ async function openMarksEntry(assessmentType, assessmentNumber, componentType) {
 }
 
 // Render marks entry form
-function renderMarksEntryForm(data, assessmentType, assessmentNumber, componentType) {
+function renderMarksEntryForm(data, assessmentType, assessmentNumber, componentType, publishInfo) {
   const configContent = document.getElementById("config-entry-content");
   const configJson = data.config_json;
   const students = data.students;
   const isLocked = data.is_locked;
+  const pubState = publishInfo || { published: false, published_at: null };
 
   // Get questions for this assessment
   let questions = [];
@@ -1572,9 +1623,19 @@ function renderMarksEntryForm(data, assessmentType, assessmentNumber, componentT
           <button class="btn btn-primary" onclick="saveMarksEntry('${assessmentType}', ${assessmentNumber})" ${isLocked ? "disabled" : ""}>
             <i class="fas fa-save me-2"></i>Save Marks
           </button>
+          ${pubState.published
+            ? `<button class="btn btn-warning" onclick="togglePublishMarks(${data.config.id}, '${assessmentType}', ${assessmentNumber}, true)" title="Unpublish (was Published on ${pubState.published_at ? new Date(pubState.published_at).toLocaleString() : ''})">
+                 <i class="fas fa-eye-slash me-2"></i>Unpublish
+               </button>`
+            : `<button class="btn btn-success" onclick="togglePublishMarks(${data.config.id}, '${assessmentType}', ${assessmentNumber}, false)">
+                 <i class="fas fa-bullhorn me-2"></i>Publish Marks
+               </button>`}
           <button class="btn btn-secondary" onclick="closeConfigForm()">
             Back
           </button>
+          ${pubState.published
+            ? `<span class="ms-auto align-self-center small text-muted"><i class="fas fa-check-circle text-success me-1"></i>Published — students can see these marks.</span>`
+            : `<span class="ms-auto align-self-center small text-muted"><i class="fas fa-eye-slash me-1"></i>Not yet published — students cannot see these marks.</span>`}
         </div>
       </div>
     </div>
@@ -1666,6 +1727,39 @@ async function saveMarksEntry(assessmentType, assessmentNumber) {
     showMarksAlert(error.message || "Error saving marks. Please try again.", "danger");
   }
 }
+
+// Toggle publish state for one component-instance (CA/Assignment/Lab session).
+// Called from the button rendered by renderMarksEntryForm.
+async function togglePublishMarks(assessmentConfigId, assessmentType, assessmentNumber, currentlyPublished) {
+  const action = currentlyPublished ? "unpublish" : "publish";
+  const verb = currentlyPublished ? "Unpublishing" : "Publishing";
+  try {
+    const response = await fetch(`${window.API_URL}/marks/${action}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({
+        assessment_config_id: assessmentConfigId,
+        assessment_type: assessmentType,
+        assessment_number: assessmentNumber,
+      }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || `${verb} failed`);
+    }
+    showMarksAlert(`${assessmentType}${assessmentType === "ASSIGNMENT" || assessmentType === "LAB_SESSION" ? " " + assessmentNumber : ""} ${action}ed`, "success");
+    // Refresh the entry form so the button flips.
+    const componentType = (assessmentType === "LAB_SESSION") ? "LAB" : "THEORY";
+    openMarksEntry(assessmentType, assessmentNumber, componentType);
+  } catch (error) {
+    console.error(`${verb} error:`, error);
+    showMarksAlert(error.message || `${verb} failed. Please try again.`, "danger");
+  }
+}
+window.togglePublishMarks = togglePublishMarks;
 
 // View marks summary (slot-specific)
 async function viewMarksSummary() {
@@ -1776,33 +1870,44 @@ function renderConsolidatedFacultyPanel(data) {
   }
 
   // Body rows
+  // Publish-aware cells: an unpublished component shows "Not published" (muted
+  // italic) instead of a dash — makes it clear this is a visibility gate, not
+  // missing data.
   const rowsHtml = students.map((s) => {
     const cellDash = `<td class="text-muted text-center">–</td>`;
+    const notPublishedCell = `<td class="text-muted fst-italic text-center small">Not published</td>`;
 
     let cells;
     if (isPureLab) {
       const lab = s.components.LAB;
-      const sessionsCell = lab ? `${lab.sessions_done}/${lab.sessions_total}` : "0/0";
-      const actualCell = lab && lab.entered ? `${lab.actual}/${lab.actual_max}` : "–";
-      cells = `
-        <td class="text-center">${sessionsCell}</td>
-        <td class="text-center">${actualCell}</td>
-      `;
+      const labUnpub = lab && lab.published === false;
+      const sessionsCell = labUnpub
+        ? `<td class="text-muted fst-italic text-center small">Not published</td>`
+        : `<td class="text-center">${lab ? `${lab.sessions_done}/${lab.sessions_total}` : "0/0"}</td>`;
+      const actualCell = labUnpub
+        ? `<td class="text-muted fst-italic text-center small">Not published</td>`
+        : `<td class="text-center">${lab && lab.entered ? `${lab.actual}/${lab.actual_max}` : "–"}</td>`;
+      cells = `${sessionsCell}${actualCell}`;
     } else {
       const caCells = caKeys.map((k) => {
         const c = s.components[k];
+        if (c && c.published === false) return notPublishedCell + notPublishedCell;
         if (!c || !c.entered) return cellDash + cellDash;
         return `<td class="text-center">${c.actual}</td><td class="text-center fw-bold">${c.converted.toFixed(2)}</td>`;
       }).join("");
       const imCell = hasIM
-        ? (s.components.IM && s.components.IM.entered
-            ? `<td class="text-center fw-bold">${s.components.IM.converted.toFixed(2)}</td>`
-            : cellDash)
+        ? ((s.components.IM && s.components.IM.published === false)
+            ? notPublishedCell
+            : (s.components.IM && s.components.IM.entered
+                ? `<td class="text-center fw-bold">${s.components.IM.converted.toFixed(2)}</td>`
+                : cellDash))
         : "";
       const labCell = hasLAB
-        ? (s.components.LAB && s.components.LAB.entered
-            ? `<td class="text-center fw-bold">${s.components.LAB.converted.toFixed(2)}</td>`
-            : cellDash)
+        ? ((s.components.LAB && s.components.LAB.published === false)
+            ? notPublishedCell
+            : (s.components.LAB && s.components.LAB.entered
+                ? `<td class="text-center fw-bold">${s.components.LAB.converted.toFixed(2)}</td>`
+                : cellDash))
         : "";
       cells = caCells + imCell + labCell;
     }
@@ -1842,7 +1947,11 @@ function renderConsolidatedFacultyPanel(data) {
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
-        <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Actual = raw marks conducted; Converted = scaled to weightage. Grand Total is out of 100.</small>
+        <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Actual = raw marks conducted; Converted = scaled to weightage. Grand Total is out of 100.
+          ${stats.total_components != null
+            ? ` &nbsp;·&nbsp; Published: ${stats.published_components} of ${stats.total_components} components${stats.published_components < stats.total_components ? " — unpublished components show 'Not published' and don't contribute to the Grand Total" : ""}.`
+            : ""}
+        </small>
       </div>
     </div>
   `;
@@ -2381,10 +2490,13 @@ function renderConsolidatedStudentPanel(data) {
 
   const cellDash = `<td class="text-muted text-center">–</td>`;
 
+  // Build per-component rows. Each row carries a `notPublished` flag so we can
+  // render 'Not published yet' (distinct from 'entered but blank / — ').
   const componentRows = [];
   for (const k of caKeys) {
     const c = student.components[k];
     if (!c) continue;
+    const notPublished = c.published === false;
     componentRows.push({
       name: k,
       actual: c.entered ? c.actual : null,
@@ -2392,10 +2504,12 @@ function renderConsolidatedStudentPanel(data) {
       actual_max: c.actual_max,
       weightage: c.weightage,
       pending: !c.entered,
+      notPublished,
     });
   }
   if (hasIM) {
     const c = student.components.IM;
+    const notPublished = c && c.published === false;
     componentRows.push({
       name: "Internal Marks (IM)",
       actual: c && c.entered ? c.actual : null,
@@ -2403,21 +2517,34 @@ function renderConsolidatedStudentPanel(data) {
       actual_max: c ? c.actual_max : 0,
       weightage: c ? c.weightage : weightages.IM,
       pending: !(c && c.entered),
+      notPublished,
     });
   }
   if (hasLAB) {
     const c = student.components.LAB;
+    const notPublished = c && c.published === false;
     componentRows.push({
-      name: `Lab Evaluation${c && c.sessions_total ? ` (${c.sessions_done}/${c.sessions_total} sessions)` : ""}`,
+      name: `Lab Evaluation${c && c.sessions_total && !notPublished ? ` (${c.sessions_done}/${c.sessions_total} sessions)` : ""}`,
       actual: c && c.entered ? c.actual : null,
       converted: c && c.entered ? c.converted : null,
       actual_max: c ? c.actual_max : 0,
       weightage: c ? c.weightage : weightages.LAB,
       pending: !(c && c.entered),
+      notPublished,
     });
   }
 
   const rowsHtml = componentRows.map((r) => {
+    // Unpublished takes priority over "pending" — student sees 'Not published
+    // yet' rather than empty dashes, so they know it's a visibility gate.
+    if (r.notPublished) {
+      return `
+        <tr class="text-muted">
+          <td>${r.name} <span class="badge bg-secondary ms-1">Not published yet</span></td>
+          <td colspan="2" class="text-center fst-italic">Faculty has not published these marks yet.</td>
+          <td class="text-center text-muted">${r.weightage}</td>
+        </tr>`;
+    }
     const pendingBadge = r.pending ? ` <span class="badge bg-warning text-dark ms-1">Pending</span>` : "";
     return `
       <tr>
@@ -2428,10 +2555,13 @@ function renderConsolidatedStudentPanel(data) {
       </tr>`;
   }).join("");
 
-  const enteredCount = componentRows.filter((r) => !r.pending).length;
+  const publishedCount = componentRows.filter((r) => !r.notPublished).length;
+  const enteredCount = componentRows.filter((r) => !r.notPublished && !r.pending).length;
   const totalComponents = componentRows.length;
   const completeness = totalComponents
-    ? (enteredCount === totalComponents ? `All ${totalComponents} components entered ✓` : `${enteredCount} of ${totalComponents} entered`)
+    ? (publishedCount < totalComponents
+        ? `${publishedCount} of ${totalComponents} components published so far`
+        : (enteredCount === totalComponents ? `All ${totalComponents} components entered ✓` : `${enteredCount} of ${totalComponents} entered`))
     : "";
 
   // Grading Type for the student: prefer per-student value if backend attached
