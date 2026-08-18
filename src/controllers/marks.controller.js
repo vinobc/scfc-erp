@@ -719,8 +719,17 @@ exports.getMarksEntryData = async (req, res) => {
           [slot_year, semester_type, course_code, employee_id, session.date, slot_name, venue]
         );
 
+        // OD-exclusion applies prospectively w.e.f. Summer 2025-26 onwards.
+        // For older offerings, do not surface is_od — display and totals must
+        // match the pre-cutoff behaviour (i.e., what was on awarded grades).
+        const odExclusionActive =
+          slot_year > "2025-26" ||
+          (slot_year === "2025-26" && semester_type === "SUMMER");
         attendanceResult.rows.forEach((record) => {
-          attendanceMap[record.enrollment_no] = { status: record.status, is_od: record.is_od };
+          attendanceMap[record.enrollment_no] = {
+            status: record.status,
+            is_od: odExclusionActive ? record.is_od : false,
+          };
         });
       }
     }
@@ -912,6 +921,9 @@ exports.getMarksSummary = async (req, res) => {
     // Get all marks for all configs.
     // For LAB_SESSION rows, LEFT JOIN attendance so we can identify OD sessions
     // (attendance.is_od=TRUE) and exclude them from per-student totals below.
+    // OD-exclusion applies prospectively w.e.f. Summer 2025-26 onwards — the
+    // JOIN's semester-cutoff clause ensures pre-cutoff offerings compute
+    // totals exactly as they did before the fix (parity with awarded grades).
     const configIds = configResult.rows.map((c) => c.id);
     const marksResult = await db.query(
       `SELECT sm.*, ac.component_type, ac.config_json, ac.assessment_type as course_assessment_type,
@@ -931,6 +943,8 @@ exports.getMarksSummary = async (req, res) => {
         AND a.attendance_date = (
               (ac.config_json -> 'labSessions' -> (sm.assessment_number - 1) ->> 'date')::date
             )
+        AND (ac.slot_year > '2025-26'
+             OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
        WHERE sm.assessment_config_id = ANY($1)`,
       [configIds]
     );
@@ -1469,6 +1483,9 @@ async function computeConsolidatedReport(configs, students) {
   // Fetch marks for every config in one query.
   // For LAB_SESSION rows, LEFT JOIN attendance so we can identify OD sessions
   // (attendance.is_od=TRUE) and skip them from the LAB aggregation below.
+  // OD-exclusion applies prospectively w.e.f. Summer 2025-26 onwards — the
+  // JOIN's semester-cutoff clause keeps pre-cutoff totals identical to the
+  // pre-fix behaviour (parity with grades already awarded).
   const configIds = configs.map((c) => c.id);
   const marksRes = configIds.length
     ? await db.query(
@@ -1490,6 +1507,8 @@ async function computeConsolidatedReport(configs, students) {
           AND a.attendance_date = (
                 (ac.config_json -> 'labSessions' -> (sm.assessment_number - 1) ->> 'date')::date
               )
+          AND (ac.slot_year > '2025-26'
+               OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
          WHERE sm.assessment_config_id = ANY($1::int[])`,
         [configIds]
       )

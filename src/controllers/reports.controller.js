@@ -1587,6 +1587,11 @@ async function fetchIMMarks(group, students, assessmentType) {
        AND a.attendance_date = (
              (ac.config_json -> 'labSessions' -> (sm.assessment_number - 1) ->> 'date')::date
            )
+       -- OD-exclusion applies prospectively w.e.f. Summer 2025-26 onwards.
+       -- Pre-cutoff offerings match no attendance row here, so is_od stays
+       -- FALSE and the Excel renders the raw numeric mark as before.
+       AND (ac.slot_year > '2025-26'
+            OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
       WHERE sm.assessment_config_id = ANY($1::int[])
         AND sm.assessment_type = 'LAB_SESSION'
       GROUP BY sm.enrollment_number, sm.assessment_config_id, sm.assessment_number
