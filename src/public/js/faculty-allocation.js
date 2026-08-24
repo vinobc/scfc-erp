@@ -4465,12 +4465,12 @@ function loadP4LabVenues() {
       labVenues.forEach((venue) => {
         const option1 = document.createElement("option");
         option1.value = venue.venue;
-        option1.textContent = venue.venue;
+        option1.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         allocationLabVenue1.appendChild(option1);
 
         const option2 = document.createElement("option");
         option2.value = venue.venue;
-        option2.textContent = venue.venue;
+        option2.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         allocationLabVenue2.appendChild(option2);
       });
     })
@@ -4851,7 +4851,7 @@ function loadVenuesForP4Lab(venueType, venueDropdown) {
       filteredVenues.forEach((venue) => {
         const option = document.createElement("option");
         option.value = venue.venue;
-        option.textContent = venue.venue;
+        option.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         venueDropdown.appendChild(option);
       });
     })
