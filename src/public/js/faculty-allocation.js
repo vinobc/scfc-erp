@@ -4465,12 +4465,12 @@ function loadP4LabVenues() {
       labVenues.forEach((venue) => {
         const option1 = document.createElement("option");
         option1.value = venue.venue;
-        option1.textContent = venue.venue;
+        option1.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         allocationLabVenue1.appendChild(option1);
 
         const option2 = document.createElement("option");
         option2.value = venue.venue;
-        option2.textContent = venue.venue;
+        option2.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         allocationLabVenue2.appendChild(option2);
       });
     })
@@ -4767,10 +4767,11 @@ function updateLabPairDayTime(labPair, displayElement, year = null, semester = n
     "L39+L40": "Friday 3:15 PM - 5:15 PM"
   };
   
-  // Use 2025-26 timings for FALL and WINTER (same timetable)
-  const dayTimeMap = (currentYear === "2025-26" && (currentSemester === "FALL" || currentSemester === "WINTER"))
-    ? fall2025DayTimeMap
-    : defaultDayTimeMap;
+  // Semesters sharing the current master timetable grid: W25-26, F25-26, F26-27
+  const useCurrentTimings =
+    (currentYear === "2025-26" && (currentSemester === "FALL" || currentSemester === "WINTER")) ||
+    (currentYear === "2026-27" && currentSemester === "FALL");
+  const dayTimeMap = useCurrentTimings ? fall2025DayTimeMap : defaultDayTimeMap;
   
   displayElement.textContent = dayTimeMap[labPair] || "Unknown time slot";
 }
@@ -4850,7 +4851,7 @@ function loadVenuesForP4Lab(venueType, venueDropdown) {
       filteredVenues.forEach((venue) => {
         const option = document.createElement("option");
         option.value = venue.venue;
-        option.textContent = venue.venue;
+        option.textContent = `${venue.venue} (Capacity: ${venue.capacity})`;
         venueDropdown.appendChild(option);
       });
     })
