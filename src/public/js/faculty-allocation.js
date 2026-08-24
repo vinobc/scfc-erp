@@ -4767,10 +4767,11 @@ function updateLabPairDayTime(labPair, displayElement, year = null, semester = n
     "L39+L40": "Friday 3:15 PM - 5:15 PM"
   };
   
-  // Use 2025-26 timings for FALL and WINTER (same timetable)
-  const dayTimeMap = (currentYear === "2025-26" && (currentSemester === "FALL" || currentSemester === "WINTER"))
-    ? fall2025DayTimeMap
-    : defaultDayTimeMap;
+  // Semesters sharing the current master timetable grid: W25-26, F25-26, F26-27
+  const useCurrentTimings =
+    (currentYear === "2025-26" && (currentSemester === "FALL" || currentSemester === "WINTER")) ||
+    (currentYear === "2026-27" && currentSemester === "FALL");
+  const dayTimeMap = useCurrentTimings ? fall2025DayTimeMap : defaultDayTimeMap;
   
   displayElement.textContent = dayTimeMap[labPair] || "Unknown time slot";
 }
