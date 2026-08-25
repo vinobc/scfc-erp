@@ -4,6 +4,7 @@ const {
   verifyToken,
   isFacultyOrCoordinator,
   isAdmin,
+  isAdminOrCoe,
   isStudent,
 } = require("../middleware/auth.middleware");
 
@@ -14,7 +15,16 @@ router.use(verifyToken);
 
 // ================== FACULTY/COORDINATOR ROUTES ==================
 // Configuration endpoints
-router.get("/semesters", isFacultyOrCoordinator, marksController.getAvailableSemesters);
+// CoE also allowed to /semesters — needed to drive the lock-controls semester
+// picker. CoE never proceeds into course/entry endpoints below.
+router.get(
+  "/semesters",
+  (req, res, next) => {
+    if (["faculty", "timetable_coordinator", "admin", "coe"].includes(req.userRole)) return next();
+    return res.status(403).json({ message: "Access denied" });
+  },
+  marksController.getAvailableSemesters
+);
 router.get("/courses", isFacultyOrCoordinator, marksController.getCourseOfferings);
 router.get("/assessment-type/:course_code", isFacultyOrCoordinator, marksController.getAssessmentType);
 router.get("/config", isFacultyOrCoordinator, marksController.getAssessmentConfig);
@@ -26,6 +36,9 @@ router.get("/students", isFacultyOrCoordinator, marksController.getEnrolledStude
 router.get("/entry", isFacultyOrCoordinator, marksController.getMarksEntryData);
 router.post("/entry", isFacultyOrCoordinator, marksController.saveMarks);
 router.get("/summary", isFacultyOrCoordinator, marksController.getMarksSummary);
+// Effective per-component lock status for a faculty's specific (course, slot).
+// Considers both the bulk lock and any active unlock exceptions.
+router.get("/effective-locks", isFacultyOrCoordinator, marksController.getEffectiveLocks);
 // Consolidated is also read-access for COE (used by the View Grades page)
 router.get(
   "/consolidated",
@@ -42,13 +55,27 @@ router.get("/publish-status", isFacultyOrCoordinator, marksController.getPublish
 router.post("/publish", isFacultyOrCoordinator, marksController.publishComponent);
 router.post("/unpublish", isFacultyOrCoordinator, marksController.unpublishComponent);
 
-// ================== ADMIN ROUTES ==================
+// ================== ADMIN / COE ROUTES ==================
 // Lock control endpoints
 // GET locks is accessible to faculty/coordinator (to check if entry is locked)
-// POST lock/unlock is admin only
-router.get("/admin/locks", isFacultyOrCoordinator, marksController.getLockStatus);
-router.post("/admin/lock", isAdmin, marksController.lockComponent);
-router.post("/admin/unlock", isAdmin, marksController.unlockComponent);
+// and to CoE (needed by the lock-controls panel). Writes are admin OR CoE.
+router.get(
+  "/admin/locks",
+  (req, res, next) => {
+    if (["faculty", "timetable_coordinator", "admin", "coe"].includes(req.userRole)) return next();
+    return res.status(403).json({ message: "Access denied" });
+  },
+  marksController.getLockStatus
+);
+router.post("/admin/lock", isAdminOrCoe, marksController.lockComponent);
+router.post("/admin/unlock", isAdminOrCoe, marksController.unlockComponent);
+
+// Selective unlock exceptions layered on top of bulk locks.
+// Admin/CoE grant per-(faculty, course, slot) overrides when a bulk lock is on.
+router.get("/admin/lock-exceptions", isAdminOrCoe, marksController.listMarksLockExceptions);
+router.post("/admin/lock-exception", isAdminOrCoe, marksController.addMarksLockException);
+router.delete("/admin/lock-exception/:id", isAdminOrCoe, marksController.deleteMarksLockException);
+router.get("/admin/allocations", isAdminOrCoe, marksController.getFacultyAllocationsForSemester);
 
 // ================== STUDENT ROUTES ==================
 // Student marks view
