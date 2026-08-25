@@ -52,6 +52,14 @@ exports.isAdmin = (req, res, next) => {
   next();
 };
 
+// Check if user has admin or CoE role. Used for marks-lock write endpoints
+// (bulk lock/unlock + selective unlock exceptions) which CoE runs during
+// exam windows.
+exports.isAdminOrCoe = (req, res, next) => {
+  if (req.userRole === "admin" || req.userRole === "coe") return next();
+  return res.status(403).json({ message: "Require Admin or CoE Role" });
+};
+
 // Check if user has staff or admin role
 exports.isStaffOrAdmin = (req, res, next) => {
   if (req.userRole !== "admin" && req.userRole !== "staff") {

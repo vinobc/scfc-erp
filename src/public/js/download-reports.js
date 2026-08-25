@@ -279,12 +279,11 @@ function displayDownloadReportsInterface() {
             </div>
           </div>
 
-          <!-- Student Marks Report — hidden for COE (their own report section will
-               be defined later); still shown to faculty/coordinator/admin/HoI. -->
+          <!-- Student Marks Report — shown to faculty/coordinator/admin/HoI/COE.
+               COE sees the same all-faculty view as admin. -->
           ${(() => {
-            if (currentUserRole === "coe") return "";
             const showMyCourses = currentUserRole === "faculty" || currentUserRole === "timetable_coordinator";
-            const showMySchool = currentUserRole === "admin" || currentUserIsHoi;
+            const showMySchool = currentUserRole === "admin" || currentUserRole === "coe" || currentUserIsHoi;
             if (!showMyCourses && !showMySchool) return "";
             const showToggle = showMyCourses && showMySchool;
             const defaultScope = showMySchool ? "my-school" : "my-courses";

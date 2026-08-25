@@ -12,6 +12,38 @@ function deriveProgramLevel(courseCode) {
   return "RESEARCH";
 }
 
+// Returns true if marks entry is blocked for this specific
+// (component, level, faculty, course, slot, venue).
+// Consults the bulk marks_entry_lock table first; if bulk is on, checks
+// marks_lock_exception for a matching unlock exception granted by admin/CoE.
+// RESEARCH-tier courses bypass everything.
+async function isMarksEntryLocked({
+  slot_year, semester_type, component_type, program_level,
+  employee_id, course_code, slot_name, venue,
+}) {
+  if (program_level !== "UG" && program_level !== "PG") return false;
+  const bulk = await db.query(
+    `SELECT 1 FROM marks_entry_lock
+     WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3
+       AND program_level IN ('ALL', $4)
+       AND is_locked = true
+     LIMIT 1`,
+    [slot_year, semester_type, component_type, program_level]
+  );
+  if (bulk.rows.length === 0) return false;
+  const exc = await db.query(
+    `SELECT 1 FROM marks_lock_exception
+     WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3
+       AND program_level IN ('ALL', $4)
+       AND employee_id = $5 AND course_code = $6
+       AND slot_name = $7 AND venue = $8
+       AND (expires_at IS NULL OR expires_at > NOW())
+     LIMIT 1`,
+    [slot_year, semester_type, component_type, program_level, employee_id, course_code, slot_name, venue]
+  );
+  return exc.rows.length === 0;
+}
+
 // Derive assessment type from course code and course type
 function deriveAssessmentType(courseCode, courseType, theory = 0, practical = 0) {
   // Course code format: ABC1234 (e.g., CSE2008)
@@ -123,8 +155,8 @@ exports.getAvailableSemesters = async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Admin can see all semesters
-    if (user.role === "admin") {
+    // Admin and CoE see all semesters (CoE drives the lock-controls picker)
+    if (user.role === "admin" || user.role === "coe") {
       const result = await db.query(
         `SELECT DISTINCT slot_year, semester_type
          FROM faculty_allocation
@@ -635,21 +667,20 @@ exports.getMarksEntryData = async (req, res) => {
     const config = configResult.rows[0];
     const configJson = config.config_json;
 
-    // Check if component is locked for this course's program level.
-    // 'ALL' locks apply to both UG and PG. RESEARCH courses bypass locks.
+    // Check if component is locked for this specific (faculty, course, slot).
+    // Bulk 'ALL' locks apply to both UG and PG; admin/CoE-granted exceptions
+    // can re-open a specific (faculty, course, slot). RESEARCH bypasses.
     const programLevel = deriveProgramLevel(config.course_code);
-    let isLocked = false;
-    if (programLevel === "UG" || programLevel === "PG") {
-      const lockResult = await db.query(
-        `SELECT 1 FROM marks_entry_lock
-         WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3
-           AND program_level IN ('ALL', $4)
-           AND is_locked = true
-         LIMIT 1`,
-        [slot_year, semester_type, assType, programLevel]
-      );
-      isLocked = lockResult.rows.length > 0;
-    }
+    const isLocked = await isMarksEntryLocked({
+      slot_year,
+      semester_type,
+      component_type: assType,
+      program_level: programLevel,
+      employee_id,
+      course_code,
+      slot_name,
+      venue,
+    });
 
     // Get faculty name
     const facultyResult = await db.query(
@@ -809,22 +840,23 @@ exports.saveMarks = async (req, res) => {
       lockComponentType = 'LAB';
     }
 
-    // Program-level-aware lock: 'ALL' locks apply to both UG and PG; RESEARCH courses bypass.
+    // Program-level lock: 'ALL' bulk locks apply to both UG and PG; admin/CoE
+    // exceptions can re-open a specific (faculty, course, slot). RESEARCH bypasses.
     const programLevel = deriveProgramLevel(config.course_code);
-    if (programLevel === "UG" || programLevel === "PG") {
-      const lockResult = await db.query(
-        `SELECT 1 FROM marks_entry_lock
-         WHERE slot_year = $1 AND semester_type = $2 AND component_type = $3
-           AND program_level IN ('ALL', $4)
-           AND is_locked = true
-         LIMIT 1`,
-        [config.slot_year, config.semester_type, lockComponentType, programLevel]
-      );
-      if (lockResult.rows.length > 0) {
-        return res.status(403).json({
-          message: `Marks entry is locked for ${programLevel} courses (${lockComponentType})`,
-        });
-      }
+    const locked = await isMarksEntryLocked({
+      slot_year: config.slot_year,
+      semester_type: config.semester_type,
+      component_type: lockComponentType,
+      program_level: programLevel,
+      employee_id: config.employee_id,
+      course_code: config.course_code,
+      slot_name: config.slot_name,
+      venue: config.venue,
+    });
+    if (locked) {
+      return res.status(403).json({
+        message: `Marks entry is locked for ${programLevel} courses (${lockComponentType})`,
+      });
     }
 
     const assNumber = assessment_number || 1;
@@ -2206,3 +2238,161 @@ async function fetchPublishedKeySet(config_ids) {
   return set;
 }
 exports._fetchPublishedKeySet = fetchPublishedKeySet;
+
+// ================== MARKS LOCK EXCEPTIONS (admin / CoE) ==================
+
+// List active exceptions for a semester. Optional component_type filter.
+// expires_at is returned as ISO-ish text via TO_CHAR to sidestep the
+// JS-Date-in-UTC drift we hit on the attendance-range feature.
+exports.listMarksLockExceptions = async (req, res) => {
+  try {
+    const { slot_year, semester_type, component_type } = req.query;
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "slot_year and semester_type are required" });
+    }
+    const params = [slot_year, semester_type];
+    let where = "e.slot_year = $1 AND e.semester_type = $2";
+    if (component_type) {
+      params.push(component_type);
+      where += ` AND e.component_type = $${params.length}`;
+    }
+    const result = await db.query(
+      `SELECT e.id, e.slot_year, e.semester_type, e.component_type, e.program_level,
+              e.employee_id, e.course_code, e.slot_name, e.venue,
+              TO_CHAR(e.expires_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS expires_at,
+              e.granted_by, e.granted_at,
+              f.name AS faculty_name,
+              u.username AS granted_by_username
+       FROM marks_lock_exception e
+       LEFT JOIN faculty f ON f.employee_id = e.employee_id
+       LEFT JOIN "user" u ON u.user_id = e.granted_by
+       WHERE ${where}
+       ORDER BY e.granted_at DESC, e.id DESC`,
+      params
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("List marks lock exceptions error:", error);
+    res.status(500).json({ message: "Server error while listing marks lock exceptions" });
+  }
+};
+
+// Add an unlock exception. Effective immediately; grants save access to the
+// specific (faculty, course, slot, venue) for the component even while the
+// bulk lock is on. Optional expires_at silently ends the grant.
+exports.addMarksLockException = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const {
+      slot_year, semester_type, component_type, program_level,
+      employee_id, course_code, slot_name, venue,
+      expires_at,
+    } = req.body;
+    if (!slot_year || !semester_type || !component_type || !program_level ||
+        !employee_id || !course_code || !slot_name || !venue) {
+      return res.status(400).json({ message: "Required parameters missing" });
+    }
+    if (!["UG", "PG", "ALL"].includes(program_level)) {
+      return res.status(400).json({ message: "program_level must be UG, PG, or ALL" });
+    }
+    if (expires_at) {
+      const parsed = new Date(expires_at);
+      if (isNaN(parsed.getTime())) {
+        return res.status(400).json({ message: "expires_at is not a valid datetime" });
+      }
+    }
+    const result = await db.query(
+      `INSERT INTO marks_lock_exception
+        (slot_year, semester_type, component_type, program_level,
+         employee_id, course_code, slot_name, venue, expires_at, granted_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id`,
+      [slot_year, semester_type, component_type, program_level,
+       employee_id, course_code, slot_name, venue, expires_at || null, userId]
+    );
+    res.status(201).json({ id: result.rows[0].id, message: "Exception added" });
+  } catch (error) {
+    console.error("Add marks lock exception error:", error);
+    res.status(500).json({ message: "Server error while adding marks lock exception" });
+  }
+};
+
+exports.deleteMarksLockException = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ message: "id is required" });
+    const result = await db.query(
+      `DELETE FROM marks_lock_exception WHERE id = $1`,
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Exception not found" });
+    }
+    res.status(200).json({ message: "Exception removed" });
+  } catch (error) {
+    console.error("Delete marks lock exception error:", error);
+    res.status(500).json({ message: "Server error while deleting marks lock exception" });
+  }
+};
+
+// Faculty-facing effective lock status per component for a specific
+// (course, faculty, slot). Returns rows shaped like /admin/locks so the
+// existing dashboard renderer can consume it. Considers bulk locks AND any
+// active exceptions applied to this specific slot.
+exports.getEffectiveLocks = async (req, res) => {
+  try {
+    const { slot_year, semester_type, course_code, employee_id, slot_name, venue } = req.query;
+    if (!slot_year || !semester_type || !course_code || !employee_id || !slot_name || !venue) {
+      return res.status(400).json({ message: "Required parameters missing" });
+    }
+    const programLevel = deriveProgramLevel(course_code);
+    const components = ["CA1", "CA2", "CA3", "ASSIGNMENT", "LAB"];
+    const rows = await Promise.all(
+      components.map(async (ct) => {
+        const locked = await isMarksEntryLocked({
+          slot_year,
+          semester_type,
+          component_type: ct,
+          program_level: programLevel,
+          employee_id,
+          course_code,
+          slot_name,
+          venue,
+        });
+        // program_level=ALL mimics the "applies to this course" shape the
+        // frontend's isComponentLockedForCourse helper already expects.
+        return { component_type: ct, program_level: "ALL", is_locked: locked };
+      })
+    );
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error("Get effective locks error:", error);
+    res.status(500).json({ message: "Server error while fetching effective locks" });
+  }
+};
+
+// Feed the admin/CoE UI's cascading Faculty → Course → Slot dropdowns.
+// Returns distinct (employee_id, faculty_name, course_code, slot_name, venue)
+// from faculty_allocation. Client-side filters the cascade — no per-cascade
+// round trips.
+exports.getFacultyAllocationsForSemester = async (req, res) => {
+  try {
+    const { slot_year, semester_type } = req.query;
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "slot_year and semester_type are required" });
+    }
+    const result = await db.query(
+      `SELECT DISTINCT fa.employee_id, f.name AS faculty_name,
+              fa.course_code, fa.slot_name, fa.venue
+       FROM faculty_allocation fa
+       JOIN faculty f ON f.employee_id = fa.employee_id
+       WHERE fa.slot_year = $1 AND fa.semester_type = $2
+       ORDER BY f.name, fa.course_code, fa.slot_name, fa.venue`,
+      [slot_year, semester_type]
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error("Get faculty allocations error:", error);
+    res.status(500).json({ message: "Server error while fetching faculty allocations" });
+  }
+};

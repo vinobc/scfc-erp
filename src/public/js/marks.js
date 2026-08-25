@@ -180,7 +180,21 @@ async function loadMarksCourses() {
   const semesterSelect = document.getElementById("marks-semester-select");
   const [slot_year, semester_type] = semesterSelect.value.split("|");
 
+  const isCoe = typeof currentUser !== "undefined" && currentUser?.role === "coe";
+
   try {
+    // Show admin/CoE lock controls (bulk grid + selective unlock exceptions)
+    if (typeof currentUser !== "undefined" && ["admin", "coe"].includes(currentUser?.role)) {
+      renderAdminLockControls(slot_year, semester_type);
+    }
+
+    // CoE has no faculty allocations and doesn't need the marks entry flow —
+    // the lock panel above is their entire workflow. Hide the course step.
+    if (isCoe) {
+      document.getElementById("course-selection-step").classList.add("d-none");
+      return;
+    }
+
     const courseList = document.getElementById("marks-course-list");
     courseList.innerHTML = `
       <div class="text-center py-3">
@@ -190,11 +204,6 @@ async function loadMarksCourses() {
     `;
 
     document.getElementById("course-selection-step").classList.remove("d-none");
-
-    // Show admin lock controls if user is admin
-    if (typeof currentUser !== "undefined" && currentUser?.role === "admin") {
-      renderAdminLockControls(slot_year, semester_type);
-    }
 
     const response = await fetch(
       `${window.API_URL}/marks/courses?slot_year=${slot_year}&semester_type=${semester_type}`,
@@ -340,9 +349,13 @@ async function loadComponentsDashboard(slot_year, semester_type, course_code, em
       labConfig = await labResponse.json();
     }
 
-    // Get lock status
+    // Get effective per-component lock status for THIS specific slot —
+    // factors in both bulk locks and any active unlock exceptions granted
+    // by admin/CoE to this faculty+course+slot.
     const lockResponse = await fetch(
-      `${window.API_URL}/marks/admin/locks?slot_year=${slot_year}&semester_type=${semester_type}`,
+      `${window.API_URL}/marks/effective-locks?slot_year=${slot_year}&semester_type=${semester_type}` +
+      `&course_code=${encodeURIComponent(course_code)}&employee_id=${encodeURIComponent(employee_id)}` +
+      `&slot_name=${encodeURIComponent(slot_name)}&venue=${encodeURIComponent(venue)}`,
       { headers: { "x-access-token": localStorage.getItem("token") } }
     );
 
@@ -2113,7 +2126,7 @@ function renderMarksSummary(data) {
 
 // ================== ADMIN LOCK CONTROLS ==================
 
-// Render admin lock controls panel
+// Render admin/CoE lock controls panel: bulk grid + selective unlock exceptions.
 async function renderAdminLockControls(slot_year, semester_type) {
   const adminPanel = document.getElementById("admin-lock-controls");
   if (!adminPanel) return;
@@ -2122,7 +2135,7 @@ async function renderAdminLockControls(slot_year, semester_type) {
   adminPanel.innerHTML = `
     <div class="card border-warning">
       <div class="card-header bg-warning text-dark">
-        <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Marks Entry Lock Controls (Admin Only)</h6>
+        <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Marks Entry Lock Controls (Admin / CoE)</h6>
       </div>
       <div class="card-body">
         <div class="text-center py-2">
@@ -2134,27 +2147,29 @@ async function renderAdminLockControls(slot_year, semester_type) {
   `;
 
   try {
-    const response = await fetch(
-      `${window.API_URL}/marks/admin/locks?slot_year=${slot_year}&semester_type=${semester_type}`,
-      { headers: { "x-access-token": localStorage.getItem("token") } }
-    );
+    const token = localStorage.getItem("token");
+    const headers = { "x-access-token": token };
+    const [locksResp, excResp, allocResp] = await Promise.all([
+      fetch(`${window.API_URL}/marks/admin/locks?slot_year=${slot_year}&semester_type=${semester_type}`, { headers }),
+      fetch(`${window.API_URL}/marks/admin/lock-exceptions?slot_year=${slot_year}&semester_type=${semester_type}`, { headers }),
+      fetch(`${window.API_URL}/marks/admin/allocations?slot_year=${slot_year}&semester_type=${semester_type}`, { headers }),
+    ]);
+    if (!locksResp.ok) throw new Error("Failed to load lock status");
+    if (!excResp.ok) throw new Error("Failed to load exceptions");
+    if (!allocResp.ok) throw new Error("Failed to load allocations");
+    const locks = await locksResp.json();
+    const exceptions = await excResp.json();
+    // Stash allocations for the cascading dropdowns to filter client-side.
+    window.marksLockAllocations = await allocResp.json();
 
-    if (!response.ok) {
-      throw new Error("Failed to load lock status");
-    }
-
-    const locks = await response.json();
     const components = ["CA1", "CA2", "CA3", "ASSIGNMENT", "LAB"];
 
-    // Build lock status map keyed by component × program_level.
-    // Each lock row = { component_type, program_level, is_locked, ... }
+    // ─── Bulk lock grid (unchanged behavior) ────────────────────────────
     const lockMap = {};
     locks.forEach((lock) => {
       lockMap[`${lock.component_type}|${lock.program_level}`] = lock.is_locked;
     });
 
-    // Helper to render one lock cell (badge + toggle button) for a given
-    // component + level. The 'ALL' cell is the "Both" toggle.
     const cell = (comp, level) => {
       const isLocked = lockMap[`${comp}|${level}`] || false;
       const badge = isLocked
@@ -2173,7 +2188,7 @@ async function renderAdminLockControls(slot_year, semester_type) {
       `;
     };
 
-    let lockRows = components
+    const lockRows = components
       .map((comp) => `
         <tr>
           <td><strong>${comp}</strong></td>
@@ -2184,14 +2199,52 @@ async function renderAdminLockControls(slot_year, semester_type) {
       `)
       .join("");
 
+    // ─── Exception panel: form + list ───────────────────────────────────
+    // Build a searchable faculty list backed by a <datalist>. Option values
+    // are display labels ("Name (empId)"); we look the empId back out via
+    // window.marksFacultyLookup keyed on the same label.
+    const facultyEntries = [...new Map(
+      window.marksLockAllocations.map((a) => [String(a.employee_id), a.faculty_name])
+    ).entries()].sort((a, b) => (a[1] || "").localeCompare(b[1] || ""));
+    window.marksFacultyLookup = {};
+    const facultyDatalistOptions = facultyEntries.map(([empId, name]) => {
+      const label = `${name || empId} (${empId})`;
+      window.marksFacultyLookup[label] = empId;
+      return `<option value="${label}"></option>`;
+    }).join("");
+
+    const exceptionRows = exceptions.length === 0
+      ? `<tr><td colspan="9" class="text-center text-muted small">No active exceptions.</td></tr>`
+      : exceptions.map((e) => {
+          const levelLabel = e.program_level === "ALL" ? "Both" : e.program_level;
+          const expires = e.expires_at ? e.expires_at.replace("T", " ") : "—";
+          const granted = e.granted_at ? new Date(e.granted_at).toLocaleString() : "";
+          return `
+            <tr>
+              <td>${e.faculty_name || ""} <span class="text-muted small">(${e.employee_id})</span></td>
+              <td>${e.course_code}</td>
+              <td>${e.slot_name}</td>
+              <td>${e.venue}</td>
+              <td>${e.component_type}</td>
+              <td>${levelLabel}</td>
+              <td class="small">${expires}</td>
+              <td class="small text-muted">${granted}</td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteMarksLockException(${e.id}, '${slot_year}', '${semester_type}')">
+                  <i class="fas fa-trash me-1"></i>Remove
+                </button>
+              </td>
+            </tr>`;
+        }).join("");
+
     adminPanel.innerHTML = `
       <div class="card border-warning">
         <div class="card-header bg-warning text-dark">
-          <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Marks Entry Lock Controls (Admin Only) - ${slot_year} ${semester_type}</h6>
+          <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Marks Entry Lock Controls (Admin / CoE) - ${slot_year} ${semester_type}</h6>
         </div>
         <div class="card-body">
           <p class="text-muted small mb-3">Lock/unlock marks entry per component and program level. The "Both" toggle locks BOTH UG and PG regardless of the UG/PG individual toggles. When locked, faculty cannot enter or edit marks for that component in that program level. RESEARCH-tier courses are not affected by any lock.</p>
-          <table class="table table-bordered table-sm mb-0 align-middle">
+          <table class="table table-bordered table-sm mb-3 align-middle">
             <thead class="table-light">
               <tr>
                 <th>Component</th>
@@ -2204,16 +2257,207 @@ async function renderAdminLockControls(slot_year, semester_type) {
               ${lockRows}
             </tbody>
           </table>
+
+          <hr class="my-3">
+
+          <h6 class="mb-2"><i class="fas fa-key me-2"></i>Temporary Unlock Exceptions</h6>
+          <p class="text-muted small mb-2">When a bulk lock is on, an exception grants save access to a specific faculty + course + slot until removed. Optional expiry auto-ends the grant. Exceptions have no effect when the bulk lock is off.</p>
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-3">
+              <label class="form-label small mb-1">Faculty</label>
+              <input type="text" id="mle-faculty" class="form-control form-control-sm"
+                     list="mle-faculty-options" placeholder="Type name or ID..."
+                     autocomplete="off"
+                     oninput="onMarksLockExceptionFacultyChange()"
+                     onchange="onMarksLockExceptionFacultyChange()">
+              <datalist id="mle-faculty-options">${facultyDatalistOptions}</datalist>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1">Course</label>
+              <select id="mle-course" class="form-select form-select-sm" onchange="onMarksLockExceptionCourseChange()" disabled>
+                <option value="">Select faculty first</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small mb-1">Slot (slot_name @ venue)</label>
+              <select id="mle-slot" class="form-select form-select-sm" disabled>
+                <option value="">Select course first</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1">Component</label>
+              <select id="mle-component" class="form-select form-select-sm">
+                ${components.map((c) => `<option value="${c}">${c}</option>`).join("")}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1">Level</label>
+              <select id="mle-level" class="form-select form-select-sm">
+                <option value="UG">UG</option>
+                <option value="PG">PG</option>
+                <option value="ALL">Both</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-3">
+              <label class="form-label small mb-1">Expires at (optional)</label>
+              <input type="datetime-local" id="mle-expires" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-auto">
+              <button class="btn btn-sm btn-warning" onclick="addMarksLockException('${slot_year}', '${semester_type}')">
+                <i class="fas fa-plus me-1"></i>Add Exception
+              </button>
+            </div>
+          </div>
+
+          <table class="table table-bordered table-sm mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Faculty</th>
+                <th>Course</th>
+                <th>Slot</th>
+                <th>Venue</th>
+                <th>Component</th>
+                <th>Level</th>
+                <th>Expires</th>
+                <th>Granted at</th>
+                <th class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody>${exceptionRows}</tbody>
+          </table>
         </div>
       </div>
     `;
   } catch (error) {
-    console.error("Error loading lock status:", error);
+    console.error("Error loading admin lock panel:", error);
     adminPanel.innerHTML = `
       <div class="alert alert-danger">
-        <i class="fas fa-exclamation-triangle me-2"></i>Failed to load lock status
+        <i class="fas fa-exclamation-triangle me-2"></i>Failed to load lock controls
       </div>
     `;
+  }
+}
+
+// Cascading dropdown handlers for the exception form. Data comes from
+// window.marksLockAllocations (populated once by renderAdminLockControls).
+// Faculty is an <input>+<datalist> whose value is a label like
+// "Dr. Name (313117)" — resolve it back to employee_id via marksFacultyLookup.
+function resolveFacultyEmpIdFromInput() {
+  const label = document.getElementById("mle-faculty")?.value?.trim();
+  if (!label) return null;
+  const lookup = window.marksFacultyLookup || {};
+  if (lookup[label]) return lookup[label];
+  // Fallback: user typed the raw empId
+  return Object.values(lookup).includes(label) ? label : null;
+}
+
+function onMarksLockExceptionFacultyChange() {
+  const courseSelect = document.getElementById("mle-course");
+  const slotSelect = document.getElementById("mle-slot");
+  const empId = resolveFacultyEmpIdFromInput();
+  courseSelect.innerHTML = '<option value="">Select course</option>';
+  slotSelect.innerHTML = '<option value="">Select course first</option>';
+  slotSelect.disabled = true;
+  if (!empId) {
+    courseSelect.disabled = true;
+    return;
+  }
+  const courses = [...new Set(
+    (window.marksLockAllocations || [])
+      .filter((a) => String(a.employee_id) === String(empId))
+      .map((a) => a.course_code)
+  )].sort();
+  courseSelect.innerHTML = '<option value="">Select course</option>' +
+    courses.map((c) => `<option value="${c}">${c}</option>`).join("");
+  courseSelect.disabled = false;
+}
+
+function onMarksLockExceptionCourseChange() {
+  const courseSelect = document.getElementById("mle-course");
+  const slotSelect = document.getElementById("mle-slot");
+  const empId = resolveFacultyEmpIdFromInput();
+  const course = courseSelect?.value;
+  if (!empId || !course) {
+    slotSelect.innerHTML = '<option value="">Select course first</option>';
+    slotSelect.disabled = true;
+    return;
+  }
+  const slots = (window.marksLockAllocations || [])
+    .filter((a) => String(a.employee_id) === String(empId) && a.course_code === course)
+    .map((a) => ({ slot_name: a.slot_name, venue: a.venue }));
+  // De-dupe by slot_name|venue
+  const seen = new Set();
+  const uniq = slots.filter((s) => {
+    const k = `${s.slot_name}|${s.venue}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  slotSelect.innerHTML = '<option value="">Select slot</option>' +
+    uniq.map((s) => `<option value="${s.slot_name}|${s.venue}">${s.slot_name} @ ${s.venue}</option>`).join("");
+  slotSelect.disabled = false;
+}
+
+async function addMarksLockException(slot_year, semester_type) {
+  const empId = resolveFacultyEmpIdFromInput();
+  const course = document.getElementById("mle-course")?.value;
+  const slotComposite = document.getElementById("mle-slot")?.value;
+  const component = document.getElementById("mle-component")?.value;
+  const level = document.getElementById("mle-level")?.value;
+  const expires = document.getElementById("mle-expires")?.value || null;
+
+  if (!empId || !course || !slotComposite || !component || !level) {
+    alert("Please pick a valid faculty from the list, plus course, slot, component, and level.");
+    return;
+  }
+  const [slot_name, venue] = slotComposite.split("|");
+
+  try {
+    const response = await fetch(`${window.API_URL}/marks/admin/lock-exception`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({
+        slot_year,
+        semester_type,
+        component_type: component,
+        program_level: level,
+        employee_id: empId,
+        course_code: course,
+        slot_name,
+        venue,
+        expires_at: expires,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Failed to add exception");
+    }
+    showMarksAlert("Exception added", "success");
+    renderAdminLockControls(slot_year, semester_type);
+  } catch (error) {
+    console.error("Error adding exception:", error);
+    alert(error.message || "Failed to add exception");
+  }
+}
+
+async function deleteMarksLockException(id, slot_year, semester_type) {
+  if (!confirm("Remove this unlock exception?")) return;
+  try {
+    const response = await fetch(`${window.API_URL}/marks/admin/lock-exception/${id}`, {
+      method: "DELETE",
+      headers: { "x-access-token": localStorage.getItem("token") },
+    });
+    if (!response.ok) throw new Error("Failed to remove exception");
+    showMarksAlert("Exception removed", "success");
+    renderAdminLockControls(slot_year, semester_type);
+  } catch (error) {
+    console.error("Error removing exception:", error);
+    alert("Failed to remove exception");
   }
 }
 
