@@ -1923,12 +1923,16 @@ function handleSaveFacultyAllocation() {
       let conflictDetails = [];
 
       for (const individualSlot of allIndividualSlots) {
-        let slotToSearch = individualSlot;
+        // For combined theory slots (e.g., "E1+TC1", "A1+TA1"), match ALL
+        // components so every constituent time slot is pre-checked, not just
+        // the root's. Otherwise the T-side day gets skipped and later saved
+        // without the T-side time row.
+        let componentsToMatch = [individualSlot];
         if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
-          slotToSearch = individualSlot.split('+')[0];
+          componentsToMatch = individualSlot.split('+');
         }
 
-        const preCheckSlots = slots.filter((s) => s.slot_name === slotToSearch);
+        const preCheckSlots = slots.filter((s) => componentsToMatch.includes(s.slot_name));
 
         for (const slot of preCheckSlots) {
           let slotNameToUse;
@@ -1993,18 +1997,20 @@ function handleSaveFacultyAllocation() {
 
       // For each individual slot that needs to be allocated
       for (const individualSlot of allIndividualSlots) {
-        // Parse slot name for T=4 combined slots (e.g., "B1+TB1" -> use "B1" for lookup)
-        let slotToSearch = individualSlot;
+        // For combined theory slots (e.g., "B1+TB1", "E1+TC1"), gather ALL
+        // components so each constituent (day, time) is emitted as a batch row.
+        // Previously only [0] was used, dropping the T-side row entirely.
+        let componentsToMatch = [individualSlot];
         if (individualSlot.includes('+') && !individualSlot.includes(',') && !individualSlot.startsWith('L')) {
-          slotToSearch = individualSlot.split('+')[0];
-          console.log(`T=4 slot detected: ${individualSlot}, searching for: ${slotToSearch}`);
+          componentsToMatch = individualSlot.split('+');
+          console.log(`Combined theory slot detected: ${individualSlot}, matching components: ${componentsToMatch.join(', ')}`);
         }
 
         const matchingSlots = slots.filter(
-          (s) => s.slot_name === slotToSearch
+          (s) => componentsToMatch.includes(s.slot_name)
         );
 
-        console.log(`Matching slots for ${individualSlot} (searched: ${slotToSearch}):`, matchingSlots);
+        console.log(`Matching slots for ${individualSlot} (components: ${componentsToMatch.join(', ')}):`, matchingSlots);
 
         if (matchingSlots.length === 0) {
           localShowAlert(`No slots found for ${individualSlot}`, "danger");
