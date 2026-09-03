@@ -477,7 +477,7 @@ function renderCourseSelection() {
 
     coursesHtml += `
       <div class="col-md-6 mb-3">
-        <div class="card course-card h-100" style="cursor: pointer;" onclick="selectCourse('${course.course_code}')">
+        <div class="card course-card h-100" style="cursor: pointer;" onclick="selectAttendanceCourse('${course.course_code}')">
           <div class="card-body">
             <h6 class="card-title">${course.course_code}</h6>
             <p class="card-text">${course.course_name}</p>
@@ -499,7 +499,7 @@ function renderCourseSelection() {
 }
 
 // Select course for attendance
-function selectCourse(courseCode) {
+function selectAttendanceCourse(courseCode) {
   const course = attendanceAllocations.filter(a => a.course_code === courseCode);
   
   if (!course.length) {
