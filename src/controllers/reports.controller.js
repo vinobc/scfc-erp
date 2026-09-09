@@ -2017,6 +2017,24 @@ async function appendAttendanceSheets(workbook, opts) {
     FROM attendance a
     WHERE a.slot_year = $1 AND a.semester_type = $2
       AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
+      -- Phantom OD filter: exclude dates where only OD-auto rows exist
+      -- (i.e. faculty never marked anyone). The date columns in the Excel
+      -- should reflect classes that were actually conducted.
+      AND (
+        a.status IS NOT NULL
+        OR EXISTS (
+          SELECT 1 FROM attendance a2
+          WHERE a2.course_code     = a.course_code
+            AND a2.slot_year       = a.slot_year
+            AND a2.semester_type   = a.semester_type
+            AND a2.employee_id     = a.employee_id
+            AND a2.venue           = a.venue
+            AND a2.slot_name       = a.slot_name
+            AND a2.slot_time       = a.slot_time
+            AND a2.attendance_date = a.attendance_date
+            AND a2.status IS NOT NULL
+        )
+      )
     ORDER BY a.attendance_date, a.slot_time
   `, params);
   const dates = datesResult.rows;
@@ -2054,6 +2072,25 @@ async function appendAttendanceSheets(workbook, opts) {
       AND a.semester_type = $2
       AND a.employee_id = $4
       ${slot_name ? `AND a.slot_name = $5` : ""}
+      -- Phantom OD filter: OD rows (status IS NULL) count only if faculty
+      -- has marked at least one non-OD row for the same class on the same
+      -- date. Prevents phantom OD (auto-created for a date the faculty
+      -- was absent) from inflating student totals.
+      AND (
+        a.status IS NOT NULL
+        OR EXISTS (
+          SELECT 1 FROM attendance a2
+          WHERE a2.course_code     = a.course_code
+            AND a2.slot_year       = a.slot_year
+            AND a2.semester_type   = a.semester_type
+            AND a2.employee_id     = a.employee_id
+            AND a2.venue           = a.venue
+            AND a2.slot_name       = a.slot_name
+            AND a2.slot_time       = a.slot_time
+            AND a2.attendance_date = a.attendance_date
+            AND a2.status IS NOT NULL
+        )
+      )
     GROUP BY ds.enrollment_number, ds.student_name, ds.program_code, s.school_short_name
     ORDER BY ds.enrollment_number
   `, params);
@@ -2066,6 +2103,22 @@ async function appendAttendanceSheets(workbook, opts) {
     JOIN student st ON a.student_id = st.user_id
     WHERE a.slot_year = $1 AND a.semester_type = $2
       AND a.course_code = $3 AND a.employee_id = $4${slotFilter}
+      -- Phantom OD filter (see appendAttendanceSheets datesResult above).
+      AND (
+        a.status IS NOT NULL
+        OR EXISTS (
+          SELECT 1 FROM attendance a2
+          WHERE a2.course_code     = a.course_code
+            AND a2.slot_year       = a.slot_year
+            AND a2.semester_type   = a.semester_type
+            AND a2.employee_id     = a.employee_id
+            AND a2.venue           = a.venue
+            AND a2.slot_name       = a.slot_name
+            AND a2.slot_time       = a.slot_time
+            AND a2.attendance_date = a.attendance_date
+            AND a2.status IS NOT NULL
+        )
+      )
     ORDER BY a.attendance_date, a.slot_time
   `, params);
   // Map key = "YYYY-MM-DD|<slot_time>" so compound theory slots (same date,
@@ -2437,6 +2490,23 @@ exports.getDebarListReport = async (req, res) => {
           AND a.semester_type = $2
           AND a.employee_id = f.employee_id
           AND a.attendance_date <= $3::date
+          -- Phantom OD filter: an OD row counts only if faculty has marked
+          -- at least one non-OD row for the same class on the same date.
+          AND (
+            a.status IS NOT NULL
+            OR EXISTS (
+              SELECT 1 FROM attendance a2
+              WHERE a2.course_code     = a.course_code
+                AND a2.slot_year       = a.slot_year
+                AND a2.semester_type   = a.semester_type
+                AND a2.employee_id     = a.employee_id
+                AND a2.venue           = a.venue
+                AND a2.slot_name       = a.slot_name
+                AND a2.slot_time       = a.slot_time
+                AND a2.attendance_date = a.attendance_date
+                AND a2.status IS NOT NULL
+            )
+          )
         GROUP BY ds.enrollment_number, ds.student_name, ds.program_code,
                  ds.course_code, ds.course_name, ds.slot_name, ds.faculty_name, ds.school
       )
