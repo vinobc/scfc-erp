@@ -444,6 +444,25 @@ exports.getAttendanceReport = async (req, res) => {
            AND a.slot_year = $1
            AND a.semester_type = $2
            AND a.employee_id = $4${slotFilter}
+           -- Phantom OD filter: an OD row (status IS NULL) counts only if
+           -- the faculty has marked at least one non-OD row for the same
+           -- class on the same date. If faculty was absent and never marked
+           -- roll-call, auto-created OD rows are treated as non-existent.
+           AND (
+             a.status IS NOT NULL
+             OR EXISTS (
+               SELECT 1 FROM attendance a2
+               WHERE a2.course_code     = a.course_code
+                 AND a2.slot_year       = a.slot_year
+                 AND a2.semester_type   = a.semester_type
+                 AND a2.employee_id     = a.employee_id
+                 AND a2.venue           = a.venue
+                 AND a2.slot_name       = a.slot_name
+                 AND a2.slot_time       = a.slot_time
+                 AND a2.attendance_date = a.attendance_date
+                 AND a2.status IS NOT NULL
+             )
+           )
          GROUP BY ds.enrollment_number, ds.student_name
        )
        SELECT *,
@@ -571,11 +590,29 @@ exports.getLowAttendanceStudents = async (req, res) => {
            END as attendance_percentage
          FROM student_registrations sr
          JOIN student s ON sr.enrollment_number = s.enrollment_no
-         LEFT JOIN attendance a ON s.user_id = a.student_id 
-           AND a.course_code = sr.course_code 
-           AND a.slot_year = sr.slot_year 
+         LEFT JOIN attendance a ON s.user_id = a.student_id
+           AND a.course_code = sr.course_code
+           AND a.slot_year = sr.slot_year
            AND a.semester_type = sr.semester_type
            AND a.employee_id = $4
+           -- Phantom OD filter (see getAttendanceReport for full rationale):
+           -- OD rows count only if faculty has marked at least one non-OD row
+           -- for the same class on the same date.
+           AND (
+             a.status IS NOT NULL
+             OR EXISTS (
+               SELECT 1 FROM attendance a2
+               WHERE a2.course_code     = a.course_code
+                 AND a2.slot_year       = a.slot_year
+                 AND a2.semester_type   = a.semester_type
+                 AND a2.employee_id     = a.employee_id
+                 AND a2.venue           = a.venue
+                 AND a2.slot_name       = a.slot_name
+                 AND a2.slot_time       = a.slot_time
+                 AND a2.attendance_date = a.attendance_date
+                 AND a2.status IS NOT NULL
+             )
+           )
          WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
          AND sr.withdrawn = false
          GROUP BY sr.enrollment_number, sr.student_name, sr.program_code
@@ -667,7 +704,11 @@ exports.getStudentCourses = async (req, res) => {
         c.theory,
         c.practical,
         c.course_type,
-        -- Calculate attendance percentage for this specific component (by slot_name)
+        -- Calculate attendance percentage for this specific component (by slot_name).
+        -- Phantom OD filter: OD rows (status IS NULL) count only if the faculty
+        -- has marked at least one non-OD row for the same class on the same date.
+        -- If faculty was absent and never marked roll-call, auto-created OD rows
+        -- are treated as non-existent.
         (SELECT
           CASE
             WHEN COUNT(a.id) = 0 THEN 0
@@ -679,6 +720,21 @@ exports.getStudentCourses = async (req, res) => {
            AND a.slot_year = sr.slot_year
            AND a.semester_type = sr.semester_type
            AND a.slot_name = sr.slot_name
+           AND (
+             a.status IS NOT NULL
+             OR EXISTS (
+               SELECT 1 FROM attendance a2
+               WHERE a2.course_code     = a.course_code
+                 AND a2.slot_year       = a.slot_year
+                 AND a2.semester_type   = a.semester_type
+                 AND a2.employee_id     = a.employee_id
+                 AND a2.venue           = a.venue
+                 AND a2.slot_name       = a.slot_name
+                 AND a2.slot_time       = a.slot_time
+                 AND a2.attendance_date = a.attendance_date
+                 AND a2.status IS NOT NULL
+             )
+           )
         ) as attendance_percentage,
         -- Count total classes for this component
         (SELECT COUNT(a.id)
@@ -688,6 +744,21 @@ exports.getStudentCourses = async (req, res) => {
            AND a.slot_year = sr.slot_year
            AND a.semester_type = sr.semester_type
            AND a.slot_name = sr.slot_name
+           AND (
+             a.status IS NOT NULL
+             OR EXISTS (
+               SELECT 1 FROM attendance a2
+               WHERE a2.course_code     = a.course_code
+                 AND a2.slot_year       = a.slot_year
+                 AND a2.semester_type   = a.semester_type
+                 AND a2.employee_id     = a.employee_id
+                 AND a2.venue           = a.venue
+                 AND a2.slot_name       = a.slot_name
+                 AND a2.slot_time       = a.slot_time
+                 AND a2.attendance_date = a.attendance_date
+                 AND a2.status IS NOT NULL
+             )
+           )
         ) as total_classes,
         -- Count present classes for this component
         (SELECT COUNT(CASE WHEN a.status = 'present' OR a.is_od = true THEN 1 END)
@@ -697,6 +768,21 @@ exports.getStudentCourses = async (req, res) => {
            AND a.slot_year = sr.slot_year
            AND a.semester_type = sr.semester_type
            AND a.slot_name = sr.slot_name
+           AND (
+             a.status IS NOT NULL
+             OR EXISTS (
+               SELECT 1 FROM attendance a2
+               WHERE a2.course_code     = a.course_code
+                 AND a2.slot_year       = a.slot_year
+                 AND a2.semester_type   = a.semester_type
+                 AND a2.employee_id     = a.employee_id
+                 AND a2.venue           = a.venue
+                 AND a2.slot_name       = a.slot_name
+                 AND a2.slot_time       = a.slot_time
+                 AND a2.attendance_date = a.attendance_date
+                 AND a2.status IS NOT NULL
+             )
+           )
         ) as present_classes
       FROM student_registrations sr
       JOIN course c ON sr.course_code = c.course_code
@@ -747,6 +833,22 @@ exports.getStudentCourses = async (req, res) => {
               AND a.slot_year = $3
               AND a.semester_type = $4
               AND a.slot_name = $5
+              -- Phantom OD filter (see getAttendanceReport for full rationale).
+              AND (
+                a.status IS NOT NULL
+                OR EXISTS (
+                  SELECT 1 FROM attendance a2
+                  WHERE a2.course_code     = a.course_code
+                    AND a2.slot_year       = a.slot_year
+                    AND a2.semester_type   = a.semester_type
+                    AND a2.employee_id     = a.employee_id
+                    AND a2.venue           = a.venue
+                    AND a2.slot_name       = a.slot_name
+                    AND a2.slot_time       = a.slot_time
+                    AND a2.attendance_date = a.attendance_date
+                    AND a2.status IS NOT NULL
+                )
+              )
           `, [studentId, row.course_code, row.slot_year, row.semester_type, slot]);
 
           const att = attResult.rows[0];

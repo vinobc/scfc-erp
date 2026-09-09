@@ -977,6 +977,25 @@ exports.getMarksSummary = async (req, res) => {
             )
         AND (ac.slot_year > '2025-26'
              OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
+        -- Phantom OD filter: OD-row exclusion of a lab-session mark only
+        -- kicks in if the faculty actually held that lab (at least one
+        -- non-OD attendance row exists). Otherwise the OD row is a phantom
+        -- and shouldn't cause the mark to be excluded from the total.
+        AND (
+          a.status IS NOT NULL
+          OR EXISTS (
+            SELECT 1 FROM attendance a2
+            WHERE a2.course_code     = a.course_code
+              AND a2.slot_year       = a.slot_year
+              AND a2.semester_type   = a.semester_type
+              AND a2.employee_id     = a.employee_id
+              AND a2.venue           = a.venue
+              AND a2.slot_name       = a.slot_name
+              AND a2.slot_time       = a.slot_time
+              AND a2.attendance_date = a.attendance_date
+              AND a2.status IS NOT NULL
+          )
+        )
        WHERE sm.assessment_config_id = ANY($1)`,
       [configIds]
     );
@@ -1541,6 +1560,24 @@ async function computeConsolidatedReport(configs, students) {
               )
           AND (ac.slot_year > '2025-26'
                OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
+          -- Phantom OD filter (see getMarksSummary for full rationale):
+          -- OD-based lab-session exclusion only applies if the lab was
+          -- actually held (at least one non-OD attendance row exists).
+          AND (
+            a.status IS NOT NULL
+            OR EXISTS (
+              SELECT 1 FROM attendance a2
+              WHERE a2.course_code     = a.course_code
+                AND a2.slot_year       = a.slot_year
+                AND a2.semester_type   = a.semester_type
+                AND a2.employee_id     = a.employee_id
+                AND a2.venue           = a.venue
+                AND a2.slot_name       = a.slot_name
+                AND a2.slot_time       = a.slot_time
+                AND a2.attendance_date = a.attendance_date
+                AND a2.status IS NOT NULL
+            )
+          )
          WHERE sm.assessment_config_id = ANY($1::int[])`,
         [configIds]
       )
