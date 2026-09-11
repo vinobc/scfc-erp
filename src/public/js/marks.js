@@ -426,7 +426,17 @@ function renderComponentsDashboard(theoryConfig, labConfig, lockStatus, publishe
   // Small helper: badge for the Status column reflecting publish state.
   const publishBadge = (configId, type, num) => {
     if (!configId) return "";
-    const isPub = pubSet.has(`${configId}|${type}|${num || 1}`);
+    // CAs: the publish row for CA<n> is stored with assessment_number = <n>
+    // (CA1 → 1, CA2 → 2, CA3 → 3) — not always 1 — so treat the CA as
+    // published if ANY publish row exists for (config, "CA<n>"), regardless
+    // of assessment_number. Mirrors the backend Consolidated read gate.
+    const isCa = type === "CA1" || type === "CA2" || type === "CA3";
+    const isPub = isCa
+      ? Array.from(pubSet).some((k) => {
+          const [cid, t] = k.split("|");
+          return Number(cid) === Number(configId) && t === type;
+        })
+      : pubSet.has(`${configId}|${type}|${num || 1}`);
     return isPub
       ? '<span class="badge bg-info ms-1" title="Students can see these marks">Published</span>'
       : '<span class="badge bg-secondary ms-1" title="Not yet visible to students">Not published</span>';

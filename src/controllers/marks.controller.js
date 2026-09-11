@@ -1588,13 +1588,33 @@ async function computeConsolidatedReport(configs, students) {
   // Unpublished marks are hidden from students AND from the Consolidated card
   // (both student self-view and faculty View Grades).
   const publishedKeys = await fetchPublishedKeySet(configIds);
-  const isPublished = (m) =>
-    publishedKeys.has(`${m.assessment_config_id}|${m.assessment_type}|${m.assessment_number}`);
+  // For CAs, the frontend passes assessment_number equal to the CA number
+  // (CA1→1, CA2→2, CA3→3) at publish/save time, so publish rows for CA2/CA3
+  // land with assessment_number = 2/3 — not 1. The Consolidated card must
+  // therefore treat a CA as "published" if ANY publish row exists for
+  // (config_id, "CA<n>"), regardless of assessment_number — same pattern
+  // this function already uses for IM and LAB just below. Precompute a
+  // set of "config_id|assessment_type" keys so both the per-mark gate
+  // and the per-component flag work consistently.
+  const publishedCaKeys = new Set();
+  for (const k of publishedKeys) {
+    const [cid, type] = k.split("|");
+    if (type === "CA1" || type === "CA2" || type === "CA3") {
+      publishedCaKeys.add(`${cid}|${type}`);
+    }
+  }
+  const isPublished = (m) => {
+    if (m.assessment_type === "CA1" || m.assessment_type === "CA2" || m.assessment_type === "CA3") {
+      return publishedCaKeys.has(`${m.assessment_config_id}|${m.assessment_type}`);
+    }
+    return publishedKeys.has(`${m.assessment_config_id}|${m.assessment_type}|${m.assessment_number}`);
+  };
 
   // Per-component published flags (used by the frontend to distinguish
   // "Not published yet" from "Not entered").
   // A "component" here maps to the UI column: CA1 / CA2 / CA3 / IM / LAB.
-  // CAs: single entry per theory config (assessment_number always 1).
+  // CAs: published if ANY publish row exists for (config, "CA<n>") — see
+  //      note above on assessment_number.
   // IM:  published if ANY assignment is published.
   // LAB: published if ANY lab session (across all lab configs) is published.
   const componentPublished = {};
@@ -1602,7 +1622,7 @@ async function computeConsolidatedReport(configs, students) {
   for (const ca of caList) {
     componentPublished[`CA${ca.number}`] =
       theoryConfigId != null &&
-      publishedKeys.has(`${theoryConfigId}|CA${ca.number}|1`);
+      publishedCaKeys.has(`${theoryConfigId}|CA${ca.number}`);
   }
   if (hasAssignments) {
     componentPublished.IM = Array.from(publishedKeys).some((k) => {
