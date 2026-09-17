@@ -474,33 +474,64 @@ function displayCourseOfferings(data) {
   let offeringsTable = "";
 
   if (isProjectCourse) {
-    // Project Course: Direct registration without faculty selection
+    // Project Course: Direct registration without faculty selection.
+    // Show seat availability if the admin has set a cap on this project
+    // (max_students in project_allocation). NULL cap = unlimited.
+    // Aggregate across all offerings (usually just one row per project).
+    let maxStudents = null;
+    let registeredCount = 0;
+    let isFull = false;
+    if (Array.isArray(offerings) && offerings.length > 0) {
+      // Take the FIRST offering's cap/count. Projects should typically have
+      // exactly one project_allocation row per (course, year, semester);
+      // if there are multiple (rare), we use the first.
+      const first = offerings[0];
+      maxStudents = first.max_students !== undefined ? first.max_students : null;
+      registeredCount = Number(first.registered_count || 0);
+      isFull = !!first.is_full;
+    }
+
+    const seatsLine = (maxStudents === null || maxStudents === undefined)
+      ? `<li>Seats: ${registeredCount} registered (no cap)</li>`
+      : (isFull
+        ? `<li><strong style="color:#721c24;">Seats: ${registeredCount} / ${maxStudents} (FULL — no more registrations)</strong></li>`
+        : `<li><strong>Seats: ${registeredCount} / ${maxStudents}</strong> (${maxStudents - registeredCount} available)</li>`);
+
+    const registerDisabled = isFull ? 'disabled' : '';
+    const registerStyle = isFull
+      ? 'padding: 10px 25px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: not-allowed; font-size: 16px; opacity: 0.65;'
+      : 'padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;';
+    const registerTitle = isFull ? 'This project is full — no more seats available.' : '';
+
     offeringsTable = `
       <div style="background: white; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-top: 20px;">
         <h5 style="color: #007bff; margin-bottom: 15px;">📋 Step 4: Register for Project Course</h5>
-        
+
         <div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
           <h6 style="color: #155724; margin: 0 0 10px 0;">📚 Project Course Registration:</h6>
           <ul style="margin: 0; color: #155724;">
             <li>This is a project-based course with ${course_info.credits} credits</li>
             <li>No fixed time slots or venue required</li>
             <li>Students work independently on their projects</li>
+            ${seatsLine}
           </ul>
         </div>
 
         <div style="text-align: center; padding: 20px;">
           <div style="display: flex; justify-content: center; gap: 15px;">
-            <button onclick="registerForProjectCourse('${course_info.course_code}')" 
-                    style="padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+            <button onclick="registerForProjectCourse('${course_info.course_code}')"
+                    ${registerDisabled}
+                    title="${registerTitle}"
+                    style="${registerStyle}">
               <i class="fas fa-plus"></i> Register
             </button>
-            <button onclick="deleteProjectCourse('${course_info.course_code}')" 
+            <button onclick="deleteProjectCourse('${course_info.course_code}')"
                     style="padding: 10px 25px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
               <i class="fas fa-trash"></i> Delete
             </button>
           </div>
           <p style="margin-top: 15px; color: #666;">
-            Register for this project course or delete existing registration.
+            ${isFull ? 'This project has reached its seat cap. No further registrations are allowed.' : 'Register for this project course or delete existing registration.'}
           </p>
         </div>
       </div>

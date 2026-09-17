@@ -32,6 +32,11 @@ function initializeProjectAllocation() {
   if (saveBtn) {
     saveBtn.addEventListener('click', saveProjectAllocation);
   }
+
+  const editSaveBtn = document.getElementById('save-project-allocation-edit-btn');
+  if (editSaveBtn) {
+    editSaveBtn.addEventListener('click', saveProjectAllocationEdit);
+  }
   
   if (filterYear) {
     filterYear.addEventListener('change', loadProjectAllocations);
@@ -227,10 +232,12 @@ async function saveProjectAllocation() {
     return;
   }
   
+  const maxStudentsRaw = document.getElementById('project-allocation-max-students')?.value || '';
   const data = {
     slot_year: document.getElementById('project-allocation-year').value,
     semester_type: document.getElementById('project-allocation-semester').value,
-    course_code: document.getElementById('project-allocation-course').value
+    course_code: document.getElementById('project-allocation-course').value,
+    max_students: maxStudentsRaw === '' ? null : parseInt(maxStudentsRaw, 10),
   };
   
   try {
@@ -289,30 +296,101 @@ async function loadProjectAllocations() {
 function displayProjectAllocations() {
   const tbody = document.getElementById('project-allocation-table-body');
   if (!tbody) return;
-  
+
   if (projectAllocations.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center">No project allocations found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center">No project allocations found</td></tr>';
     return;
   }
-  
-  tbody.innerHTML = projectAllocations.map(allocation => `
+
+  tbody.innerHTML = projectAllocations.map(allocation => {
+    const registered = Number(allocation.registered_count ?? 0);
+    const cap = allocation.max_students;
+    const capLabel = (cap === null || cap === undefined)
+      ? `${registered} / <span class="text-muted">no cap</span>`
+      : (registered >= cap
+        ? `<span class="text-danger fw-bold">${registered} / ${cap} (full)</span>`
+        : `${registered} / ${cap}`);
+    return `
     <tr>
       <td>${allocation.course_code}</td>
       <td>${allocation.course_name}</td>
       <td>${allocation.credits}</td>
       <td>${allocation.slot_year}</td>
       <td>${allocation.semester_type}</td>
+      <td>${capLabel}</td>
       <td><span class="badge bg-success">Active</span></td>
       <td>
+        <button class="btn btn-sm btn-primary me-1"
+          onclick="openProjectAllocationEditModal(${allocation.id})"
+          title="Edit Max Students">
+          <i class="fas fa-edit"></i> Edit
+        </button>
         <button class="btn btn-sm btn-danger" onclick="deleteProjectAllocation(${allocation.id})">
           <i class="fas fa-trash"></i> Remove
         </button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
-// Edit functionality removed - project allocations can only be added or deleted
+// Open the "Edit Max Students" modal for one project allocation. Only the
+// max_students value can be changed post-creation; year/semester/course
+// remain frozen (shown as read-only info).
+function openProjectAllocationEditModal(allocationId) {
+  const allocation = projectAllocations.find(a => a.id === allocationId);
+  if (!allocation) return;
+
+  document.getElementById('project-allocation-edit-id').value = allocationId;
+  document.getElementById('project-allocation-edit-course-info').textContent =
+    `${allocation.course_code} — ${allocation.course_name} (${allocation.slot_year} ${allocation.semester_type})`;
+
+  const registered = Number(allocation.registered_count ?? 0);
+  const cap = allocation.max_students;
+  document.getElementById('project-allocation-edit-registered-info').textContent =
+    (cap === null || cap === undefined)
+      ? `${registered} (no cap currently)`
+      : `${registered} out of ${cap}`;
+
+  document.getElementById('project-allocation-edit-max-students').value =
+    (cap === null || cap === undefined) ? '' : cap;
+
+  const modal = new bootstrap.Modal(document.getElementById('projectAllocationEditModal'));
+  modal.show();
+}
+
+async function saveProjectAllocationEdit() {
+  const id = document.getElementById('project-allocation-edit-id').value;
+  const raw = document.getElementById('project-allocation-edit-max-students').value;
+  const maxStudents = raw === '' ? null : parseInt(raw, 10);
+  if (raw !== '' && (Number.isNaN(maxStudents) || maxStudents <= 0)) {
+    showAlert('warning', 'Max Students must be a positive integer, or left blank for no cap.');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${window.API_URL || ''}/project-allocations/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': localStorage.getItem('token'),
+        'x-access-token': localStorage.getItem('token')
+      },
+      body: JSON.stringify({ max_students: maxStudents })
+    });
+    const result = await response.json();
+    if (response.ok) {
+      showAlert('success', result.message || 'Max Students updated');
+      bootstrap.Modal.getInstance(document.getElementById('projectAllocationEditModal')).hide();
+      loadProjectAllocations();
+    } else {
+      showAlert('danger', result.message || 'Failed to update Max Students');
+    }
+  } catch (error) {
+    console.error('Error updating project allocation:', error);
+    showAlert('danger', 'Error updating Max Students');
+  }
+}
+window.openProjectAllocationEditModal = openProjectAllocationEditModal;
 
 // Delete project allocation
 async function deleteProjectAllocation(id) {

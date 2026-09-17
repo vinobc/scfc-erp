@@ -1495,13 +1495,14 @@
                       <th>Credits</th>
                       <th>Year</th>
                       <th>Semester</th>
+                      <th>Registered / Cap</th>
                       <th>Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody id="project-allocation-table-body">
                     <tr>
-                      <td colspan="7" class="text-center">
+                      <td colspan="8" class="text-center">
                         Loading project allocations...
                       </td>
                     </tr>
@@ -5254,6 +5255,65 @@
       </div>
     </div>
 
+    <!-- Project Allocation — Edit Max Students Modal -->
+    <div
+      class="modal fade"
+      id="projectAllocationEditModal"
+      tabindex="-1"
+      aria-labelledby="projectAllocationEditModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="projectAllocationEditModalLabel">
+              Edit Max Students
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Project</label>
+              <div id="project-allocation-edit-course-info" class="form-control-plaintext"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Currently Registered</label>
+              <div id="project-allocation-edit-registered-info" class="form-control-plaintext"></div>
+            </div>
+            <div class="mb-3">
+              <label for="project-allocation-edit-max-students" class="form-label">
+                Max Students
+              </label>
+              <input
+                type="number"
+                class="form-control"
+                id="project-allocation-edit-max-students"
+                min="1"
+                placeholder="Leave blank for no cap"
+              />
+              <small class="form-text text-muted">
+                Leave blank to remove the cap. If set below the currently registered count, no new registrations will be permitted until existing registrations fall below the new cap.
+              </small>
+            </div>
+            <input type="hidden" id="project-allocation-edit-id" />
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+              Cancel
+            </button>
+            <button type="button" class="btn btn-primary" id="save-project-allocation-edit-btn">
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Project Allocation Modal -->
     <div
       class="modal fade"
@@ -5324,6 +5384,23 @@
                   <div id="project-course-details" class="form-control-plaintext">
                     <span class="text-muted">Select a course to view details</span>
                   </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="project-allocation-max-students" class="form-label">
+                    Max Students
+                  </label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="project-allocation-max-students"
+                    min="1"
+                    placeholder="Leave blank for no cap"
+                  />
+                  <small class="form-text text-muted">
+                    Optional. If specified, no further student registrations will be permitted once this cap is reached. Leave blank for unlimited.
+                  </small>
                 </div>
               </div>
               <div class="alert alert-info">

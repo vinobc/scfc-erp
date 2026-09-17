@@ -5,11 +5,23 @@ exports.getAllProjectAllocations = async (req, res) => {
   try {
     const { year, semesterType, employeeId, courseCode } = req.query;
 
+    // registered_count is computed LIVE from student_registrations (source of
+    // truth). Do NOT rely on pa.current_students — that stored counter can
+    // drift when a student uses the Course Withdrawal flow (which doesn't
+    // decrement the counter). Live count matches the pattern used for the
+    // venue-seat check on regular courses.
     let query = `
-      SELECT 
+      SELECT
         pa.*,
         c.course_name,
-        c.credits
+        c.credits,
+        (
+          SELECT COUNT(*)
+          FROM student_registrations sr
+          WHERE sr.course_code   = pa.course_code
+            AND sr.slot_year     = pa.slot_year
+            AND sr.semester_type = pa.semester_type
+        ) AS registered_count
       FROM project_allocation pa
       JOIN course c ON pa.course_code = c.course_code
       WHERE pa.is_active = true
@@ -50,35 +62,49 @@ exports.createProjectAllocation = async (req, res) => {
     const {
       slot_year,
       semester_type,
-      course_code
+      course_code,
+      max_students,
     } = req.body;
 
     // Validate required fields
     if (!slot_year || !semester_type || !course_code) {
-      return res.status(400).json({ 
-        message: "slot_year, semester_type, and course_code are required" 
+      return res.status(400).json({
+        message: "slot_year, semester_type, and course_code are required"
       });
+    }
+
+    // max_students is optional; NULL = unlimited. If supplied, must be a
+    // positive integer.
+    let maxStudentsValue = null;
+    if (max_students !== undefined && max_students !== null && max_students !== "") {
+      const n = parseInt(max_students, 10);
+      if (Number.isNaN(n) || n <= 0) {
+        return res.status(400).json({
+          message: "max_students, if provided, must be a positive integer",
+        });
+      }
+      maxStudentsValue = n;
     }
 
     // Verify the course is a project type
     const courseCheck = await db.query(
-      `SELECT course_code, course_name, course_type, credits 
-       FROM course 
+      `SELECT course_code, course_name, course_type, credits
+       FROM course
        WHERE course_code = $1 AND course_type = 'PRJ'`,
       [course_code]
     );
 
     if (courseCheck.rows.length === 0) {
-      return res.status(400).json({ 
-        message: "Course not found or is not a project-type course" 
+      return res.status(400).json({
+        message: "Course not found or is not a project-type course"
       });
     }
 
     // Check if this project course is already activated for this semester
     const existingCheck = await db.query(
       `SELECT * FROM project_allocation
-       WHERE slot_year = $1 
-         AND semester_type = $2 
+       WHERE slot_year = $1
+         AND semester_type = $2
          AND course_code = $3
          AND is_active = true`,
       [slot_year, semester_type, course_code]
@@ -91,13 +117,13 @@ exports.createProjectAllocation = async (req, res) => {
       });
     }
 
-    // Create the allocation (without faculty or max_students)
+    // Create the allocation. max_students is optional (NULL = unlimited).
     const result = await db.query(
-      `INSERT INTO project_allocation 
-       (slot_year, semester_type, course_code)
-       VALUES ($1, $2, $3)
+      `INSERT INTO project_allocation
+       (slot_year, semester_type, course_code, max_students)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [slot_year, semester_type, course_code]
+      [slot_year, semester_type, course_code, maxStudentsValue]
     );
 
     res.status(201).json({
