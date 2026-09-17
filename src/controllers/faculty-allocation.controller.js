@@ -1703,9 +1703,20 @@ async function checkVenueConflictForUpdate(
   semesterType,
   slotDay,
   slotTime,
+  slotName,
   currentCourseCode,
   currentEmployeeId
 ) {
+  // Also flag conflicts against slots that occupy overlapping time windows —
+  // e.g. moving A2 (3.05-3.55) into a venue that already holds L39+L40
+  // (3.05-4.45). Exact slot_time match alone misses these theory↔lab overlaps.
+  const conflictRows = await client.query(
+    `SELECT conflicting_slot_name FROM slot_conflict
+     WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+    [slotYear, semesterType, slotName]
+  );
+  const slotNamesToCheck = [slotName, ...conflictRows.rows.map(r => r.conflicting_slot_name)];
+
   const result = await client.query(
     `SELECT fa.*, c.course_name, f.name as faculty_name
      FROM faculty_allocation fa
@@ -1715,14 +1726,14 @@ async function checkVenueConflictForUpdate(
        AND fa.semester_type = $2
        AND fa.venue = $3
        AND fa.slot_day = $4
-       AND fa.slot_time = $5
+       AND fa.slot_name = ANY($5)
        AND (fa.course_code != $6 OR fa.employee_id != $7)`,
     [
       slotYear,
       semesterType,
       newVenue,
       slotDay,
-      slotTime,
+      slotNamesToCheck,
       currentCourseCode,
       currentEmployeeId,
     ]
@@ -1850,6 +1861,7 @@ exports.updateFacultyAllocation = async (req, res) => {
           oldAllocation.semester_type,
           oldAllocation.slot_day,
           oldAllocation.slot_time,
+          oldAllocation.slot_name,
           oldAllocation.course_code,
           oldAllocation.employee_id
         );
@@ -1858,7 +1870,7 @@ exports.updateFacultyAllocation = async (req, res) => {
           const conflict = venueConflicts[0];
           await client.query("ROLLBACK");
           return res.status(409).json({
-            message: `Venue conflict: ${newAllocation.venue} is already booked by ${conflict.faculty_name} for ${conflict.course_name} at this time slot (${oldAllocation.slot_day} ${oldAllocation.slot_time})`,
+            message: `Venue conflict: ${newAllocation.venue} on ${oldAllocation.slot_day} is already used by ${conflict.faculty_name} for ${conflict.course_name} in slot ${conflict.slot_name} (${conflict.slot_time}), which overlaps with your ${oldAllocation.slot_name} slot`,
             conflict: conflict,
           });
         }
