@@ -225,24 +225,34 @@ exports.getCourseOfferings = async (req, res) => {
 
     const courseType = getCourseType(theory, practical);
 
-    // Handle project courses differently
+    // Handle project courses differently.
+    // - LEFT JOIN faculty because projects may not have a faculty assigned
+    //   (employee_id is nullable on project_allocation).
+    // - registered_count is computed LIVE from student_registrations (source
+    //   of truth). available_seats derived from max_students - registered_count
+    //   when a cap exists; NULL when max_students is unset (unlimited).
     if (dbCourseType === 'PRJ') {
       const projectResult = await db.query(
-        `SELECT 
+        `SELECT
           pa.id,
           pa.employee_id,
           f.name as faculty_name,
           f.email as faculty_email,
           pa.max_students,
-          pa.current_students,
-          (pa.max_students - pa.current_students) as available_seats
+          (
+            SELECT COUNT(*)
+            FROM student_registrations sr
+            WHERE sr.course_code   = pa.course_code
+              AND sr.slot_year     = pa.slot_year
+              AND sr.semester_type = pa.semester_type
+          ) AS registered_count
          FROM project_allocation pa
-         JOIN faculty f ON pa.employee_id = f.employee_id
+         LEFT JOIN faculty f ON pa.employee_id = f.employee_id
          WHERE pa.course_code = $1
            AND pa.slot_year = $2
            AND pa.semester_type = $3
            AND pa.is_active = true
-         ORDER BY f.name`,
+         ORDER BY COALESCE(f.name, ''), pa.id`,
         [course_code, slot_year, semester_type]
       );
 
@@ -252,16 +262,21 @@ exports.getCourseOfferings = async (req, res) => {
           course_type: 'PRJ'  // Ensure course_type is included
         },
         courseType: 'PRJ',
-        offerings: projectResult.rows.map(row => ({
-          type: 'project',
-          faculty_name: row.faculty_name,
-          faculty_email: row.faculty_email,
-          employee_id: row.employee_id,
-          max_students: row.max_students,
-          current_students: row.current_students,
-          available_seats: row.available_seats,
-          allocation_id: row.id
-        }))
+        offerings: projectResult.rows.map(row => {
+          const registered = parseInt(row.registered_count, 10);
+          const cap = row.max_students;
+          return {
+            type: 'project',
+            faculty_name: row.faculty_name,
+            faculty_email: row.faculty_email,
+            employee_id: row.employee_id,
+            max_students: cap,
+            registered_count: registered,
+            available_seats: cap === null || cap === undefined ? null : cap - registered,
+            is_full: cap !== null && cap !== undefined && registered >= cap,
+            allocation_id: row.id
+          };
+        })
       });
     }
 
@@ -1197,9 +1212,38 @@ exports.registerCourseOffering = async (req, res) => {
       );
 
       if (projectActivation.rows.length === 0) {
-        return res.status(404).json({ 
-          message: "This project course is not activated for the selected semester" 
+        return res.status(404).json({
+          message: "This project course is not activated for the selected semester"
         });
+      }
+
+      // Seat-cap gate: if project_allocation.max_students is set (NULL means
+      // unlimited), refuse when the number of active registrations has
+      // reached the cap. Count is computed LIVE from student_registrations —
+      // same pattern as the venue-seat check on regular courses. All
+      // registrations count towards the cap regardless of withdrawal
+      // status, matching regular-course behaviour.
+      const maxStudents = projectActivation.rows[0].max_students;
+      if (maxStudents !== null && maxStudents !== undefined) {
+        const currentCountRes = await db.query(
+          `SELECT COUNT(*) AS n
+           FROM student_registrations
+           WHERE course_code   = $1
+             AND slot_year     = $2
+             AND semester_type = $3`,
+          [course_code, slot_year, semester_type]
+        );
+        const currentCount = parseInt(currentCountRes.rows[0].n, 10);
+        if (currentCount >= maxStudents) {
+          return res.status(400).json({
+            message: `Registration failed: No seats available for project ${course_code}. All ${maxStudents} seats are occupied.`,
+            seat_info: {
+              max_students: maxStudents,
+              current_registrations: currentCount,
+              available_seats: 0,
+            },
+          });
+        }
       }
 
       // Begin transaction for project registration
