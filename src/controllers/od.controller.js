@@ -766,3 +766,296 @@ exports.lookupStudent = async (req, res) => {
       .json({ message: "Server error while looking up student" });
   }
 };
+
+// =============================================================================
+// BULK ADD STUDENTS TO AN ACTIVITY
+// =============================================================================
+// The coordinator can add many students to an OD activity at once (via paste
+// or Excel/CSV upload). Two endpoints:
+//   1. validateBulkStudents  — dry-run: returns per-row status (will_add /
+//                              already_in_activity / not_found /
+//                              duplicate_in_list / invalid_format). No DB
+//                              writes.
+//   2. bulkAddStudentsToActivity — commits: for each valid row, inserts into
+//                                  od_activity_student and calls autoMarkOD.
+//                                  Per-student commit (idempotent, safe to
+//                                  retry).
+// Both endpoints reuse the exact same auth + future-date rules as the
+// single-add endpoint (addStudentToActivity).
+
+const MAX_BULK_STUDENTS = 2000; // soft cap per request
+
+// Helper: shared prechecks (activity exists, not future-dated, caller is
+// authorised). Returns { ok: true, activity } or { ok: false, code, message }.
+async function loadActivityAndAuthorise(activityId, req) {
+  const activityResult = await db.query(
+    `SELECT a.*, e.coordinator_employee_id, e.slot_year, e.semester_type
+     FROM od_activity a JOIN od_event e ON a.event_id = e.event_id
+     WHERE a.activity_id = $1`,
+    [activityId]
+  );
+  if (!activityResult.rows.length) {
+    return { ok: false, code: 404, message: "Activity not found" };
+  }
+
+  const activity = activityResult.rows[0];
+
+  // Block bulk add on future-dated activities — same rule as single-add.
+  const activityDate = new Date(activity.activity_date);
+  const today = new Date();
+  activityDate.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  if (activityDate > today) {
+    return {
+      ok: false,
+      code: 400,
+      message: "Cannot add students to future-dated activities. Students can only be added on or after the activity date.",
+    };
+  }
+
+  // Faculty must be the event's coordinator. Admin and staff bypass.
+  if (req.userRole === "faculty") {
+    const userResult = await db.query(
+      'SELECT employee_id FROM "user" WHERE user_id = $1',
+      [req.userId]
+    );
+    if (
+      !userResult.rows.length ||
+      userResult.rows[0].employee_id !== activity.coordinator_employee_id
+    ) {
+      return { ok: false, code: 403, message: "Not authorized to manage this activity" };
+    }
+  }
+
+  return { ok: true, activity };
+}
+
+// Helper: normalise the caller-supplied list. Trims, uppercases, drops empty
+// strings, splits on comma/newline/whitespace, de-duplicates while preserving
+// first-occurrence order. Returns { unique: [...], duplicates: [enr, ...] }.
+function normaliseEnrolmentList(rawList) {
+  if (!Array.isArray(rawList)) return { unique: [], duplicates: [] };
+  const seen = new Set();
+  const unique = [];
+  const duplicates = [];
+  for (const raw of rawList) {
+    if (raw === null || raw === undefined) continue;
+    const str = String(raw).trim().toUpperCase();
+    if (str === "") continue;
+    if (seen.has(str)) {
+      duplicates.push(str);
+      continue;
+    }
+    seen.add(str);
+    unique.push(str);
+  }
+  return { unique, duplicates };
+}
+
+// Helper: basic enrolment format sanity — starts with A, 12–13 chars,
+// remaining characters alphanumeric.
+function isValidEnrolmentFormat(str) {
+  return /^A[A-Z0-9]{11,12}$/.test(str);
+}
+
+// POST /od/activities/:activityId/students/validate
+// Body: { enrollment_numbers: string[] }
+// Returns per-row status. NO DB writes.
+exports.validateBulkStudents = async (req, res) => {
+  try {
+    const { activityId } = req.params;
+    const { enrollment_numbers } = req.body;
+
+    if (!Array.isArray(enrollment_numbers)) {
+      return res.status(400).json({ message: "enrollment_numbers must be an array" });
+    }
+    if (enrollment_numbers.length === 0) {
+      return res.status(400).json({ message: "No enrolment numbers provided" });
+    }
+    if (enrollment_numbers.length > MAX_BULK_STUDENTS) {
+      return res.status(400).json({
+        message: `Batch too large. Maximum ${MAX_BULK_STUDENTS} enrolment numbers per submission.`,
+      });
+    }
+
+    const guard = await loadActivityAndAuthorise(activityId, req);
+    if (!guard.ok) return res.status(guard.code).json({ message: guard.message });
+
+    const { unique, duplicates } = normaliseEnrolmentList(enrollment_numbers);
+
+    // Look up all matching students in one query.
+    let studentMap = new Map();
+    if (unique.length > 0) {
+      const studentsRes = await db.query(
+        `SELECT enrollment_no, student_name, school_name, program_name
+         FROM student
+         WHERE enrollment_no = ANY($1::text[])`,
+        [unique]
+      );
+      for (const s of studentsRes.rows) studentMap.set(s.enrollment_no, s);
+    }
+
+    // Look up existing memberships in one query.
+    let alreadyInActivity = new Set();
+    if (unique.length > 0) {
+      const existingRes = await db.query(
+        `SELECT enrollment_number FROM od_activity_student
+         WHERE activity_id = $1 AND enrollment_number = ANY($2::text[])`,
+        [activityId, unique]
+      );
+      for (const r of existingRes.rows) alreadyInActivity.add(r.enrollment_number);
+    }
+
+    // Build per-row status for the unique set.
+    const rows = unique.map((enr) => {
+      if (!isValidEnrolmentFormat(enr)) {
+        return { enrollment_number: enr, status: "invalid_format", reason: "Enrolment format invalid" };
+      }
+      const student = studentMap.get(enr);
+      if (!student) {
+        return { enrollment_number: enr, status: "not_found", reason: "Student record not found" };
+      }
+      if (alreadyInActivity.has(enr)) {
+        return {
+          enrollment_number: enr,
+          status: "already_in_activity",
+          reason: "Already added to this activity",
+          student_name: student.student_name,
+          school_name: student.school_name,
+          program_name: student.program_name,
+        };
+      }
+      return {
+        enrollment_number: enr,
+        status: "will_add",
+        student_name: student.student_name,
+        school_name: student.school_name,
+        program_name: student.program_name,
+      };
+    });
+
+    // Append duplicate-in-list rows (they appear once in `unique`, so any
+    // extra occurrences show here — indicated but not counted twice).
+    for (const dup of duplicates) {
+      rows.push({
+        enrollment_number: dup,
+        status: "duplicate_in_list",
+        reason: "Appears more than once in the submitted list",
+      });
+    }
+
+    const summary = {
+      total_submitted: enrollment_numbers.length,
+      unique_submitted: unique.length,
+      will_add:            rows.filter((r) => r.status === "will_add").length,
+      already_in_activity: rows.filter((r) => r.status === "already_in_activity").length,
+      not_found:           rows.filter((r) => r.status === "not_found").length,
+      invalid_format:      rows.filter((r) => r.status === "invalid_format").length,
+      duplicate_in_list:   duplicates.length,
+    };
+
+    res.status(200).json({ summary, rows });
+  } catch (error) {
+    console.error("Validate bulk students error:", error);
+    res.status(500).json({ message: "Server error while validating enrolment list" });
+  }
+};
+
+// POST /od/activities/:activityId/students/bulk
+// Body: { enrollment_numbers: string[] }
+// For each unique enrolment: revalidates, inserts od_activity_student row,
+// auto-marks OD. Per-student commit (one failure doesn't block others).
+exports.bulkAddStudentsToActivity = async (req, res) => {
+  try {
+    const { activityId } = req.params;
+    const { enrollment_numbers } = req.body;
+
+    if (!Array.isArray(enrollment_numbers)) {
+      return res.status(400).json({ message: "enrollment_numbers must be an array" });
+    }
+    if (enrollment_numbers.length === 0) {
+      return res.status(400).json({ message: "No enrolment numbers provided" });
+    }
+    if (enrollment_numbers.length > MAX_BULK_STUDENTS) {
+      return res.status(400).json({
+        message: `Batch too large. Maximum ${MAX_BULK_STUDENTS} enrolment numbers per submission.`,
+      });
+    }
+
+    const guard = await loadActivityAndAuthorise(activityId, req);
+    if (!guard.ok) return res.status(guard.code).json({ message: guard.message });
+    const activity = guard.activity;
+
+    const { unique } = normaliseEnrolmentList(enrollment_numbers);
+
+    const added = [];
+    const skipped = [];
+    const failed = [];
+    const startTime = activity.start_time.substring(0, 5);
+    const endTime = activity.end_time.substring(0, 5);
+
+    for (const enr of unique) {
+      try {
+        if (!isValidEnrolmentFormat(enr)) {
+          skipped.push({ enrollment_number: enr, reason: "Enrolment format invalid" });
+          continue;
+        }
+
+        // Verify student exists (cheap, indexed).
+        const studentCheck = await db.query(
+          "SELECT enrollment_no, student_name FROM student WHERE enrollment_no = $1",
+          [enr]
+        );
+        if (!studentCheck.rows.length) {
+          skipped.push({ enrollment_number: enr, reason: "Student not found" });
+          continue;
+        }
+
+        // Attempt insert. Unique constraint on (activity_id, enrollment_number)
+        // handles the "already added" case idempotently.
+        try {
+          await db.query(
+            "INSERT INTO od_activity_student (activity_id, enrollment_number) VALUES ($1, $2)",
+            [activityId, enr]
+          );
+        } catch (insErr) {
+          if (insErr.code === "23505") {
+            skipped.push({ enrollment_number: enr, reason: "Already added to this activity" });
+            continue;
+          }
+          throw insErr;
+        }
+
+        // Auto-mark OD (reuses the tested single-add helper).
+        await autoMarkOD(
+          parseInt(activityId),
+          enr,
+          activity.activity_date,
+          startTime,
+          endTime,
+          activity.slot_year,
+          activity.semester_type,
+          req.userId
+        );
+
+        added.push({ enrollment_number: enr, student_name: studentCheck.rows[0].student_name });
+      } catch (rowErr) {
+        console.error(`Bulk add: row failed for ${enr}`, rowErr);
+        failed.push({ enrollment_number: enr, reason: "Server error while adding this row" });
+      }
+    }
+
+    const summary = {
+      total_submitted: enrollment_numbers.length,
+      unique_processed: unique.length,
+      added: added.length,
+      skipped: skipped.length,
+      failed: failed.length,
+    };
+
+    res.status(200).json({ summary, added, skipped, failed });
+  } catch (error) {
+    console.error("Bulk add students error:", error);
+    res.status(500).json({ message: "Server error while bulk-adding students" });
+  }
+};
