@@ -5255,6 +5255,136 @@
       </div>
     </div>
 
+    <!-- OD Bulk-Add-Students Modal -->
+    <div
+      class="modal fade"
+      id="odBulkAddModal"
+      tabindex="-1"
+      aria-labelledby="odBulkAddModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="odBulkAddModalLabel">
+              Bulk Add Students to Activity
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="od-bulk-activity-info" class="mb-3 text-muted small"></div>
+
+            <!-- Step 1: Input -->
+            <div id="od-bulk-step-input">
+              <ul class="nav nav-tabs mb-2" role="tablist">
+                <li class="nav-item">
+                  <button class="nav-link active" data-bs-toggle="tab"
+                    data-bs-target="#od-bulk-paste-tab" type="button">
+                    Paste List
+                  </button>
+                </li>
+                <li class="nav-item">
+                  <button class="nav-link" data-bs-toggle="tab"
+                    data-bs-target="#od-bulk-file-tab" type="button">
+                    Upload Excel / CSV
+                  </button>
+                </li>
+              </ul>
+              <div class="tab-content">
+                <div class="tab-pane fade show active" id="od-bulk-paste-tab">
+                  <label class="form-label mt-2">
+                    Paste enrolment numbers (one per line, or comma-separated):
+                  </label>
+                  <textarea id="od-bulk-paste-input" class="form-control"
+                    rows="10" placeholder="A866175125001&#10;A866175125002&#10;A866175125003"></textarea>
+                </div>
+                <div class="tab-pane fade" id="od-bulk-file-tab">
+                  <div class="mt-2">
+                    <label class="form-label">Upload Excel (.xlsx) or CSV file:</label>
+                    <input type="file" id="od-bulk-file-input" class="form-control"
+                      accept=".xlsx,.xls,.csv" />
+                    <small class="form-text text-muted">
+                      Single column containing enrolment numbers. Header row optional.
+                      Only the first column of the first sheet is read; extra columns are ignored.
+                    </small>
+                    <div class="mt-2">
+                      <a href="#" id="od-bulk-download-template"
+                        class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-download me-1"></i>Download Template
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-3 text-end">
+                <button type="button" class="btn btn-primary"
+                  id="od-bulk-validate-btn">
+                  <i class="fas fa-check-circle me-1"></i>Validate
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 2: Preview -->
+            <div id="od-bulk-step-preview" class="d-none">
+              <div class="alert alert-info small mb-2" id="od-bulk-preview-summary"></div>
+              <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th>Status</th>
+                      <th>Enrolment No.</th>
+                      <th>Student Name</th>
+                      <th>Program</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody id="od-bulk-preview-tbody"></tbody>
+                </table>
+              </div>
+              <div class="mt-3 text-end">
+                <button type="button" class="btn btn-secondary me-2"
+                  id="od-bulk-back-btn">
+                  <i class="fas fa-arrow-left me-1"></i>Back
+                </button>
+                <button type="button" class="btn btn-success"
+                  id="od-bulk-confirm-btn">
+                  <i class="fas fa-check me-1"></i>Confirm Add
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 3: Result -->
+            <div id="od-bulk-step-result" class="d-none">
+              <div class="alert alert-success small mb-2" id="od-bulk-result-summary"></div>
+              <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th>Status</th>
+                      <th>Enrolment No.</th>
+                      <th>Student Name / Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody id="od-bulk-result-tbody"></tbody>
+                </table>
+              </div>
+              <div class="mt-3 text-end">
+                <button type="button" class="btn btn-secondary"
+                  data-bs-dismiss="modal">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Project Allocation — Edit Max Students Modal -->
     <div
       class="modal fade"
@@ -5671,6 +5801,8 @@
 
     <!-- Bootstrap & jQuery JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SheetJS (XLSX) — client-side parsing for OD bulk-add and future Excel widgets -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
       // Force HTTP protocol
       if (window.location.protocol === "https:") {

@@ -688,7 +688,7 @@ async function loadActivityStudents(activityId) {
 
     let html = `
       <!-- Add Student -->
-      <div class="row g-2 mb-3 align-items-end">
+      <div class="row g-2 mb-2 align-items-end">
         <div class="col-md-3">
           <label class="form-label">Enrollment Number</label>
           <input type="text" id="od-add-student-${activityId}" class="form-control form-control-sm"
@@ -705,6 +705,13 @@ async function loadActivityStudents(activityId) {
             <i class="fas fa-plus me-1"></i>Add
           </button>
         </div>
+      </div>
+      <div class="mb-3">
+        <button class="btn btn-sm btn-outline-secondary"
+          onclick="openODBulkAddModal(${activityId})"
+          title="Add many students at once via paste or Excel upload">
+          <i class="fas fa-users me-1"></i>Bulk Upload
+        </button>
       </div>
     `;
 
@@ -879,3 +886,321 @@ function showODAlert(message, type) {
     alertDiv.remove();
   }, 4000);
 }
+
+// =============================================================================
+// BULK ADD STUDENTS TO AN OD ACTIVITY
+// =============================================================================
+// Modal-based flow:
+//   1. Faculty opens the modal on a specific activity.
+//   2. Pastes enrolments OR uploads Excel/CSV.
+//   3. Clicks Validate → backend dry-run returns per-row status.
+//   4. Faculty reviews preview → clicks Confirm Add.
+//   5. Backend commits per-student; result modal shows summary + per-row detail.
+
+let odBulkCurrentActivityId = null;
+let odBulkCurrentActivity = null; // { activity_name, activity_date, start_time, end_time }
+let odBulkPendingList = [];       // list of enrolments captured at Validate time
+
+function openODBulkAddModal(activityId) {
+  odBulkCurrentActivityId = activityId;
+  odBulkPendingList = [];
+
+  // Reset UI to Step 1
+  document.getElementById("od-bulk-step-input").classList.remove("d-none");
+  document.getElementById("od-bulk-step-preview").classList.add("d-none");
+  document.getElementById("od-bulk-step-result").classList.add("d-none");
+  document.getElementById("od-bulk-paste-input").value = "";
+  document.getElementById("od-bulk-file-input").value = "";
+
+  // Try to display activity context (best effort — pulled from the activity
+  // header if the DOM has it; otherwise blank).
+  const infoDiv = document.getElementById("od-bulk-activity-info");
+  const activityCard = document.querySelector(`[data-activity-id="${activityId}"]`);
+  let contextText = `Activity ID: ${activityId}`;
+  if (activityCard) {
+    const header = activityCard.querySelector(".activity-header")?.textContent?.trim();
+    if (header) contextText = header;
+  }
+  infoDiv.textContent = contextText;
+
+  const modal = new bootstrap.Modal(document.getElementById("odBulkAddModal"));
+  modal.show();
+}
+
+// Parse the paste-textbox: split on comma, newline, or whitespace; trim; drop empties.
+function parseODBulkPaste(text) {
+  if (!text) return [];
+  return text
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// Parse the uploaded Excel/CSV. Uses SheetJS (window.XLSX) — already loaded
+// for other Excel features in the app. Reads first column of first sheet.
+async function parseODBulkFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!window.XLSX) {
+      reject(new Error("Excel library not loaded"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = window.XLSX.read(data, { type: "array" });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        // Read as array of arrays so we can access column A regardless of header.
+        const rows = window.XLSX.utils.sheet_to_json(firstSheet, {
+          header: 1,
+          raw: false,
+          defval: "",
+        });
+        const enrolments = [];
+        for (const row of rows) {
+          const cell = row && row[0] !== undefined ? String(row[0]).trim() : "";
+          if (cell !== "") enrolments.push(cell);
+        }
+        // If the first row looks like a header (doesn't match enrolment format),
+        // drop it.
+        if (enrolments.length > 0 && !/^A[A-Z0-9]{11,12}$/i.test(enrolments[0])) {
+          enrolments.shift();
+        }
+        resolve(enrolments);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function validateODBulkList() {
+  // Determine which tab is active — paste or file
+  const pasteTabActive = document
+    .getElementById("od-bulk-paste-tab")
+    .classList.contains("active");
+
+  let enrolments = [];
+  try {
+    if (pasteTabActive) {
+      enrolments = parseODBulkPaste(document.getElementById("od-bulk-paste-input").value);
+    } else {
+      const fileInput = document.getElementById("od-bulk-file-input");
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showODAlert("Please choose an Excel/CSV file first.", "warning");
+        return;
+      }
+      enrolments = await parseODBulkFile(fileInput.files[0]);
+    }
+  } catch (err) {
+    showODAlert("Could not read the input: " + err.message, "danger");
+    return;
+  }
+
+  if (enrolments.length === 0) {
+    showODAlert("No enrolment numbers found in the input.", "warning");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${window.API_URL}/od/activities/${odBulkCurrentActivityId}/students/validate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": localStorage.getItem("token"),
+        },
+        body: JSON.stringify({ enrollment_numbers: enrolments }),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      showODAlert(data.message || "Validation failed", "danger");
+      return;
+    }
+    renderODBulkPreview(enrolments, data);
+  } catch (err) {
+    console.error("Validate error:", err);
+    showODAlert("Server error while validating. Please try again.", "danger");
+  }
+}
+
+function renderODBulkPreview(originalList, data) {
+  odBulkPendingList = originalList;
+  const { summary, rows } = data;
+
+  const s = summary;
+  document.getElementById("od-bulk-preview-summary").innerHTML = `
+    <strong>Submitted:</strong> ${s.total_submitted}
+    (${s.unique_submitted} unique) &nbsp;&nbsp;
+    <span class="text-success">✓ ${s.will_add} to add</span> &nbsp;&nbsp;
+    <span class="text-warning">⚠ ${s.already_in_activity} already in activity</span> &nbsp;&nbsp;
+    <span class="text-danger">✗ ${s.not_found} not found</span> &nbsp;&nbsp;
+    <span class="text-danger">✗ ${s.invalid_format} invalid format</span> &nbsp;&nbsp;
+    <span class="text-warning">⚠ ${s.duplicate_in_list} duplicates in list</span>
+  `;
+
+  const tbody = document.getElementById("od-bulk-preview-tbody");
+  tbody.innerHTML = rows
+    .map((r) => {
+      let statusLabel = "";
+      let rowClass = "";
+      switch (r.status) {
+        case "will_add":
+          statusLabel = '<span class="text-success">✓ Will add</span>';
+          break;
+        case "already_in_activity":
+          statusLabel = '<span class="text-warning">⚠ Already in activity</span>';
+          rowClass = "table-warning";
+          break;
+        case "not_found":
+          statusLabel = '<span class="text-danger">✗ Not found</span>';
+          rowClass = "table-danger";
+          break;
+        case "invalid_format":
+          statusLabel = '<span class="text-danger">✗ Invalid format</span>';
+          rowClass = "table-danger";
+          break;
+        case "duplicate_in_list":
+          statusLabel = '<span class="text-warning">⚠ Duplicate in list</span>';
+          rowClass = "table-warning";
+          break;
+        default:
+          statusLabel = r.status;
+      }
+      return `
+        <tr class="${rowClass}">
+          <td>${statusLabel}</td>
+          <td><code>${r.enrollment_number}</code></td>
+          <td>${r.student_name || "—"}</td>
+          <td>${r.program_name || "—"}</td>
+          <td>${r.reason || ""}</td>
+        </tr>`;
+    })
+    .join("");
+
+  document.getElementById("od-bulk-step-input").classList.add("d-none");
+  document.getElementById("od-bulk-step-preview").classList.remove("d-none");
+  document.getElementById("od-bulk-step-result").classList.add("d-none");
+}
+
+function backToODBulkInput() {
+  document.getElementById("od-bulk-step-input").classList.remove("d-none");
+  document.getElementById("od-bulk-step-preview").classList.add("d-none");
+}
+
+async function confirmODBulkAdd() {
+  if (!odBulkPendingList || odBulkPendingList.length === 0) {
+    showODAlert("Nothing to add.", "warning");
+    return;
+  }
+
+  const confirmBtn = document.getElementById("od-bulk-confirm-btn");
+  confirmBtn.disabled = true;
+  confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Adding...';
+
+  try {
+    const response = await fetch(
+      `${window.API_URL}/od/activities/${odBulkCurrentActivityId}/students/bulk`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": localStorage.getItem("token"),
+        },
+        body: JSON.stringify({ enrollment_numbers: odBulkPendingList }),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      showODAlert(data.message || "Bulk add failed", "danger");
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = '<i class="fas fa-check me-1"></i>Confirm Add';
+      return;
+    }
+    renderODBulkResult(data);
+    // Refresh the activity's student list on the parent page.
+    if (typeof loadActivityStudents === "function") {
+      loadActivityStudents(odBulkCurrentActivityId);
+    }
+  } catch (err) {
+    console.error("Bulk add error:", err);
+    showODAlert("Server error while adding students. Please try again.", "danger");
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = '<i class="fas fa-check me-1"></i>Confirm Add';
+  }
+}
+
+function renderODBulkResult(data) {
+  const { summary, added, skipped, failed } = data;
+
+  document.getElementById("od-bulk-result-summary").innerHTML = `
+    <strong>Added:</strong> ${summary.added} &nbsp;&nbsp;
+    <strong>Skipped:</strong> ${summary.skipped} &nbsp;&nbsp;
+    <strong>Failed:</strong> ${summary.failed}
+    (out of ${summary.unique_processed} unique enrolment numbers processed)
+  `;
+
+  const rows = [];
+  for (const a of added) {
+    rows.push(`
+      <tr class="table-success">
+        <td><span class="text-success">✓ Added</span></td>
+        <td><code>${a.enrollment_number}</code></td>
+        <td>${a.student_name || "—"}</td>
+      </tr>`);
+  }
+  for (const s of skipped) {
+    rows.push(`
+      <tr class="table-warning">
+        <td><span class="text-warning">⚠ Skipped</span></td>
+        <td><code>${s.enrollment_number}</code></td>
+        <td>${s.reason}</td>
+      </tr>`);
+  }
+  for (const f of failed) {
+    rows.push(`
+      <tr class="table-danger">
+        <td><span class="text-danger">✗ Failed</span></td>
+        <td><code>${f.enrollment_number}</code></td>
+        <td>${f.reason}</td>
+      </tr>`);
+  }
+  document.getElementById("od-bulk-result-tbody").innerHTML = rows.join("");
+
+  document.getElementById("od-bulk-step-input").classList.add("d-none");
+  document.getElementById("od-bulk-step-preview").classList.add("d-none");
+  document.getElementById("od-bulk-step-result").classList.remove("d-none");
+
+  const confirmBtn = document.getElementById("od-bulk-confirm-btn");
+  confirmBtn.disabled = false;
+  confirmBtn.innerHTML = '<i class="fas fa-check me-1"></i>Confirm Add';
+}
+
+function downloadODBulkTemplate(e) {
+  e.preventDefault();
+  if (!window.XLSX) {
+    showODAlert("Excel library not loaded", "danger");
+    return;
+  }
+  const ws = window.XLSX.utils.aoa_to_sheet([
+    ["enrollment_number"],
+    ["A866175125001"],
+    ["A866175125002"],
+  ]);
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, "Enrolments");
+  window.XLSX.writeFile(wb, "od-bulk-add-template.xlsx");
+}
+
+// Wire up modal buttons once DOM is ready.
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("od-bulk-validate-btn")?.addEventListener("click", validateODBulkList);
+  document.getElementById("od-bulk-back-btn")?.addEventListener("click", backToODBulkInput);
+  document.getElementById("od-bulk-confirm-btn")?.addEventListener("click", confirmODBulkAdd);
+  document.getElementById("od-bulk-download-template")?.addEventListener("click", downloadODBulkTemplate);
+});
+window.openODBulkAddModal = openODBulkAddModal;

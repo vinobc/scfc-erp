@@ -53,6 +53,17 @@ router.post(
   isFacultyOrStaffOrAdmin,
   odController.addStudentToActivity
 );
+// Bulk-add: validate step (dry-run, no DB writes) then bulk commit.
+router.post(
+  "/activities/:activityId/students/validate",
+  isFacultyOrStaffOrAdmin,
+  odController.validateBulkStudents
+);
+router.post(
+  "/activities/:activityId/students/bulk",
+  isFacultyOrStaffOrAdmin,
+  odController.bulkAddStudentsToActivity
+);
 router.delete(
   "/activities/:activityId/students/:enrollmentNumber",
   isFacultyOrStaffOrAdmin,
