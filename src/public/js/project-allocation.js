@@ -54,8 +54,19 @@ function initializeProjectAllocation() {
   
   // Load initial data
   loadAcademicYears();
-  // No need to load faculty list anymore
-  loadProjectAllocations();
+  // No need to load faculty list anymore.
+  // NOTE: loadProjectAllocations() is NOT called here anymore. It used to run
+  // on every page load for every logged-in user (project-allocation.js is
+  // loaded globally in index.html), which hit the endpoint hard during
+  // registration windows. Instead we now load lazily — see below, when the
+  // admin actually clicks the "Project Allocation" sidebar link.
+
+  const paLink = document.getElementById("project-allocation-link");
+  if (paLink) {
+    paLink.addEventListener("click", () => {
+      loadProjectAllocations();
+    });
+  }
 }
 
 // Load academic years
