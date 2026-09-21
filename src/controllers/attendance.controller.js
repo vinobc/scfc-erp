@@ -207,13 +207,17 @@ exports.getEnrolledStudents = async (req, res) => {
        JOIN student s ON sr.enrollment_number = s.enrollment_no
        WHERE sr.slot_year = $1 AND sr.semester_type = $2 AND sr.course_code = $3
          AND sr.venue = $4
-         AND (sr.slot_name = $5 OR sr.slot_name LIKE '%' || $5 || '%')
+         AND (sr.slot_name = $5
+              OR (',' || REPLACE(sr.slot_name, ' ', '') || ',')
+                 LIKE ('%,' || REPLACE($5, ' ', '') || ',%'))
          AND EXISTS (
            SELECT 1 FROM faculty_allocation fa
            WHERE fa.course_code = sr.course_code
            AND fa.slot_year = sr.slot_year AND fa.semester_type = sr.semester_type
            AND fa.employee_id = $6 AND fa.venue = sr.venue
-           AND sr.slot_name LIKE '%' || fa.slot_name || '%'
+           AND (sr.slot_name = fa.slot_name
+                OR (',' || REPLACE(sr.slot_name, ' ', '') || ',')
+                   LIKE ('%,' || REPLACE(fa.slot_name, ' ', '') || ',%'))
          )
          AND sr.withdrawn = false
        ORDER BY sr.enrollment_number`,

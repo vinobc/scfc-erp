@@ -418,7 +418,9 @@ exports.getStudentRegistrations = async (req, res) => {
              JOIN faculty_allocation fa ON sr.course_code = fa.course_code
                AND sr.slot_year = fa.slot_year AND sr.semester_type = fa.semester_type
                AND sr.venue = fa.venue
-               AND (sr.slot_name = fa.slot_name OR sr.slot_name LIKE '%' || fa.slot_name || '%')`
+               AND (sr.slot_name = fa.slot_name
+                    OR (',' || REPLACE(sr.slot_name, ' ', '') || ',')
+                       LIKE ('%,' || REPLACE(fa.slot_name, ' ', '') || ',%'))`
           );
         }
         params.push(userResult.rows[0].employee_id);

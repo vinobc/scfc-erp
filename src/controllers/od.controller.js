@@ -65,7 +65,9 @@ async function autoMarkOD(
        AND fa.semester_type = sr.semester_type
        AND fa.course_code = sr.course_code
        AND fa.venue = sr.venue
-       AND (sr.slot_name = fa.slot_name OR sr.slot_name LIKE '%' || fa.slot_name || '%')
+       AND (sr.slot_name = fa.slot_name
+            OR (',' || REPLACE(sr.slot_name, ' ', '') || ',')
+               LIKE ('%,' || REPLACE(fa.slot_name, ' ', '') || ',%'))
      WHERE sr.enrollment_number = $1
        AND sr.slot_year = $2
        AND sr.semester_type = $3
