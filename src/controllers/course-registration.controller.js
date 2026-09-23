@@ -4,6 +4,12 @@ const { getActiveBlock } = require("../utils/registration-block");
 // Tells the frontend whether the current student is blocked from registration.
 // Always callable (no checkRegistrationEnabled gate) so the student sees the
 // banner even when the registration window is closed.
+//
+// Three block reasons, checked in order:
+//   1. Individual student block (student_registration_block table).
+//   2. Master registration toggle OFF (system_config.course_registration_enabled).
+//   3. Student's year_admitted not in the allowed-cohort array
+//      (system_config.registration_enabled_years).
 exports.getBlockStatus = async (req, res) => {
   try {
     if (req.userRole !== "student") {
@@ -13,16 +19,63 @@ exports.getBlockStatus = async (req, res) => {
     if (!student) {
       return res.status(200).json({ blocked: false });
     }
+
+    // 1) Individual per-student block (existing behavior).
     const activeBlock = await getActiveBlock(student.enrollment_number);
-    if (!activeBlock) {
-      return res.status(200).json({ blocked: false });
+    if (activeBlock) {
+      return res.status(200).json({
+        blocked: true,
+        reason: activeBlock.block_reason,
+        notes: activeBlock.notes,
+        blocked_at: activeBlock.blocked_at,
+      });
     }
-    res.status(200).json({
-      blocked: true,
-      reason: activeBlock.block_reason,
-      notes: activeBlock.notes,
-      blocked_at: activeBlock.blocked_at,
+
+    // 2) & 3) Master toggle and cohort array.
+    const configResult = await db.query(
+      `SELECT config_key, config_value FROM system_config
+       WHERE config_key IN ('course_registration_enabled', 'registration_message', 'registration_enabled_years')
+         AND is_active = true`
+    );
+    const config = {};
+    configResult.rows.forEach((r) => {
+      config[r.config_key] = r.config_value;
     });
+
+    const blockMessage =
+      config.registration_message ||
+      "Course registration is currently not available";
+
+    // Master toggle OFF → block.
+    if (
+      config.course_registration_enabled !== undefined &&
+      config.course_registration_enabled.toLowerCase() !== "true"
+    ) {
+      return res.status(200).json({
+        blocked: true,
+        reason: blockMessage,
+      });
+    }
+
+    // Cohort array present → check student's year_admitted.
+    if (config.registration_enabled_years !== undefined) {
+      let allowedYears;
+      try {
+        allowedYears = JSON.parse(config.registration_enabled_years);
+        if (!Array.isArray(allowedYears)) allowedYears = [];
+      } catch (e) {
+        allowedYears = [];
+      }
+      if (!allowedYears.includes(student.year_admitted)) {
+        return res.status(200).json({
+          blocked: true,
+          reason: blockMessage,
+        });
+      }
+    }
+
+    // No blocks apply.
+    return res.status(200).json({ blocked: false });
   } catch (error) {
     console.error("Get block status error:", error);
     res.status(500).json({ message: "Server error while checking block status" });

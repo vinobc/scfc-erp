@@ -12,23 +12,69 @@ const checkRegistrationEnabled = async (req, res, next) => {
       return next();
     }
 
-    // Check if course registration is enabled
     const db = require("../config/db");
-    const result = await db.query(
-      `SELECT config_value FROM system_config
-       WHERE config_key = 'course_registration_enabled' AND is_active = true`
+
+    // Fetch master toggle, custom message, and allowed-cohort array in one round-trip.
+    const configResult = await db.query(
+      `SELECT config_key, config_value FROM system_config
+       WHERE config_key IN ('course_registration_enabled', 'registration_message', 'registration_enabled_years')
+         AND is_active = true`
     );
 
-    if (result.rows.length === 0) {
-      // Default to enabled if no configuration found
+    const config = {};
+    configResult.rows.forEach((r) => {
+      config[r.config_key] = r.config_value;
+    });
+
+    // Master toggle missing → fail-safe allow (pre-existing behavior).
+    if (config.course_registration_enabled === undefined) {
       return next();
     }
 
-    const isEnabled = result.rows[0].config_value.toLowerCase() === "true";
+    const isEnabled = config.course_registration_enabled.toLowerCase() === "true";
+    const blockMessage =
+      config.registration_message ||
+      "Course registration is currently disabled by administration";
 
     if (!isEnabled) {
       return res.status(403).json({
-        message: "Course registration is currently disabled by administration",
+        message: blockMessage,
+        registrationDisabled: true,
+      });
+    }
+
+    // Master toggle ON — check the allowed-cohort array against the student's
+    // year_admitted. If the config key is missing (pre-migration DB), treat as
+    // "all cohorts allowed" for backwards compatibility.
+    if (config.registration_enabled_years === undefined) {
+      return next();
+    }
+
+    let allowedYears;
+    try {
+      allowedYears = JSON.parse(config.registration_enabled_years);
+      if (!Array.isArray(allowedYears)) allowedYears = [];
+    } catch (e) {
+      allowedYears = [];
+    }
+
+    // Look up student's year_admitted from the request's authenticated user.
+    const studentResult = await db.query(
+      `SELECT year_admitted FROM student WHERE user_id = $1`,
+      [req.userId]
+    );
+
+    // Non-student caller (admin, faculty, etc.) — controller's own role checks
+    // will handle authorization. Skip the cohort gate.
+    if (studentResult.rows.length === 0) {
+      return next();
+    }
+
+    const yearAdmitted = studentResult.rows[0].year_admitted;
+
+    if (!allowedYears.includes(yearAdmitted)) {
+      return res.status(403).json({
+        message: blockMessage,
         registrationDisabled: true,
       });
     }
