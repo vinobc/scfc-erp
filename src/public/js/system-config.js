@@ -1,5 +1,6 @@
 // System Configuration Management
 let systemConfig = {};
+let knownAdmissionYears = []; // [{year: 2026, student_count: 3247}, ...]
 
 // Initialize system configuration functionality
 function initializeSystemConfig() {
@@ -12,17 +13,27 @@ async function loadSystemConfiguration() {
   try {
     console.log("📋 Loading system configuration...");
 
-    const response = await fetch(`${window.API_URL}/system-config`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-    });
+    const [configResponse, yearsResponse] = await Promise.all([
+      fetch(`${window.API_URL}/system-config`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      }),
+      fetch(`${window.API_URL}/system-config/known-admission-years`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      }),
+    ]);
 
-    if (!response.ok) {
+    if (!configResponse.ok) {
       throw new Error(
-        `HTTP ${response.status}: Failed to load system configuration`
+        `HTTP ${configResponse.status}: Failed to load system configuration`
+      );
+    }
+    if (!yearsResponse.ok) {
+      throw new Error(
+        `HTTP ${yearsResponse.status}: Failed to load known admission years`
       );
     }
 
-    const data = await response.json();
+    const data = await configResponse.json();
     systemConfig = {};
 
     // Convert array to object for easier access
@@ -30,7 +41,11 @@ async function loadSystemConfiguration() {
       systemConfig[item.config_key] = item;
     });
 
+    const yearsData = await yearsResponse.json();
+    knownAdmissionYears = yearsData.years || [];
+
     console.log("✅ System configuration loaded:", systemConfig);
+    console.log("✅ Known admission years loaded:", knownAdmissionYears);
     displaySystemConfiguration();
   } catch (error) {
     console.error("❌ Error loading system configuration:", error);
@@ -50,7 +65,19 @@ function displaySystemConfiguration() {
     systemConfig.course_registration_enabled?.config_value === "true";
   const registrationMessage =
     systemConfig.registration_message?.config_value || "";
-  
+
+  // Parse the allowed cohort array. Missing / invalid → empty array.
+  let allowedYears = [];
+  try {
+    allowedYears = JSON.parse(
+      systemConfig.registration_enabled_years?.config_value || "[]"
+    );
+    if (!Array.isArray(allowedYears)) allowedYears = [];
+  } catch (e) {
+    allowedYears = [];
+  }
+  const allowedYearsSet = new Set(allowedYears);
+
   const courseWithdrawalEnabled =
     systemConfig.course_withdrawal_enabled?.config_value === "true";
   const withdrawalMessage =
@@ -96,8 +123,49 @@ function displaySystemConfiguration() {
                   <button class="btn btn-success" onclick="updateRegistrationMessage()">
                     💾 Update Message
                   </button>
+
+                  <hr class="my-4">
+
+                  <h6 class="mb-2">👥 Allowed Cohorts</h6>
+                  <p class="form-text mt-0 mb-3">
+                    Only students in the ticked cohorts can register (when the master toggle above is ON).
+                    Admin proxy always bypasses this check.
+                  </p>
+
+                  <div id="cohortCheckboxList">
+                    ${
+                      knownAdmissionYears.length === 0
+                        ? '<div class="text-muted small">No admission years found in the student table.</div>'
+                        : knownAdmissionYears
+                            .map(
+                              (y) => `
+                      <div class="form-check">
+                        <input class="form-check-input cohort-year-checkbox" type="checkbox"
+                               id="cohortYear_${y.year}" value="${y.year}"
+                               ${allowedYearsSet.has(y.year) ? "checked" : ""}>
+                        <label class="form-check-label" for="cohortYear_${y.year}">
+                          <strong>${y.year}</strong> — Batch of ${y.year}
+                          <span class="text-muted small">(${y.student_count.toLocaleString()} students)</span>
+                        </label>
+                      </div>
+                    `
+                            )
+                            .join("")
+                    }
+                  </div>
+
+                  <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="quickPickCohorts('all')">All Cohorts</button>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="quickPickCohorts('freshmen')">Freshmen Only</button>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="quickPickCohorts('seniors')">Seniors Only</button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="quickPickCohorts('none')">Clear</button>
+                  </div>
+
+                  <button class="btn btn-success mt-3" onclick="updateAllowedCohorts()">
+                    💾 Save Cohorts
+                  </button>
                 </div>
-                
+
                 <div class="col-lg-4">
                   <div class="alert ${
                     courseRegEnabled ? "alert-success" : "alert-warning"
@@ -111,6 +179,16 @@ function displaySystemConfiguration() {
                         ${courseRegEnabled ? "✅ ENABLED" : "❌ DISABLED"}
                       </span>
                     </p>
+                    <p class="mb-1">
+                      <strong>Cohorts open: </strong>
+                      <span class="badge bg-info">
+                        ${
+                          allowedYears.length === 0
+                            ? "None"
+                            : allowedYears.sort((a, b) => b - a).join(", ")
+                        }
+                      </span>
+                    </p>
                     <small class="text-muted">
                       Last updated: ${
                         systemConfig.course_registration_enabled?.updated_at
@@ -121,16 +199,15 @@ function displaySystemConfiguration() {
                       }
                     </small>
                   </div>
-                  
+
                   <div class="card bg-light">
                     <div class="card-body text-center">
                       <h6 class="card-title">Quick Actions</h6>
-                      <button class="btn btn-sm btn-outline-success mb-2 w-100" 
-                              onclick="quickToggleRegistration(true)" 
-                              ${courseRegEnabled ? "disabled" : ""}>
-                        ✅ Enable Registration
+                      <button class="btn btn-sm btn-outline-success mb-2 w-100"
+                              onclick="quickToggleRegistration(true)">
+                        ✅ Enable Registration (all cohorts)
                       </button>
-                      <button class="btn btn-sm btn-outline-danger w-100" 
+                      <button class="btn btn-sm btn-outline-danger w-100"
                               onclick="quickToggleRegistration(false)"
                               ${!courseRegEnabled ? "disabled" : ""}>
                         ❌ Disable Registration
@@ -330,6 +407,83 @@ async function quickToggleRegistration(enable) {
   const toggle = document.getElementById("courseRegistrationToggle");
   toggle.checked = enable;
   await toggleCourseRegistration();
+
+  // When enabling via the quick action, also tick all known cohorts so that
+  // "Enable Registration" continues to mean "everyone can register" (matches
+  // the pre-cohort-feature intent).
+  if (enable && knownAdmissionYears.length > 0) {
+    const allYears = knownAdmissionYears.map((y) => y.year);
+    await saveAllowedCohortsArray(allYears);
+  }
+}
+
+// Set the cohort checkbox selection by preset.
+function quickPickCohorts(preset) {
+  const checkboxes = document.querySelectorAll(".cohort-year-checkbox");
+  if (checkboxes.length === 0) return;
+
+  // Determine which years to tick.
+  const years = Array.from(checkboxes)
+    .map((cb) => parseInt(cb.value, 10))
+    .sort((a, b) => b - a);
+  const freshmanYear = years[0]; // highest = most recent = freshmen
+
+  checkboxes.forEach((cb) => {
+    const y = parseInt(cb.value, 10);
+    if (preset === "all") cb.checked = true;
+    else if (preset === "none") cb.checked = false;
+    else if (preset === "freshmen") cb.checked = y === freshmanYear;
+    else if (preset === "seniors") cb.checked = y !== freshmanYear;
+  });
+}
+
+// Read the current cohort selection and save.
+async function updateAllowedCohorts() {
+  const selected = Array.from(
+    document.querySelectorAll(".cohort-year-checkbox:checked")
+  ).map((cb) => parseInt(cb.value, 10));
+  await saveAllowedCohortsArray(selected);
+}
+
+// Helper: persist the given array of years to system_config.
+async function saveAllowedCohortsArray(years) {
+  try {
+    const response = await fetch(
+      `${window.API_URL}/system-config/registration_enabled_years`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          configValue: JSON.stringify(years),
+          configDescription:
+            "JSON array of year_admitted values allowed to register when the master toggle is ON. Empty array blocks all cohorts.",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(
+        error.message || `HTTP ${response.status}: Update failed`
+      );
+    }
+
+    showAlert(
+      years.length === 0
+        ? "Allowed cohorts cleared — no cohorts can register."
+        : `Allowed cohorts saved: ${years.sort((a, b) => b - a).join(", ")}`,
+      "success"
+    );
+
+    // Reload configuration to refresh display
+    setTimeout(() => loadSystemConfiguration(), 500);
+  } catch (error) {
+    console.error("❌ Error saving allowed cohorts:", error);
+    showAlert(`Error saving allowed cohorts: ${error.message}`, "danger");
+  }
 }
 
 // Update registration message
@@ -486,6 +640,8 @@ window.loadSystemConfiguration = loadSystemConfiguration;
 window.toggleCourseRegistration = toggleCourseRegistration;
 window.quickToggleRegistration = quickToggleRegistration;
 window.updateRegistrationMessage = updateRegistrationMessage;
+window.quickPickCohorts = quickPickCohorts;
+window.updateAllowedCohorts = updateAllowedCohorts;
 window.toggleCourseWithdrawal = toggleCourseWithdrawal;
 window.quickToggleWithdrawal = quickToggleWithdrawal;
 window.updateWithdrawalMessage = updateWithdrawalMessage;

@@ -12,6 +12,13 @@ router.get(
 
 // Admin-only endpoints
 router.get(
+  "/known-admission-years",
+  verifyToken,
+  isAdmin,
+  systemConfigController.getKnownAdmissionYears
+);
+
+router.get(
   "/",
   verifyToken,
   isAdmin,

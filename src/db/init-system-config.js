@@ -31,6 +31,12 @@ async function initializeSystemConfig() {
         value: "Course registration is currently available",
         description: "Message to display to students about registration status",
       },
+      {
+        key: "registration_enabled_years",
+        value: "[]",
+        description:
+          "JSON array of year_admitted values allowed to register when the master toggle is ON (e.g., [2024,2025,2026]). Empty array blocks all cohorts.",
+      },
     ];
 
     for (const config of defaultConfigs) {

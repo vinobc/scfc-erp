@@ -96,6 +96,21 @@ exports.updateConfigSetting = async (req, res) => {
       }
     }
 
+    if (configKey === "registration_enabled_years") {
+      try {
+        const parsed = JSON.parse(valueString);
+        if (!Array.isArray(parsed) || !parsed.every((y) => Number.isInteger(y))) {
+          return res.status(400).json({
+            message: "registration_enabled_years must be a JSON array of integers (e.g., [2024,2025,2026])",
+          });
+        }
+      } catch (e) {
+        return res.status(400).json({
+          message: "registration_enabled_years must be valid JSON (e.g., [2024,2025,2026])",
+        });
+      }
+    }
+
     // Check if configuration exists
     const existingResult = await db.query(
       `SELECT config_key FROM system_config WHERE config_key = $1`,
@@ -140,53 +155,134 @@ exports.updateConfigSetting = async (req, res) => {
 };
 
 // Get course registration status (public endpoint for students)
+// Powers the student sidebar's grey-out of the "Course Registration" menu item.
+// Returns enabled=true only if BOTH the master toggle is ON AND the caller's
+// year_admitted is present in the registration_enabled_years cohort array.
 exports.getCourseRegistrationStatus = async (req, res) => {
   try {
     console.log("📋 Getting course registration status for student");
 
-    const result = await db.query(
-      `SELECT config_value, config_description, updated_at
-       FROM system_config 
-       WHERE config_key = 'course_registration_enabled' AND is_active = true`
+    // Fetch master toggle, custom message, and cohort array in one round-trip.
+    const configResult = await db.query(
+      `SELECT config_key, config_value, updated_at FROM system_config
+       WHERE config_key IN ('course_registration_enabled', 'registration_message', 'registration_enabled_years')
+         AND is_active = true`
     );
 
-    if (result.rows.length === 0) {
-      // Default to enabled if not found
+    const config = {};
+    let lastUpdated = null;
+    configResult.rows.forEach((r) => {
+      config[r.config_key] = r.config_value;
+      if (r.config_key === "course_registration_enabled") lastUpdated = r.updated_at;
+    });
+
+    // Master toggle missing → default enabled (pre-existing fail-safe).
+    if (config.course_registration_enabled === undefined) {
       return res.status(200).json({
         enabled: true,
         message: "Course registration is available",
       });
     }
 
-    const isEnabled = result.rows[0].config_value.toLowerCase() === "true";
+    const masterOn = config.course_registration_enabled.toLowerCase() === "true";
+    const message =
+      config.registration_message ||
+      (masterOn
+        ? "Course registration is available"
+        : "Course registration is currently disabled");
 
-    // Get the custom message
-    const messageResult = await db.query(
-      `SELECT config_value
-       FROM system_config 
-       WHERE config_key = 'registration_message' AND is_active = true`
+    // Master toggle OFF → all callers blocked.
+    if (!masterOn) {
+      return res.status(200).json({
+        enabled: false,
+        message: message,
+        lastUpdated: lastUpdated,
+      });
+    }
+
+    // Master ON — if no cohort array, treat as "all cohorts allowed" (backwards
+    // compat for pre-migration DB).
+    if (config.registration_enabled_years === undefined) {
+      return res.status(200).json({
+        enabled: true,
+        message: message,
+        lastUpdated: lastUpdated,
+      });
+    }
+
+    let allowedYears;
+    try {
+      allowedYears = JSON.parse(config.registration_enabled_years);
+      if (!Array.isArray(allowedYears)) allowedYears = [];
+    } catch (e) {
+      allowedYears = [];
+    }
+
+    // For non-student callers (admin/faculty/etc.), skip cohort check — this
+    // endpoint is primarily consumed by the student sidebar grey-out logic.
+    // Callers whose year_admitted we can't look up get enabled=true.
+    if (req.userRole !== "student") {
+      return res.status(200).json({
+        enabled: true,
+        message: message,
+        lastUpdated: lastUpdated,
+      });
+    }
+
+    const studentResult = await db.query(
+      `SELECT year_admitted FROM student WHERE user_id = $1`,
+      [req.userId]
     );
 
-    const message =
-      messageResult.rows.length > 0
-        ? messageResult.rows[0].config_value
-        : isEnabled
-        ? "Course registration is available"
-        : "Course registration is currently disabled";
+    if (studentResult.rows.length === 0) {
+      // Not a student row — treat as enabled (no data to check against).
+      return res.status(200).json({
+        enabled: true,
+        message: message,
+        lastUpdated: lastUpdated,
+      });
+    }
+
+    const yearAdmitted = studentResult.rows[0].year_admitted;
+    const cohortAllowed = allowedYears.includes(yearAdmitted);
 
     console.log(
-      `✅ Course registration status: ${isEnabled ? "ENABLED" : "DISABLED"}`
+      `✅ Registration status for ${req.userId} (year ${yearAdmitted}): ${cohortAllowed ? "ENABLED" : "BLOCKED (cohort)"}`
     );
 
     res.status(200).json({
-      enabled: isEnabled,
+      enabled: cohortAllowed,
       message: message,
-      lastUpdated: result.rows[0].updated_at,
+      lastUpdated: lastUpdated,
     });
   } catch (error) {
     console.error("❌ Error getting course registration status:", error);
     res.status(500).json({
       message: "Server error while checking course registration status",
+    });
+  }
+};
+
+// Return distinct year_admitted values from student table with student counts.
+// Used by the "Allowed Cohorts" checkbox list on the System Configuration page.
+exports.getKnownAdmissionYears = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT year_admitted AS year, COUNT(*)::int AS student_count
+       FROM student
+       WHERE year_admitted IS NOT NULL
+       GROUP BY year_admitted
+       ORDER BY year_admitted DESC`
+    );
+
+    res.status(200).json({
+      message: "Known admission years retrieved successfully",
+      years: result.rows,
+    });
+  } catch (error) {
+    console.error("❌ Error getting known admission years:", error);
+    res.status(500).json({
+      message: "Server error while retrieving known admission years",
     });
   }
 };
