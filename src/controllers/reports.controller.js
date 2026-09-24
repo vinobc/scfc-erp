@@ -1634,7 +1634,10 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
     const venueRes = await db.query(
       `SELECT ac.venue FROM assessment_config ac
        WHERE ac.slot_year = $1 AND ac.semester_type = $2
-         AND ac.course_code = $3 AND ac.employee_id = $4 AND ac.slot_name = $5
+         AND ac.course_code = $3 AND ac.employee_id = $4
+         AND ( ac.slot_name = $5
+            OR ',' || REPLACE($5, ' ', '') || ','
+                  LIKE '%,' || REPLACE(ac.slot_name, ' ', '') || ',%' )
        LIMIT 1`,
       [slot_year, semester_type, course_code, employee_id, slot_name]
     );
@@ -1650,7 +1653,11 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
      JOIN faculty f ON ac.employee_id = f.employee_id
      WHERE ac.slot_year = $1 AND ac.semester_type = $2
        AND ac.course_code = $3 AND ac.employee_id = $4
-       AND ac.slot_name = $5 AND ac.venue = $6`,
+       AND ( ac.slot_name = $5
+          OR ',' || REPLACE($5, ' ', '') || ','
+                LIKE '%,' || REPLACE(ac.slot_name, ' ', '') || ',%' )
+       AND ac.venue = $6
+     LIMIT 1`,
     [slot_year, semester_type, course_code, employee_id, slot_name, venue]
   );
   if (!primaryConfigRes.rows.length) return null;
@@ -1702,7 +1709,10 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
          JOIN course c ON ac.course_code = c.course_code
          JOIN faculty f ON ac.employee_id = f.employee_id
          JOIN UNNEST($4::text[], $5::text[], $6::text[]) AS t(sn, vn, fn)
-           ON ac.slot_name = t.sn AND ac.venue = t.vn AND f.name = t.fn
+           ON ( ac.slot_name = t.sn
+             OR ',' || REPLACE(t.sn, ' ', '') || ','
+                   LIKE '%,' || REPLACE(ac.slot_name, ' ', '') || ',%' )
+              AND ac.venue = t.vn AND f.name = t.fn
          WHERE ac.slot_year = $1 AND ac.semester_type = $2
            AND ac.course_code = $3`,
         [slot_year, semester_type, course_code, slotNames, venues, facultyNames]
