@@ -1695,8 +1695,14 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
          AND (sr.withdrawn IS NULL OR sr.withdrawn = false)`,
       [slot_year, semester_type, course_code, enrollments]
     );
+    // Exclude the tuple that corresponds to the *primary config* (already in
+    // allConfigs), NOT the original request slot_name. When the request comes
+    // in with a compound slot (e.g., SUMMER 4-hour lab "L7+L8,L27+L28"), the
+    // primary lookup resolves to a per-pair config (e.g., "L7+L8"). The
+    // compound tuple from student_registrations is a legitimate sibling that
+    // brings in the OTHER per-pair configs — we must NOT filter it out.
     const siblingTuples = siblingRegsRes.rows.filter(
-      (t) => !(t.slot_name === slot_name && t.venue === venue && t.faculty_name === info.faculty_name)
+      (t) => !(t.slot_name === info.slot_name && t.venue === info.venue && t.faculty_name === info.faculty_name)
     );
     if (siblingTuples.length) {
       const slotNames = siblingTuples.map((t) => t.slot_name);
