@@ -1677,8 +1677,20 @@ async function checkFacultyConflictForUpdate(
   semesterType,
   slotDay,
   slotTime,
+  slotName,
   currentCourseCode
 ) {
+  // Include time-overlapping conflicting slots (e.g. moving CSE2009 L33+L34
+  // onto a faculty who already has CSE5009 D2 on the same day — D2 at
+  // 1.15-2.05 and L33+L34 at 1.15-2.55 overlap but are different strings).
+  // Exact slot_time match alone misses these theory↔lab overlaps.
+  const conflictRows = await client.query(
+    `SELECT conflicting_slot_name FROM slot_conflict
+     WHERE slot_year = $1 AND semester_type = $2 AND slot_name = $3`,
+    [slotYear, semesterType, slotName]
+  );
+  const slotNamesToCheck = [slotName, ...conflictRows.rows.map(r => r.conflicting_slot_name)];
+
   const result = await client.query(
     `SELECT fa.*, c.course_name, v.venue as venue_name
      FROM faculty_allocation fa
@@ -1688,9 +1700,9 @@ async function checkFacultyConflictForUpdate(
        AND fa.semester_type = $2
        AND fa.employee_id = $3
        AND fa.slot_day = $4
-       AND fa.slot_time = $5
+       AND fa.slot_name = ANY($5)
        AND fa.course_code != $6`,
-    [slotYear, semesterType, newEmployeeId, slotDay, slotTime, currentCourseCode]
+    [slotYear, semesterType, newEmployeeId, slotDay, slotNamesToCheck, currentCourseCode]
   );
   return result.rows;
 }
@@ -1806,27 +1818,74 @@ exports.updateFacultyAllocation = async (req, res) => {
       );
       console.log(`Found ${studentCount} students registered for this allocation`);
 
-      // If faculty changed, check for conflicts
-      if (facultyChanged) {
-        const facultyConflicts = await checkFacultyConflictForUpdate(
-          client,
-          newAllocation.employee_id,
+      // Fetch all related allocation rows up front. Every day of the moved
+      // allocation must be pre-flight-checked, not just the one the coordinator
+      // clicked — previously only oldAllocation.slot_day was validated, letting
+      // clashes on other days slip through (see multi-day audit trail in
+      // 2026-09-28 investigation).
+      const isLabSlot = oldAllocation.slot_name.startsWith("L");
+      const relatedAllocations = await client.query(
+        `SELECT * FROM faculty_allocation
+         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+         AND employee_id = $4 AND slot_name = $5 AND venue = $6`,
+        [
           oldAllocation.slot_year,
           oldAllocation.semester_type,
-          oldAllocation.slot_day,
-          oldAllocation.slot_time,
-          oldAllocation.course_code
-        );
+          oldAllocation.course_code,
+          oldAllocation.employee_id,
+          oldAllocation.slot_name,
+          oldAllocation.venue,
+        ]
+      );
+      console.log(`Found ${relatedAllocations.rows.length} related allocation(s) to update`);
 
-        if (facultyConflicts.length > 0) {
-          const conflict = facultyConflicts[0];
-          await client.query("ROLLBACK");
-          return res.status(409).json({
-            message: `Faculty conflict: ${newAllocation.faculty_name} is already teaching ${conflict.course_name} in ${conflict.venue_name} at this time slot (${oldAllocation.slot_day} ${oldAllocation.slot_time})`,
-            conflict: conflict,
-          });
+      // Per-day conflict pre-flight
+      for (const relatedAlloc of relatedAllocations.rows) {
+        if (facultyChanged) {
+          const facultyConflicts = await checkFacultyConflictForUpdate(
+            client,
+            newAllocation.employee_id,
+            oldAllocation.slot_year,
+            oldAllocation.semester_type,
+            relatedAlloc.slot_day,
+            relatedAlloc.slot_time,
+            oldAllocation.slot_name,
+            oldAllocation.course_code
+          );
+          if (facultyConflicts.length > 0) {
+            const conflict = facultyConflicts[0];
+            await client.query("ROLLBACK");
+            return res.status(409).json({
+              message: `Faculty conflict on ${relatedAlloc.slot_day} ${relatedAlloc.slot_time}: ${newAllocation.faculty_name} is already teaching ${conflict.course_name} in ${conflict.venue_name} in slot ${conflict.slot_name} (${conflict.slot_time}), which overlaps with your ${oldAllocation.slot_name} slot`,
+              conflict: conflict,
+            });
+          }
         }
+        if (venueChanged) {
+          const venueConflicts = await checkVenueConflictForUpdate(
+            client,
+            newAllocation.venue,
+            oldAllocation.slot_year,
+            oldAllocation.semester_type,
+            relatedAlloc.slot_day,
+            relatedAlloc.slot_time,
+            oldAllocation.slot_name,
+            oldAllocation.course_code,
+            oldAllocation.employee_id
+          );
+          if (venueConflicts.length > 0) {
+            const conflict = venueConflicts[0];
+            await client.query("ROLLBACK");
+            return res.status(409).json({
+              message: `Venue conflict on ${relatedAlloc.slot_day}: ${newAllocation.venue} is already used by ${conflict.faculty_name} for ${conflict.course_name} in slot ${conflict.slot_name} (${conflict.slot_time}), which overlaps with your ${oldAllocation.slot_name} slot`,
+              conflict: conflict,
+            });
+          }
+        }
+      }
 
+      // Single-shot checks (not per-day)
+      if (facultyChanged) {
         // Check if the new faculty already has this course+slot at a different venue
         const existingAllocation = await client.query(
           `SELECT venue FROM faculty_allocation
@@ -1842,7 +1901,6 @@ exports.updateFacultyAllocation = async (req, res) => {
             venueChanged ? newAllocation.venue : oldAllocation.venue,
           ]
         );
-
         if (existingAllocation.rows.length > 0) {
           await client.query("ROLLBACK");
           return res.status(409).json({
@@ -1851,44 +1909,13 @@ exports.updateFacultyAllocation = async (req, res) => {
         }
       }
 
-      // If venue changed, check capacity and conflicts
       if (venueChanged) {
-        // Check venue conflicts
-        const venueConflicts = await checkVenueConflictForUpdate(
-          client,
-          newAllocation.venue,
-          oldAllocation.slot_year,
-          oldAllocation.semester_type,
-          oldAllocation.slot_day,
-          oldAllocation.slot_time,
-          oldAllocation.slot_name,
-          oldAllocation.course_code,
-          oldAllocation.employee_id
-        );
-
-        if (venueConflicts.length > 0) {
-          const conflict = venueConflicts[0];
-          await client.query("ROLLBACK");
-          return res.status(409).json({
-            message: `Venue conflict: ${newAllocation.venue} on ${oldAllocation.slot_day} is already used by ${conflict.faculty_name} for ${conflict.course_name} in slot ${conflict.slot_name} (${conflict.slot_time}), which overlaps with your ${oldAllocation.slot_name} slot`,
-            conflict: conflict,
-          });
-        }
-
         // Check venue capacity
-        const newVenueCapacity = await getVenueCapacity(
-          client,
-          newAllocation.venue
-        );
-        const oldVenueCapacity = await getVenueCapacity(
-          client,
-          oldAllocation.venue
-        );
-
+        const newVenueCapacity = await getVenueCapacity(client, newAllocation.venue);
+        const oldVenueCapacity = await getVenueCapacity(client, oldAllocation.venue);
         console.log(
           `Venue capacity check: Old=${oldVenueCapacity}, New=${newVenueCapacity}, Students=${studentCount}`
         );
-
         if (newVenueCapacity < studentCount) {
           await client.query("ROLLBACK");
           return res.status(400).json({
@@ -1939,25 +1966,6 @@ exports.updateFacultyAllocation = async (req, res) => {
           conflicting_config_ids: assessmentConfigConflict.rows.map((r) => r.id),
         });
       }
-
-      // Get all related allocations (same course, faculty, slot_name, and venue)
-      // This gets all days for that specific slot at the same venue
-      const isLabSlot = oldAllocation.slot_name.startsWith("L");
-      const relatedAllocations = await client.query(
-        `SELECT * FROM faculty_allocation
-         WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
-         AND employee_id = $4 AND slot_name = $5 AND venue = $6`,
-        [
-          oldAllocation.slot_year,
-          oldAllocation.semester_type,
-          oldAllocation.course_code,
-          oldAllocation.employee_id,
-          oldAllocation.slot_name,
-          oldAllocation.venue,
-        ]
-      );
-
-      console.log(`Found ${relatedAllocations.rows.length} related allocation(s) to update`);
 
       // Step 1: Insert new allocations first (different PK due to new employee_id/venue)
       for (const relatedAlloc of relatedAllocations.rows) {
