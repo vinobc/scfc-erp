@@ -4,6 +4,7 @@ const {
   verifyToken,
   isAdmin,
   isStaffOrAdmin,
+  isFacultyOrStaffOrAdmin,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -11,9 +12,10 @@ const router = express.Router();
 // Apply auth middleware to all semester routes
 router.use(verifyToken);
 
-// Semester routes
-router.get("/", semesterController.getAllSemesters);
-router.get("/:id", semesterController.getSemesterById);
+// Semester routes — read endpoints gated to non-student roles to prevent
+// information disclosure of the full semester list to any authenticated student.
+router.get("/", isFacultyOrStaffOrAdmin, semesterController.getAllSemesters);
+router.get("/:id", isFacultyOrStaffOrAdmin, semesterController.getSemesterById);
 
 // Admin-only routes
 router.post("/", isAdmin, semesterController.createSemester);
