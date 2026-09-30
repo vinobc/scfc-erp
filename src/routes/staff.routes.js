@@ -3,6 +3,7 @@ const staffController = require("../controllers/staff.controller");
 const {
   verifyToken,
   isAdmin,
+  isFacultyOrStaffOrAdmin,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -10,9 +11,10 @@ const router = express.Router();
 // Apply auth middleware to all staff routes
 router.use(verifyToken);
 
-// Staff routes
-router.get("/", staffController.getAllStaff);
-router.get("/:id", staffController.getStaffById);
+// Staff routes — read endpoints gated to non-student roles to prevent
+// information disclosure of the full staff list to any authenticated student.
+router.get("/", isFacultyOrStaffOrAdmin, staffController.getAllStaff);
+router.get("/:id", isFacultyOrStaffOrAdmin, staffController.getStaffById);
 
 // Admin-only routes
 router.post("/", isAdmin, staffController.createStaff);

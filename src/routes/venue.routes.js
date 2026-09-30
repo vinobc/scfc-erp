@@ -4,6 +4,7 @@ const {
   verifyToken,
   isAdmin,
   isStaffOrAdmin,
+  isFacultyOrStaffOrAdmin,
 } = require("../middleware/auth.middleware");
 
 const router = express.Router();
@@ -11,9 +12,10 @@ const router = express.Router();
 // Apply auth middleware to all venue routes
 router.use(verifyToken);
 
-// Venue routes
-router.get("/", venueController.getAllVenues);
-router.get("/:id", venueController.getVenueById);
+// Venue routes — read endpoints gated to non-student roles to prevent
+// information disclosure of the full venue list to any authenticated student.
+router.get("/", isFacultyOrStaffOrAdmin, venueController.getAllVenues);
+router.get("/:id", isFacultyOrStaffOrAdmin, venueController.getVenueById);
 
 // Admin-only routes
 router.post("/", isAdmin, venueController.createVenue);

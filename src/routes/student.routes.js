@@ -5,6 +5,7 @@ const {
   verifyToken,
   isAdmin,
   isStaffOrAdmin,
+  isFacultyOrStaffOrAdmin,
   isTimetableCoordinator,
 } = require("../middleware/auth.middleware");
 
@@ -20,8 +21,12 @@ const upload = multer({
 // Apply auth middleware to all student routes
 router.use(verifyToken);
 
-// Student routes
-router.get("/", studentController.getAllStudents);
+// Student routes — GET / (full student list) gated to non-student roles to
+// prevent disclosure of the entire student roster to any authenticated student.
+// GET /:enrollment_no left open for now — student portal needs it for the
+// student's own record; controller can be tightened later to enforce self-only
+// access.
+router.get("/", isFacultyOrStaffOrAdmin, studentController.getAllStudents);
 // Admin get unique admission years (admin only) - MUST be before /:enrollment_no route
 router.get("/years", isAdmin, studentController.getUniqueYears);
 router.get("/:enrollment_no", studentController.getStudentByEnrollment);

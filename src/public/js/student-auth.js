@@ -722,29 +722,23 @@ function handleStudentLoginSuccess(data) {
     console.log("🔥 Password reset required");
     document.body.className = "student-password-reset";
     showPasswordResetModal();
-  } else {
-    console.log("🔥 Setting student interface");
 
-    // CRITICAL: Set both classes for CSS to work
-    document.body.className = "authenticated student-user";
-    console.log("🔥 Body classes set to:", document.body.className);
-
-    updateStudentHeader(data.user);
-    showStudentAlert(`Welcome, ${data.user.student_name}!`, "success");
-
-    // Show refresh message for proper functionality
-    showStudentRefreshMessage();
-
-    // Initialize student navigation
-    initializeStudentNavigation();
+    // Close login modal
+    const loginModal = document.getElementById("loginModal");
+    if (loginModal) {
+      const modalInstance = bootstrap.Modal.getInstance(loginModal);
+      if (modalInstance) modalInstance.hide();
+    }
+    return;
   }
 
-  // Close login modal
-  const loginModal = document.getElementById("loginModal");
-  if (loginModal) {
-    const modalInstance = bootstrap.Modal.getInstance(loginModal);
-    if (modalInstance) modalInstance.hide();
-  }
+  // Normal student login path: reload the page so the initial HTML render
+  // picks up the student token and shows the correct (student) UI from the
+  // start — without a flash of the admin dashboard, which is the default
+  // pre-authentication rendered layout. On reload, initializeStudentNavigation
+  // and updateStudentHeader run naturally in the fresh boot flow.
+  console.log("🔥 Reloading to render student portal cleanly");
+  window.location.reload();
 }
 
 // Update student header with information
