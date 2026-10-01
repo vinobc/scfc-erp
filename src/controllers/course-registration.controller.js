@@ -1237,77 +1237,79 @@ exports.registerCourseOffering = async (req, res) => {
 
     // Handle project course registration separately
     if (isProjectCourse) {
-      // Check if already registered for this project
-      const existingReg = await db.query(
-        `SELECT COUNT(*) as count 
-         FROM student_registrations 
-         WHERE enrollment_number = $1 
-           AND slot_year = $2 
-           AND semester_type = $3 
-           AND course_code = $4`,
-        [student.enrollment_number, slot_year, semester_type, course_code]
-      );
+      // Project registration — serialized per-project to prevent the seat-cap
+      // race condition that caused the 2026-10-01 lock pile-up. Fix: pin ONE
+      // pool client, open a real transaction, SELECT ... FOR UPDATE on the
+      // project_allocation row. Concurrent registrations for the SAME project
+      // serialize (ms-fast). Different projects run in parallel.
+      const client = await db.pool.connect();
+      try {
+        await client.query("BEGIN");
 
-      if (parseInt(existingReg.rows[0].count) > 0) {
-        return res.status(400).json({
-          message: `You are already registered for project ${course_code}`,
-        });
-      }
-
-      // Check if project course is activated for this semester
-      const projectActivation = await db.query(
-        `SELECT * FROM project_allocation
-         WHERE course_code = $1 
-           AND slot_year = $2 
-           AND semester_type = $3 
-           AND is_active = true`,
-        [course_code, slot_year, semester_type]
-      );
-
-      if (projectActivation.rows.length === 0) {
-        return res.status(404).json({
-          message: "This project course is not activated for the selected semester"
-        });
-      }
-
-      // Seat-cap gate: if project_allocation.max_students is set (NULL means
-      // unlimited), refuse when the number of active registrations has
-      // reached the cap. Count is computed LIVE from student_registrations —
-      // same pattern as the venue-seat check on regular courses. All
-      // registrations count towards the cap regardless of withdrawal
-      // status, matching regular-course behaviour.
-      const maxStudents = projectActivation.rows[0].max_students;
-      if (maxStudents !== null && maxStudents !== undefined) {
-        const currentCountRes = await db.query(
-          `SELECT COUNT(*) AS n
-           FROM student_registrations
-           WHERE course_code   = $1
-             AND slot_year     = $2
-             AND semester_type = $3`,
+        const projectLock = await client.query(
+          `SELECT max_students
+           FROM project_allocation
+           WHERE course_code = $1
+             AND slot_year = $2
+             AND semester_type = $3
+             AND is_active = true
+           FOR UPDATE`,
           [course_code, slot_year, semester_type]
         );
-        const currentCount = parseInt(currentCountRes.rows[0].n, 10);
-        if (currentCount >= maxStudents) {
-          return res.status(400).json({
-            message: `Registration failed: No seats available for project ${course_code}. All ${maxStudents} seats are occupied.`,
-            seat_info: {
-              max_students: maxStudents,
-              current_registrations: currentCount,
-              available_seats: 0,
-            },
+
+        if (projectLock.rows.length === 0) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({
+            message: "This project course is not activated for the selected semester",
           });
         }
-      }
 
-      // Begin transaction for project registration
-      await db.query('BEGIN');
+        const maxStudents = projectLock.rows[0].max_students;
 
-      try {
-        // Register the student for the project (without specific faculty)
-        await db.query(
-          `INSERT INTO student_registrations 
+        const existingReg = await client.query(
+          `SELECT COUNT(*) AS count
+           FROM student_registrations
+           WHERE enrollment_number = $1
+             AND slot_year = $2
+             AND semester_type = $3
+             AND course_code = $4`,
+          [student.enrollment_number, slot_year, semester_type, course_code]
+        );
+
+        if (parseInt(existingReg.rows[0].count) > 0) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            message: `You are already registered for project ${course_code}`,
+          });
+        }
+
+        if (maxStudents !== null && maxStudents !== undefined) {
+          const currentCountRes = await client.query(
+            `SELECT COUNT(*) AS n
+             FROM student_registrations
+             WHERE course_code   = $1
+               AND slot_year     = $2
+               AND semester_type = $3`,
+            [course_code, slot_year, semester_type]
+          );
+          const currentCount = parseInt(currentCountRes.rows[0].n, 10);
+          if (currentCount >= maxStudents) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+              message: `Registration failed: No seats available for project ${course_code}. All ${maxStudents} seats are occupied.`,
+              seat_info: {
+                max_students: maxStudents,
+                current_registrations: currentCount,
+                available_seats: 0,
+              },
+            });
+          }
+        }
+
+        await client.query(
+          `INSERT INTO student_registrations
            (enrollment_number, student_name, program_code, year_admitted,
-            slot_year, semester_type, course_code, course_name, 
+            slot_year, semester_type, course_code, course_name,
             theory, practical, credits, course_type,
             slot_name, venue, faculty_name, component_type)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
@@ -1320,20 +1322,19 @@ exports.registerCourseOffering = async (req, res) => {
             semester_type,
             course_code,
             course.course_name,
-            0, // theory
-            0, // practical
+            0,
+            0,
             course.credits,
-            'PRJ',
-            'PROJECT', // slot_name for projects
-            'N/A', // venue for projects
-            'TBA', // faculty to be assigned later
-            'SINGLE'
+            "PRJ",
+            "PROJECT",
+            "N/A",
+            "TBA",
+            "SINGLE",
           ]
         );
 
-        // Update current_students count in project_allocation
-        await db.query(
-          `UPDATE project_allocation 
+        await client.query(
+          `UPDATE project_allocation
            SET current_students = current_students + 1,
                updated_at = CURRENT_TIMESTAMP
            WHERE course_code = $1
@@ -1343,7 +1344,7 @@ exports.registerCourseOffering = async (req, res) => {
           [course_code, slot_year, semester_type]
         );
 
-        await db.query('COMMIT');
+        await client.query("COMMIT");
 
         return res.status(201).json({
           message: `Successfully registered for project ${course_code}`,
@@ -1351,11 +1352,13 @@ exports.registerCourseOffering = async (req, res) => {
             course_code,
             course_name: course.course_name,
             credits: course.credits,
-          }
+          },
         });
       } catch (error) {
-        await db.query('ROLLBACK');
+        try { await client.query("ROLLBACK"); } catch (_) {}
         throw error;
+      } finally {
+        client.release();
       }
     }
 
