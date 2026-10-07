@@ -763,25 +763,69 @@ exports.getMarksEntrySummary = async (req, res) => {
             // Approved edge-case: empty class shouldn't show a green Complete.
             status = "Not Entered";
           } else {
+            // Treat an OD-covered LAB_SESSION as "filled" for its student so
+            // the status engine stops flagging OD students as pending. Mirrors
+            // the OD-exclusion already in getConsolidatedReport (lab marks).
+            // Cutoff: SUMMER 2025-26 onwards — pre-cutoff attendance OD data
+            // isn't captured consistently, so the LEFT JOIN just matches no
+            // rows there and the query behaves exactly as before.
             const coverageResult = await db.query(`
-              WITH filled AS (
-                SELECT sm.enrollment_number, COUNT(*) AS c
-                FROM student_marks sm
-                JOIN unnest($2::text[], $3::int[], $4::text[])
+              WITH ac AS (
+                SELECT slot_year, semester_type, course_code, employee_id,
+                       slot_name, venue, config_json
+                FROM assessment_config WHERE id = $1
+              ),
+              req AS (
+                SELECT p.assessment_type, p.assessment_number, p.question_id
+                FROM unnest($2::text[], $3::int[], $4::text[])
                      AS p(assessment_type, assessment_number, question_id)
-                  ON p.assessment_type = sm.assessment_type
-                 AND p.assessment_number = sm.assessment_number
-                 AND p.question_id = sm.question_id
-                WHERE sm.assessment_config_id = $1
-                  AND sm.marks_obtained IS NOT NULL
-                  AND sm.enrollment_number = ANY($5::text[])
-                GROUP BY sm.enrollment_number
+              ),
+              od_cells AS (
+                SELECT DISTINCT s.enrollment_no AS enrollment_number,
+                       r.assessment_number
+                FROM req r
+                CROSS JOIN ac
+                JOIN student s ON s.enrollment_no = ANY($5::text[])
+                JOIN attendance a
+                  ON a.student_id      = s.user_id
+                 AND a.slot_year       = ac.slot_year
+                 AND a.semester_type   = ac.semester_type
+                 AND a.course_code     = ac.course_code
+                 AND a.employee_id     = ac.employee_id
+                 AND a.slot_name       = ac.slot_name
+                 AND a.venue           = ac.venue
+                 AND a.attendance_date = (ac.config_json -> 'labSessions'
+                                          -> (r.assessment_number - 1) ->> 'date')::date
+                 AND a.is_od           = TRUE
+                WHERE r.assessment_type = 'LAB_SESSION'
+                  AND (ac.slot_year > '2025-26'
+                       OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
+              ),
+              per_student AS (
+                SELECT e.enrollment_number,
+                       COUNT(*) FILTER (
+                         WHERE sm.marks_obtained IS NOT NULL
+                            OR (r.assessment_type = 'LAB_SESSION' AND od.enrollment_number IS NOT NULL)
+                       )::int AS c
+                FROM unnest($5::text[]) AS e(enrollment_number)
+                CROSS JOIN req r
+                LEFT JOIN student_marks sm
+                  ON sm.assessment_config_id = $1
+                 AND sm.enrollment_number = e.enrollment_number
+                 AND sm.assessment_type = r.assessment_type
+                 AND sm.assessment_number = r.assessment_number
+                 AND sm.question_id = r.question_id
+                LEFT JOIN od_cells od
+                  ON od.enrollment_number = e.enrollment_number
+                 AND od.assessment_number = r.assessment_number
+                GROUP BY e.enrollment_number
               )
               SELECT
                 COALESCE(COUNT(*) FILTER (WHERE c = $6), 0)::int AS fully_done,
                 COALESCE(COUNT(*) FILTER (WHERE c > 0 AND c < $6), 0)::int AS partial,
                 COALESCE(SUM(c), 0)::int AS filled_cells
-              FROM filled
+              FROM per_student
+              WHERE c > 0
             `, [
               configRow.id,
               pieces.map(p => p.assessment_type),
@@ -809,15 +853,48 @@ exports.getMarksEntrySummary = async (req, res) => {
             // If any student is partial or missing, fetch per-student detail so
             // the UI can show "Q3 blank for 6" and let HoI expand the enrollment list.
             if (studentsPartial > 0 || studentsMissing > 0) {
+              // Same OD-exclusion as the coverage query above: an OD-covered
+              // LAB_SESSION cell is treated as filled so the HoI's per-student
+              // "missing pieces" list drops the OD cells.
               const detailResult = await db.query(`
-                WITH req AS (
+                WITH ac AS (
+                  SELECT slot_year, semester_type, course_code, employee_id,
+                         slot_name, venue, config_json
+                  FROM assessment_config WHERE id = $1
+                ),
+                req AS (
                   SELECT assessment_type, assessment_number, question_id
                   FROM unnest($2::text[], $3::int[], $4::text[])
                        AS p(assessment_type, assessment_number, question_id)
                 ),
+                od_cells AS (
+                  SELECT DISTINCT s.enrollment_no AS enrollment_number,
+                         r.assessment_number
+                  FROM req r
+                  CROSS JOIN ac
+                  JOIN student s ON s.enrollment_no = ANY($5::text[])
+                  JOIN attendance a
+                    ON a.student_id      = s.user_id
+                   AND a.slot_year       = ac.slot_year
+                   AND a.semester_type   = ac.semester_type
+                   AND a.course_code     = ac.course_code
+                   AND a.employee_id     = ac.employee_id
+                   AND a.slot_name       = ac.slot_name
+                   AND a.venue           = ac.venue
+                   AND a.attendance_date = (ac.config_json -> 'labSessions'
+                                            -> (r.assessment_number - 1) ->> 'date')::date
+                   AND a.is_od           = TRUE
+                  WHERE r.assessment_type = 'LAB_SESSION'
+                    AND (ac.slot_year > '2025-26'
+                         OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
+                ),
                 sps AS (
                   SELECT e.enrollment_number, r.question_id,
-                         CASE WHEN sm.marks_obtained IS NOT NULL THEN 1 ELSE 0 END AS is_filled
+                         CASE
+                           WHEN sm.marks_obtained IS NOT NULL THEN 1
+                           WHEN r.assessment_type = 'LAB_SESSION' AND od.enrollment_number IS NOT NULL THEN 1
+                           ELSE 0
+                         END AS is_filled
                   FROM unnest($5::text[]) AS e(enrollment_number)
                   CROSS JOIN req r
                   LEFT JOIN student_marks sm
@@ -826,6 +903,9 @@ exports.getMarksEntrySummary = async (req, res) => {
                    AND sm.assessment_type = r.assessment_type
                    AND sm.assessment_number = r.assessment_number
                    AND sm.question_id = r.question_id
+                  LEFT JOIN od_cells od
+                    ON od.enrollment_number = e.enrollment_number
+                   AND od.assessment_number = r.assessment_number
                 )
                 SELECT sps.enrollment_number,
                        SUM(sps.is_filled)::int AS filled,
@@ -960,25 +1040,64 @@ exports.getMarksEntrySummary = async (req, res) => {
             // triple) uniquely identifies a piece. Same triple across two
             // configs represents two DIFFERENT physical sessions at different
             // slot times; both must be filled for the student to be "done".
+            // OD-aware version. For each (config_id, assessment_number) in the
+            // taggedPieces, look up assessment_config to get slot_year /
+            // semester_type / course_code / employee_id / slot_name / venue /
+            // config_json, then LEFT JOIN attendance to find OD-covered cells.
+            // Cutoff: SUMMER 2025-26 onwards.
             const coverageResult = await db.query(`
-              WITH filled AS (
-                SELECT sm.enrollment_number, COUNT(*) AS c
-                FROM student_marks sm
-                JOIN unnest($1::int[], $2::text[], $3::int[], $4::text[])
+              WITH req AS (
+                SELECT p.config_id, p.assessment_type, p.assessment_number, p.question_id
+                FROM unnest($1::int[], $2::text[], $3::int[], $4::text[])
                      AS p(config_id, assessment_type, assessment_number, question_id)
-                  ON p.config_id = sm.assessment_config_id
-                 AND p.assessment_type = sm.assessment_type
-                 AND p.assessment_number = sm.assessment_number
-                 AND p.question_id = sm.question_id
-                WHERE sm.marks_obtained IS NOT NULL
-                  AND sm.enrollment_number = ANY($5::text[])
-                GROUP BY sm.enrollment_number
+              ),
+              od_cells AS (
+                SELECT DISTINCT r.config_id, s.enrollment_no AS enrollment_number,
+                       r.assessment_number
+                FROM req r
+                JOIN assessment_config ac ON ac.id = r.config_id
+                JOIN student s ON s.enrollment_no = ANY($5::text[])
+                JOIN attendance a
+                  ON a.student_id      = s.user_id
+                 AND a.slot_year       = ac.slot_year
+                 AND a.semester_type   = ac.semester_type
+                 AND a.course_code     = ac.course_code
+                 AND a.employee_id     = ac.employee_id
+                 AND a.slot_name       = ac.slot_name
+                 AND a.venue           = ac.venue
+                 AND a.attendance_date = (ac.config_json -> 'labSessions'
+                                          -> (r.assessment_number - 1) ->> 'date')::date
+                 AND a.is_od           = TRUE
+                WHERE r.assessment_type = 'LAB_SESSION'
+                  AND (ac.slot_year > '2025-26'
+                       OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
+              ),
+              per_student AS (
+                SELECT e.enrollment_number,
+                       COUNT(*) FILTER (
+                         WHERE sm.marks_obtained IS NOT NULL
+                            OR (r.assessment_type = 'LAB_SESSION' AND od.enrollment_number IS NOT NULL)
+                       )::int AS c
+                FROM unnest($5::text[]) AS e(enrollment_number)
+                CROSS JOIN req r
+                LEFT JOIN student_marks sm
+                  ON sm.assessment_config_id = r.config_id
+                 AND sm.enrollment_number = e.enrollment_number
+                 AND sm.assessment_type = r.assessment_type
+                 AND sm.assessment_number = r.assessment_number
+                 AND sm.question_id = r.question_id
+                LEFT JOIN od_cells od
+                  ON od.config_id = r.config_id
+                 AND od.enrollment_number = e.enrollment_number
+                 AND od.assessment_number = r.assessment_number
+                GROUP BY e.enrollment_number
               )
               SELECT
                 COALESCE(COUNT(*) FILTER (WHERE c = $6), 0)::int AS fully_done,
                 COALESCE(COUNT(*) FILTER (WHERE c > 0 AND c < $6), 0)::int AS partial,
                 COALESCE(SUM(c), 0)::int AS filled_cells
-              FROM filled
+              FROM per_student
+              WHERE c > 0
             `, [
               taggedPieces.map(p => p.config_id),
               taggedPieces.map(p => p.assessment_type),
@@ -998,16 +1117,45 @@ exports.getMarksEntrySummary = async (req, res) => {
             else status = "Partial";
 
             if (studentsPartial > 0 || studentsMissing > 0) {
+              // OD-aware version of the compound-slot detail query. OD-covered
+              // LAB_SESSION cells are treated as filled, so the drill-down list
+              // only shows genuine missing pieces.
               const detailResult = await db.query(`
                 WITH req AS (
-                  SELECT config_id, assessment_type, assessment_number, question_id,
-                         config_id || ':' || assessment_type || ':' || assessment_number || ':' || question_id AS piece_key
+                  SELECT p.config_id, p.assessment_type, p.assessment_number, p.question_id,
+                         p.config_id || ':' || p.assessment_type || ':' ||
+                           p.assessment_number || ':' || p.question_id AS piece_key
                   FROM unnest($1::int[], $2::text[], $3::int[], $4::text[])
                        AS p(config_id, assessment_type, assessment_number, question_id)
                 ),
+                od_cells AS (
+                  SELECT DISTINCT r.config_id, s.enrollment_no AS enrollment_number,
+                         r.assessment_number
+                  FROM req r
+                  JOIN assessment_config ac ON ac.id = r.config_id
+                  JOIN student s ON s.enrollment_no = ANY($5::text[])
+                  JOIN attendance a
+                    ON a.student_id      = s.user_id
+                   AND a.slot_year       = ac.slot_year
+                   AND a.semester_type   = ac.semester_type
+                   AND a.course_code     = ac.course_code
+                   AND a.employee_id     = ac.employee_id
+                   AND a.slot_name       = ac.slot_name
+                   AND a.venue           = ac.venue
+                   AND a.attendance_date = (ac.config_json -> 'labSessions'
+                                            -> (r.assessment_number - 1) ->> 'date')::date
+                   AND a.is_od           = TRUE
+                  WHERE r.assessment_type = 'LAB_SESSION'
+                    AND (ac.slot_year > '2025-26'
+                         OR (ac.slot_year = '2025-26' AND ac.semester_type = 'SUMMER'))
+                ),
                 sps AS (
                   SELECT e.enrollment_number, r.piece_key,
-                         CASE WHEN sm.marks_obtained IS NOT NULL THEN 1 ELSE 0 END AS is_filled
+                         CASE
+                           WHEN sm.marks_obtained IS NOT NULL THEN 1
+                           WHEN r.assessment_type = 'LAB_SESSION' AND od.enrollment_number IS NOT NULL THEN 1
+                           ELSE 0
+                         END AS is_filled
                   FROM unnest($5::text[]) AS e(enrollment_number)
                   CROSS JOIN req r
                   LEFT JOIN student_marks sm
@@ -1016,6 +1164,10 @@ exports.getMarksEntrySummary = async (req, res) => {
                    AND sm.assessment_type = r.assessment_type
                    AND sm.assessment_number = r.assessment_number
                    AND sm.question_id = r.question_id
+                  LEFT JOIN od_cells od
+                    ON od.config_id = r.config_id
+                   AND od.enrollment_number = e.enrollment_number
+                   AND od.assessment_number = r.assessment_number
                 )
                 SELECT sps.enrollment_number,
                        SUM(sps.is_filled)::int AS filled,
