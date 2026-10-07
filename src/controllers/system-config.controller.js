@@ -162,6 +162,18 @@ exports.getCourseRegistrationStatus = async (req, res) => {
   try {
     console.log("📋 Getting course registration status for student");
 
+    // Admin impersonation bypass: when an admin is proxied in as a student,
+    // userRole is "student" but req.impersonatedBy is set. Return enabled:true
+    // so the student sidebar does NOT grey out the Course Registration link
+    // even when the master toggle is OFF or the student's cohort is blocked.
+    // This matches the frontend's own impersonation bypass in student-auth.js.
+    if (req.impersonatedBy) {
+      return res.status(200).json({
+        enabled: true,
+        message: "Course registration enabled (Admin Proxy Mode)",
+      });
+    }
+
     // Fetch master toggle, custom message, and cohort array in one round-trip.
     const configResult = await db.query(
       `SELECT config_key, config_value, updated_at FROM system_config
