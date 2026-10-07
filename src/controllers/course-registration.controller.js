@@ -12,6 +12,16 @@ const { getActiveBlock } = require("../utils/registration-block");
 //      (system_config.registration_enabled_years).
 exports.getBlockStatus = async (req, res) => {
   try {
+    // Admin impersonation bypass: when an admin is proxied in as a student,
+    // the session's userRole is "student" but req.impersonatedBy is set to the
+    // admin's user_id. Admins must be able to see / act on the student view
+    // even when the master toggle is OFF, cohort gate blocks the student,
+    // or the student has an individual block. Return blocked:false so the
+    // student-facing banner / grey-out does not fire.
+    if (req.impersonatedBy) {
+      return res.status(200).json({ blocked: false });
+    }
+
     if (req.userRole !== "student") {
       return res.status(200).json({ blocked: false });
     }
