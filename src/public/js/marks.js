@@ -1938,7 +1938,13 @@ function renderConsolidatedFacultyPanel(data) {
     const pending = (s.pending || []).length;
     const totalCell = `<td class="text-center fw-bold">${s.grand_total.toFixed(2)}${pending ? ` <span class="badge bg-warning text-dark ms-1" title="Pending: ${s.pending.join(", ")}">⚠${pending}</span>` : ''}</td>`;
     const gradingCell = perStudentGrading ? `<td class="text-center small">${s.grading_type || "N/A"}</td>` : "";
-    const gradeCell = `<td class="text-center text-muted">[—]</td>`;
+    // Grade: backend sets s.grade only when Absolute AND all components are
+    // entered + published. Relative / pending / N/A remain '[—]' for now.
+    const gradeLetter = s.grade || "[—]";
+    const gradeClass = s.grade === "F" ? "text-center fw-bold text-danger" :
+                       s.grade ? "text-center fw-bold" :
+                       "text-center text-muted";
+    const gradeCell = `<td class="${gradeClass}">${gradeLetter}</td>`;
 
     return `<tr>
       <td><code>${s.enrollment_number}</code></td>
@@ -2860,7 +2866,7 @@ function renderConsolidatedStudentPanel(data) {
               <tr>
                 <td class="fw-bold">GRADE</td>
                 <td></td>
-                <td class="text-center text-muted">[—]</td>
+                <td class="text-center fw-bold ${student.grade === "F" ? "text-danger" : (student.grade ? "" : "text-muted")}" style="font-size: 1.25rem;">${student.grade || "[—]"}</td>
                 <td></td>
               </tr>
             </tfoot>
