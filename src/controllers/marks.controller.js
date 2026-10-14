@@ -1453,6 +1453,86 @@ async function computeGradingType({
   return { header: "N/A", per_student: null };
 }
 
+// Compute the Absolute Grade for ONE student. Returns:
+//   • A letter grade string: 'S' / 'A' / 'B' / 'C' / 'D' / 'E' / 'F'
+//   • null, when grade cannot (or should not) be assigned yet — caller will
+//     render '[—]'. Reasons for null:
+//       - student's effective grading mode is not Absolute (Relative/N/A/other)
+//       - some component is still pending (not yet entered/published);
+//         we only award a grade once the picture is complete, to avoid
+//         prematurely assigning F to someone whose CAs just haven't been
+//         entered yet.
+//
+// Policy references: SCFAS Grading System document, Section 11.10 (Pass/Fail)
+// and Section 11.11 (Absolute Grading cutoffs).
+function computeStudentAbsoluteGrade({ student, course_type, assessment_type, grading_mode }) {
+  if (grading_mode !== "Absolute") return null;
+  if (Array.isArray(student.pending) && student.pending.length > 0) return null;
+
+  const components = student.components || {};
+  const isTheoryLike = course_type === "T" || course_type === "TEL" ||
+                       assessment_type === "UG_THEORY" || assessment_type === "PG_THEORY" ||
+                       assessment_type === "UG_INTEGRATED" || assessment_type === "PG_INTEGRATED";
+  const isTEL = course_type === "TEL" ||
+                assessment_type === "UG_INTEGRATED" || assessment_type === "PG_INTEGRATED";
+
+  // Sub-conditions (checked in order, first failure = F).
+  if (isTheoryLike) {
+    // #1 — CA1 + CA2 + CA3 (UG) or CA1 + CA2 (PG) must be ≥ 40% of CA weightage.
+    let caSum = 0;
+    let caMax = 0;
+    for (const k of ["CA1", "CA2", "CA3"]) {
+      const c = components[k];
+      if (c && c.weightage > 0) {
+        caMax += Number(c.weightage) || 0;
+        if (c.entered && c.converted != null) caSum += Number(c.converted) || 0;
+      }
+    }
+    if (caMax > 0 && caSum / caMax < 0.4) return "F";
+
+    // #2 — Lab marks ≥ 50% of lab weightage (TEL only).
+    if (isTEL) {
+      const lab = components.LAB;
+      if (lab && lab.weightage > 0) {
+        const earned = lab.entered && lab.converted != null ? Number(lab.converted) : 0;
+        if (earned / Number(lab.weightage) < 0.5) return "F";
+      }
+    }
+
+    // #3 — Grand Total ≥ 40.
+    if (Number(student.grand_total) < 40) return "F";
+  } else {
+    // Lab-only (P), Project (PRJ), Non-credit (NC) → only Grand Total ≥ 40.
+    if (Number(student.grand_total) < 40) return "F";
+  }
+
+  // Letter grade from the Absolute cutoff table.
+  const gt = Number(student.grand_total);
+  if (gt >= 90) return "S";
+  if (gt >= 80) return "A";
+  if (gt >= 70) return "B";
+  if (gt >= 60) return "C";
+  if (gt >= 50) return "D";
+  return "E"; // 40 ≤ gt < 50 (student is already past the Grand-Total ≥ 40 check above)
+}
+
+// Apply grades to every student in a computed report. Mutates each student
+// object by adding `.grade` (letter) and leaves it null when the policy
+// defers (Relative, N/A, pending components). Centralised so both endpoints
+// and the XLSX builder share identical semantics.
+function applyGradesToReport({ report, course_type, grading_header }) {
+  if (!report || !Array.isArray(report.students)) return;
+  for (const s of report.students) {
+    const mode = s.grading_type || grading_header; // per-student (TEL lab) or header-level
+    s.grade = computeStudentAbsoluteGrade({
+      student: s,
+      course_type,
+      assessment_type: report.assessment_type,
+      grading_mode: mode,
+    });
+  }
+}
+
 // Build the per-student component breakdown for a course-slot (may include a
 // THEORY config + one or more LAB configs, e.g. for TEL or SUMMER compound labs).
 //
@@ -1945,6 +2025,15 @@ exports.getConsolidatedReport = async (req, res) => {
       }
     }
 
+    // Absolute Grades (SCFAS Grading System section 11.11). Students whose
+    // effective mode is Relative or who have pending components stay null
+    // (frontend renders '[—]'). Relative grades will land on a separate branch.
+    applyGradesToReport({
+      report,
+      course_type: info.course_type,
+      grading_header: gradingResult.header,
+    });
+
     // Sibling info surfaced so the UI can inform faculty which slots were merged.
     const siblingSlots = allConfigs
       .filter((c) => !(c.slot_name === slot_name && c.venue === venue))
@@ -2120,6 +2209,13 @@ exports.getMyConsolidatedReport = async (req, res) => {
       report.stats.grading_type = theoryStrength >= 30 ? "Relative" : "Absolute";
     }
 
+    // Absolute grade for the student (null if Relative / pending / N/A).
+    applyGradesToReport({
+      report,
+      course_type: info.course_type,
+      grading_header: report.stats.grading_type,
+    });
+
     return res.status(200).json({
       course: {
         course_code: info.course_code,
@@ -2145,6 +2241,7 @@ exports.getMyConsolidatedReport = async (req, res) => {
 // Export the shared helper so reports.controller.js can reuse the exact math for XLSX.
 exports._computeConsolidatedReport = computeConsolidatedReport;
 exports._computeGradingType = computeGradingType;
+exports._applyGradesToReport = applyGradesToReport;
 exports._decomposeSlot = decomposeSlot;
 
 // Reset marks for a specific component (delete marks when resetting config)

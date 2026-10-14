@@ -1901,6 +1901,14 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
   });
   const perStudentGrading = gradingResult.per_student || null;
 
+  // Absolute grades per student (null when Relative / pending / N/A — rendered
+  // as '[—]' below). Attaches `grade` onto each report.students[i].
+  marksController._applyGradesToReport({
+    report,
+    course_type: info.course_type,
+    grading_header: gradingResult.header,
+  });
+
   // Build worksheet rows.
   const caKeys = Object.keys(report.weightages).filter((k) => k.startsWith("CA"))
     .sort((a, b) => parseInt(a.slice(2)) - parseInt(b.slice(2)));
@@ -1967,7 +1975,7 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
     }
     row.push(s.grand_total);
     if (perStudentGrading) row.push(perStudentGrading[s.enrollment_number] || "N/A");
-    row.push("[—]");
+    row.push(s.grade || "[—]");
     rows.push(row);
   });
 
