@@ -7,7 +7,7 @@ function parseSlotTimeRange(timeStr) {
   const [startStr, endStr] = cleanStr.split("-");
 
   const parseTime = (str) => {
-    const [hours, mins] = str.trim().split(".").map(Number);
+    const [hours, mins] = str.trim().split(/[.:]/).map(Number);
     // Convert to 24-hour format (times before 8 are PM)
     let h = hours;
     if (h < 8) h += 12; // 1.15 -> 13.15, 4.00 -> 16.00
