@@ -1484,6 +1484,13 @@ async function downloadMarksReport() {
 // ============ Admin Marks Summary Functions ============
 
 let marksSummaryData = [];
+// Set of "course_code|slot_name|employee_id|venue" strings — populated by
+// loadMarksSummary from /marks/grade-publish-status so each row can render
+// its Publish/Unpublish Grades button in the right state.
+let gradePublishSet = new Set();
+function gradePublishKey(row) {
+  return `${row.course_code}|${row.slot_name}|${row.employee_id}|${row.venue || ""}`;
+}
 
 // Load marks entry summary for admin
 async function loadMarksSummary() {
@@ -1519,6 +1526,23 @@ async function loadMarksSummary() {
     if (!res.ok) throw new Error("Failed to load summary");
 
     marksSummaryData = await res.json();
+
+    // Grade-publish state for this semester — drives per-row button and the
+    // header's bulk Publish/Unpublish Grades button.
+    try {
+      const gpRes = await fetch(
+        `${window.API_URL}/marks/grade-publish-status?slot_year=${year}&semester_type=${semester}`,
+        { headers: { "x-access-token": token } }
+      );
+      if (gpRes.ok) {
+        const published = await gpRes.json();
+        gradePublishSet = new Set(published.map((r) => `${r.course_code}|${r.slot_name}|${r.employee_id}|${r.venue || ""}`));
+      } else {
+        gradePublishSet = new Set();
+      }
+    } catch {
+      gradePublishSet = new Set();
+    }
 
     if (marksSummaryData.length === 0) {
       container.innerHTML = `
@@ -1600,7 +1624,13 @@ async function loadMarksSummary() {
             <i class="fas fa-file-excel me-1"></i>Download Status Report
           </button>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-dark" onclick="publishGradesForShownRows(true)" title="Publish grades for all rows currently visible (respects status filter). Faculty & students will see letter grades after this.">
+            <i class="fas fa-bullhorn me-2"></i>Publish Grades (shown)
+          </button>
+          <button class="btn btn-outline-secondary" onclick="publishGradesForShownRows(false)" title="Unpublish grades for all rows currently visible. Grades revert to hidden.">
+            <i class="fas fa-eye-slash me-2"></i>Unpublish Grades (shown)
+          </button>
           <button class="btn btn-primary" onclick="downloadSelectedConsolidated()" title="One workbook, one sheet per selected offering, each with Consolidated Marks & Grade Report">
             <i class="fas fa-award me-2"></i>Download Selected Consolidated
           </button>
@@ -1662,9 +1692,16 @@ async function loadMarksSummary() {
               <button class="btn btn-sm btn-outline-success me-1" onclick="downloadSingleMarks(${idx})" title="Download per-component report">
                 <i class="fas fa-download"></i>
               </button>
-              <button class="btn btn-sm btn-outline-primary" onclick="downloadSingleConsolidated(${idx})" title="Download Consolidated Marks & Grade Report">
+              <button class="btn btn-sm btn-outline-primary me-1" onclick="downloadSingleConsolidated(${idx})" title="Download Consolidated Marks & Grade Report">
                 <i class="fas fa-award"></i>
               </button>
+              ${gradePublishSet.has(gradePublishKey(row))
+                ? `<button class="btn btn-sm btn-success" onclick="toggleGradePublish(${idx}, false)" title="Grades published — click to Unpublish (hide from faculty & students)">
+                     <i class="fas fa-check-circle"></i>
+                   </button>`
+                : `<button class="btn btn-sm btn-outline-dark" onclick="toggleGradePublish(${idx}, true)" title="Publish Grades — make letter grades visible to faculty & students">
+                     <i class="fas fa-bullhorn"></i>
+                   </button>`}
             ` : `<button class="btn btn-sm btn-outline-secondary" disabled title="Not configured">
               <i class="fas fa-download"></i>
             </button>`}
@@ -1773,6 +1810,125 @@ async function downloadSingleMarks(idx) {
   const component = document.getElementById("admin-marks-component").value;
 
   await doMarksDownload(year, semester, component, row.course_code, row.slot_name, row.employee_id);
+}
+
+// Toggle grade-publish state for one row (course-slot-faculty).
+// publish=true → POST /marks/grade-publish; false → /marks/grade-unpublish.
+// After the toggle, we re-fetch publish status and re-render the summary.
+async function toggleGradePublish(idx, publish) {
+  const row = marksSummaryData[idx];
+  if (!row) return;
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+  const statusDiv = document.getElementById("marks-download-status");
+  const endpoint = publish ? "grade-publish" : "grade-unpublish";
+
+  try {
+    const res = await fetch(`${window.API_URL}/marks/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-access-token": localStorage.getItem("token"),
+      },
+      body: JSON.stringify({
+        slot_year: year,
+        semester_type: semester,
+        course_code: row.course_code,
+        employee_id: row.employee_id,
+        slot_name: row.slot_name,
+        venue: row.venue,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `${endpoint} failed`);
+    }
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-success py-2">
+        <i class="fas fa-check-circle me-2"></i>${row.course_code} / ${row.slot_name} — grades ${publish ? "published" : "unpublished"}.
+      </div>
+    `;
+    // Update local set so the row re-renders with the opposite button.
+    if (publish) gradePublishSet.add(gradePublishKey(row));
+    else         gradePublishSet.delete(gradePublishKey(row));
+    // Simplest: reload the whole summary so counts & buttons re-render.
+    await loadMarksSummary();
+  } catch (e) {
+    if (statusDiv) statusDiv.innerHTML = `
+      <div class="alert alert-danger py-2">
+        <i class="fas fa-exclamation-circle me-2"></i>${e.message}
+      </div>
+    `;
+  }
+}
+
+// Bulk toggle grade-publish for all rows currently visible in the table
+// (respects any active status filter). Each row that already is in the
+// desired state is skipped. Admin & CoE only.
+async function publishGradesForShownRows(publish) {
+  const statusDiv = document.getElementById("marks-download-status");
+  const visibleRows = Array.from(document.querySelectorAll(".summary-row-check"))
+    .filter((cb) => cb.closest("tr").style.display !== "none")
+    .map((cb) => marksSummaryData[parseInt(cb.dataset.idx)])
+    .filter((row) => row && row.status !== "Not Configured");
+
+  if (visibleRows.length === 0) {
+    if (statusDiv) statusDiv.innerHTML = `<div class="alert alert-warning py-2">No rows to ${publish ? "publish" : "unpublish"}.</div>`;
+    return;
+  }
+  const needsToggle = visibleRows.filter((row) =>
+    publish ? !gradePublishSet.has(gradePublishKey(row)) : gradePublishSet.has(gradePublishKey(row))
+  );
+  if (needsToggle.length === 0) {
+    if (statusDiv) statusDiv.innerHTML = `<div class="alert alert-info py-2">All visible rows are already ${publish ? "published" : "unpublished"}.</div>`;
+    return;
+  }
+  if (!confirm(`${publish ? "Publish" : "Unpublish"} grades for ${needsToggle.length} course-slot(s)?`)) return;
+
+  const year = document.getElementById("admin-marks-year").value;
+  const semester = document.getElementById("admin-marks-semester").value;
+  const endpoint = publish ? "grade-publish" : "grade-unpublish";
+  if (statusDiv) statusDiv.innerHTML = `
+    <div class="alert alert-info py-2"><i class="fas fa-spinner fa-spin me-2"></i>${publish ? "Publishing" : "Unpublishing"} grades for ${needsToggle.length} course-slot(s)…</div>
+  `;
+
+  let okCount = 0;
+  let failCount = 0;
+  for (const row of needsToggle) {
+    try {
+      const res = await fetch(`${window.API_URL}/marks/${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": localStorage.getItem("token"),
+        },
+        body: JSON.stringify({
+          slot_year: year,
+          semester_type: semester,
+          course_code: row.course_code,
+          employee_id: row.employee_id,
+          slot_name: row.slot_name,
+          venue: row.venue,
+        }),
+      });
+      if (res.ok) {
+        okCount += 1;
+        if (publish) gradePublishSet.add(gradePublishKey(row));
+        else         gradePublishSet.delete(gradePublishKey(row));
+      } else {
+        failCount += 1;
+      }
+    } catch {
+      failCount += 1;
+    }
+  }
+  if (statusDiv) statusDiv.innerHTML = `
+    <div class="alert alert-${failCount === 0 ? "success" : "warning"} py-2">
+      <i class="fas fa-${failCount === 0 ? "check-circle" : "exclamation-triangle"} me-2"></i>
+      ${publish ? "Published" : "Unpublished"}: ${okCount} ${failCount ? ` · Failed: ${failCount}` : ""}
+    </div>
+  `;
+  await loadMarksSummary();
 }
 
 // Download Consolidated Marks & Grade Report for one (course, slot, faculty).
@@ -2588,6 +2744,8 @@ window.downloadSingleConsolidated = downloadSingleConsolidated;
 window.downloadConsolidatedFromFilters = downloadConsolidatedFromFilters;
 window.downloadSelectedConsolidated = downloadSelectedConsolidated;
 window.downloadSelectedMarks = downloadSelectedMarks;
+window.toggleGradePublish = toggleGradePublish;
+window.publishGradesForShownRows = publishGradesForShownRows;
 window.onAttYearSemesterChange = onAttYearSemesterChange;
 window.onAttCourseChange = onAttCourseChange;
 window.clearAttFilters = clearAttFilters;
