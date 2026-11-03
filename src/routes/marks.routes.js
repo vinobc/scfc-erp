@@ -77,6 +77,20 @@ router.post("/admin/lock-exception", isAdminOrCoe, marksController.addMarksLockE
 router.delete("/admin/lock-exception/:id", isAdminOrCoe, marksController.deleteMarksLockException);
 router.get("/admin/allocations", isAdminOrCoe, marksController.getFacultyAllocationsForSemester);
 
+// Grade publish gate (admin / CoE). Toggles letter-grade visibility to faculty
+// and students per course-slot-faculty. Admin + CoE always see grades.
+// GET is open to faculty/coordinator too so their UI can display the banner.
+router.get(
+  "/grade-publish-status",
+  (req, res, next) => {
+    if (["faculty", "timetable_coordinator", "admin", "coe"].includes(req.userRole)) return next();
+    return res.status(403).json({ message: "Access denied" });
+  },
+  marksController.getGradePublishStatus
+);
+router.post("/grade-publish", isAdminOrCoe, marksController.publishGrades);
+router.post("/grade-unpublish", isAdminOrCoe, marksController.unpublishGrades);
+
 // ================== STUDENT ROUTES ==================
 // Student marks view
 router.get("/student/my-marks", isStudent, marksController.getMyMarks);

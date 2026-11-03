@@ -1520,17 +1520,68 @@ function computeStudentAbsoluteGrade({ student, course_type, assessment_type, gr
 // object by adding `.grade` (letter) and leaves it null when the policy
 // defers (Relative, N/A, pending components). Centralised so both endpoints
 // and the XLSX builder share identical semantics.
-function applyGradesToReport({ report, course_type, grading_header }) {
+//
+// Grade-publish gate: once computed, grades are hidden from faculty & students
+// until admin/CoE explicitly publishes grades for the (course, slot, employee)
+// combination. Admin and CoE always see them. When hidden, the student's
+// `.grade` is nulled AND `.grade_hidden_reason` is set to 'pending_coe_publish'
+// so the frontend can distinguish "waiting for CoE" from "components pending".
+function applyGradesToReport({ report, course_type, grading_header, is_grade_published, caller_role }) {
   if (!report || !Array.isArray(report.students)) return;
+  const privileged = caller_role === "admin" || caller_role === "coe";
+  const gated = !privileged && !is_grade_published;
   for (const s of report.students) {
     const mode = s.grading_type || grading_header; // per-student (TEL lab) or header-level
-    s.grade = computeStudentAbsoluteGrade({
+    const computed = computeStudentAbsoluteGrade({
       student: s,
       course_type,
       assessment_type: report.assessment_type,
       grading_mode: mode,
     });
+    if (gated && computed) {
+      // Only hide when there IS a grade to hide. If computed is null because
+      // of pending components / N/A grading mode, let the pre-existing
+      // '[—]' rendering continue (not a publish issue).
+      s.grade = null;
+      s.grade_hidden_reason = "pending_coe_publish";
+    } else {
+      s.grade = computed;
+    }
   }
+  // Also surface the publish state at the report-level so UIs can show
+  // a banner / button appropriately.
+  report.stats = report.stats || {};
+  report.stats.grades_published = !!is_grade_published;
+}
+
+// Check whether grades are grade-published for a (course, slot, employee)
+// combination. Returns boolean.
+//
+// SUMMER-compound slot tolerance: when admin publishes from the Download
+// Reports summary, the stored slot_name may be a compound like
+// "L15+L16,L35+L36". When faculty/students view a single pair slot (e.g.
+// "L15+L16"), the query slot_name is the pair. We match either way:
+//   • exact match (stored == query)
+//   • query slot is one of the stored comma-separated parts
+//   • stored slot is one of the query's comma-separated parts
+// Mirrors the slot-tolerance pattern used elsewhere (student_registrations
+// lookups, marks publish-gate reads).
+async function isGradePublished({ slot_year, semester_type, course_code, employee_id, slot_name, venue }) {
+  const r = await db.query(
+    `SELECT 1 FROM grade_publish_state
+     WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+       AND employee_id = $4 AND venue = $6
+       AND (
+            slot_name = $5
+         OR ',' || REPLACE(slot_name, ' ', '') || ','
+               LIKE '%,' || REPLACE($5, ' ', '') || ',%'
+         OR ',' || REPLACE($5, ' ', '') || ','
+               LIKE '%,' || REPLACE(slot_name, ' ', '') || ',%'
+       )
+     LIMIT 1`,
+    [slot_year, semester_type, course_code, employee_id, slot_name, venue]
+  );
+  return r.rows.length > 0;
 }
 
 // Build the per-student component breakdown for a course-slot (may include a
@@ -2028,10 +2079,19 @@ exports.getConsolidatedReport = async (req, res) => {
     // Absolute Grades (SCFAS Grading System section 11.11). Students whose
     // effective mode is Relative or who have pending components stay null
     // (frontend renders '[—]'). Relative grades will land on a separate branch.
+    //
+    // Grade-publish gate: hide computed grades from faculty until admin/CoE
+    // publishes grades for this course-slot-faculty. Admin and CoE always see.
+    const isGradePub = await isGradePublished({
+      slot_year, semester_type, course_code,
+      employee_id: info.employee_id, slot_name, venue,
+    });
     applyGradesToReport({
       report,
       course_type: info.course_type,
       grading_header: gradingResult.header,
+      is_grade_published: isGradePub,
+      caller_role: req.userRole,
     });
 
     // Sibling info surfaced so the UI can inform faculty which slots were merged.
@@ -2210,10 +2270,24 @@ exports.getMyConsolidatedReport = async (req, res) => {
     }
 
     // Absolute grade for the student (null if Relative / pending / N/A).
+    // Grade-publish gate: student never bypasses — always subject to publish state.
+    // Use the student's own registration (reg.reg_slot_name / reg.venue) and the
+    // config's employee_id, since that's the (course, slot, faculty) their
+    // registration binds them to.
+    const stuIsGradePub = await isGradePublished({
+      slot_year,
+      semester_type,
+      course_code,
+      employee_id: info.employee_id,
+      slot_name: reg.reg_slot_name,
+      venue: reg.venue,
+    });
     applyGradesToReport({
       report,
       course_type: info.course_type,
       grading_header: report.stats.grading_type,
+      is_grade_published: stuIsGradePub,
+      caller_role: req.userRole,
     });
 
     return res.status(200).json({
@@ -2392,6 +2466,102 @@ async function fetchPublishedKeySet(config_ids) {
   return set;
 }
 exports._fetchPublishedKeySet = fetchPublishedKeySet;
+
+// ================== GRADE PUBLISH GATE (admin / CoE) ==================
+// Once grading is done (Absolute today, Relative later), the final letter
+// grade must not be visible to faculty or students until CoE / admin publishes
+// grades for that course-slot-faculty combination. Admin and CoE always see
+// grades regardless of publish state. The gate is a thin filter in
+// applyGradesToReport; the heavy lifting is the publish/unpublish toggle
+// (course-slot granularity, same keys as View Grades).
+
+// Only admin and coe may toggle; faculty/students have no visibility of the
+// endpoints.
+function assertCanTogglePublishGrades(req) {
+  if (req.userRole === "admin" || req.userRole === "coe") return { ok: true };
+  return { ok: false, code: 403, message: "Only Admin or CoE can publish grades" };
+}
+
+// POST /marks/grade-publish { slot_year, semester_type, course_code, employee_id, slot_name, venue }
+exports.publishGrades = async (req, res) => {
+  try {
+    const { slot_year, semester_type, course_code, employee_id, slot_name, venue } = req.body;
+    if (!slot_year || !semester_type || !course_code || !employee_id || !slot_name || !venue) {
+      return res.status(400).json({ message: "slot_year, semester_type, course_code, employee_id, slot_name, venue are all required" });
+    }
+    const guard = assertCanTogglePublishGrades(req);
+    if (!guard.ok) return res.status(guard.code).json({ message: guard.message });
+
+    await db.query(
+      `INSERT INTO grade_publish_state
+         (slot_year, semester_type, course_code, employee_id, slot_name, venue, published_by, published_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+       ON CONFLICT (slot_year, semester_type, course_code, employee_id, slot_name, venue)
+       DO UPDATE SET published_by = $7, published_at = CURRENT_TIMESTAMP`,
+      [slot_year, semester_type, course_code, employee_id, slot_name, venue, req.userId]
+    );
+    res.status(200).json({ message: "Grades published", published: true });
+  } catch (error) {
+    console.error("Publish grades error:", error);
+    res.status(500).json({ message: "Server error while publishing grades" });
+  }
+};
+
+// POST /marks/grade-unpublish — same body as publish. Reverses the toggle.
+exports.unpublishGrades = async (req, res) => {
+  try {
+    const { slot_year, semester_type, course_code, employee_id, slot_name, venue } = req.body;
+    if (!slot_year || !semester_type || !course_code || !employee_id || !slot_name || !venue) {
+      return res.status(400).json({ message: "slot_year, semester_type, course_code, employee_id, slot_name, venue are all required" });
+    }
+    const guard = assertCanTogglePublishGrades(req);
+    if (!guard.ok) return res.status(guard.code).json({ message: guard.message });
+
+    const result = await db.query(
+      `DELETE FROM grade_publish_state
+       WHERE slot_year = $1 AND semester_type = $2 AND course_code = $3
+         AND employee_id = $4 AND slot_name = $5 AND venue = $6`,
+      [slot_year, semester_type, course_code, employee_id, slot_name, venue]
+    );
+    res.status(200).json({ message: "Grades unpublished", published: false, deleted: result.rowCount });
+  } catch (error) {
+    console.error("Unpublish grades error:", error);
+    res.status(500).json({ message: "Server error while unpublishing grades" });
+  }
+};
+
+// GET /marks/grade-publish-status?slot_year=…&semester_type=… (and optional
+// course_code, slot_name, venue, employee_id filters).
+// Returns an array of currently-published (course, slot, employee) tuples —
+// used by the admin/CoE UI to render per-row Publish/Unpublish state.
+exports.getGradePublishStatus = async (req, res) => {
+  try {
+    const { slot_year, semester_type, course_code, slot_name, venue, employee_id } = req.query;
+    if (!slot_year || !semester_type) {
+      return res.status(400).json({ message: "slot_year and semester_type are required" });
+    }
+    const params = [slot_year, semester_type];
+    let where = "slot_year = $1 AND semester_type = $2";
+    if (course_code)  { params.push(course_code);  where += ` AND course_code = $${params.length}`; }
+    if (slot_name)    { params.push(slot_name);    where += ` AND slot_name = $${params.length}`; }
+    if (venue)        { params.push(venue);        where += ` AND venue = $${params.length}`; }
+    if (employee_id)  { params.push(parseInt(employee_id)); where += ` AND employee_id = $${params.length}`; }
+
+    const r = await db.query(
+      `SELECT slot_year, semester_type, course_code, employee_id, slot_name, venue,
+              published_by, published_at
+       FROM grade_publish_state
+       WHERE ${where}`,
+      params
+    );
+    res.status(200).json(r.rows);
+  } catch (error) {
+    console.error("Get grade publish status error:", error);
+    res.status(500).json({ message: "Server error while fetching grade publish status" });
+  }
+};
+
+exports._isGradePublished = isGradePublished;
 
 // ================== MARKS LOCK EXCEPTIONS (admin / CoE) ==================
 

@@ -1940,11 +1940,20 @@ function renderConsolidatedFacultyPanel(data) {
     const gradingCell = perStudentGrading ? `<td class="text-center small">${s.grading_type || "N/A"}</td>` : "";
     // Grade: backend sets s.grade only when Absolute AND all components are
     // entered + published. Relative / pending / N/A remain '[—]' for now.
-    const gradeLetter = s.grade || "[—]";
-    const gradeClass = s.grade === "F" ? "text-center fw-bold text-danger" :
-                       s.grade ? "text-center fw-bold" :
-                       "text-center text-muted";
-    const gradeCell = `<td class="${gradeClass}">${gradeLetter}</td>`;
+    // Grade-publish gate: if backend nulled the grade specifically because
+    // admin/CoE hasn't published grades yet, say so instead of '[—]'.
+    let gradeInner, gradeClass;
+    if (s.grade) {
+      gradeInner = s.grade;
+      gradeClass = s.grade === "F" ? "text-center fw-bold text-danger" : "text-center fw-bold";
+    } else if (s.grade_hidden_reason === "pending_coe_publish") {
+      gradeInner = `<span class="badge bg-secondary" title="Grades will be visible after CoE/Admin publishes grades for this course-slot">Pending CoE publish</span>`;
+      gradeClass = "text-center small";
+    } else {
+      gradeInner = "[—]";
+      gradeClass = "text-center text-muted";
+    }
+    const gradeCell = `<td class="${gradeClass}">${gradeInner}</td>`;
 
     return `<tr>
       <td><code>${s.enrollment_number}</code></td>
@@ -2866,7 +2875,13 @@ function renderConsolidatedStudentPanel(data) {
               <tr>
                 <td class="fw-bold">GRADE</td>
                 <td></td>
-                <td class="text-center fw-bold ${student.grade === "F" ? "text-danger" : (student.grade ? "" : "text-muted")}" style="font-size: 1.25rem;">${student.grade || "[—]"}</td>
+                <td class="text-center">${
+                  student.grade
+                    ? `<span class="fw-bold ${student.grade === "F" ? "text-danger" : ""}" style="font-size: 1.25rem;">${student.grade}</span>`
+                    : (student.grade_hidden_reason === "pending_coe_publish"
+                        ? `<span class="badge bg-secondary" title="Your grade will appear once the Controller of Examinations publishes grades for this course">Pending CoE publish</span>`
+                        : `<span class="fw-bold text-muted" style="font-size: 1.25rem;">[—]</span>`)
+                }</td>
                 <td></td>
               </tr>
             </tfoot>

@@ -1779,7 +1779,7 @@ async function fetchIMMarks(group, students, assessmentType) {
 // Build one Consolidated worksheet for a single (course_code, slot_name,
 // employee_id) offering. Returns { ws, sheetName, headerInfo } — or null when
 // no config or roster exists for the offering.
-async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_code, employee_id, slot_name, venue }) {
+async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_code, employee_id, slot_name, venue, caller_role }) {
   // Resolve venue if not supplied (typical for bulk downloads where the caller
   // only knows course/slot/faculty).
   if (!venue) {
@@ -1903,10 +1903,18 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
 
   // Absolute grades per student (null when Relative / pending / N/A — rendered
   // as '[—]' below). Attaches `grade` onto each report.students[i].
+  // Grade-publish gate: non-admin/non-CoE callers see '[—]' until grades are
+  // published for this (course, slot, employee) by admin/CoE.
+  const isGradePub = await marksController._isGradePublished({
+    slot_year, semester_type, course_code,
+    employee_id: info.employee_id, slot_name, venue,
+  });
   marksController._applyGradesToReport({
     report,
     course_type: info.course_type,
     grading_header: gradingResult.header,
+    is_grade_published: isGradePub,
+    caller_role,
   });
 
   // Build worksheet rows.
@@ -2062,6 +2070,7 @@ exports.getConsolidatedReportXlsx = async (req, res) => {
         employee_id: it.employee_id,
         slot_name: it.slot_name,
         venue: it.venue,
+        caller_role: req.userRole,
       });
       if (!built) continue;
       const name = safeUniqueSheetName(`${it.slot_name}-${it.course_code}`, usedNames);
