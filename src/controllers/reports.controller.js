@@ -1901,10 +1901,20 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
   });
   const perStudentGrading = gradingResult.per_student || null;
 
-  // Absolute grades per student (null when Relative / pending / N/A — rendered
-  // as '[—]' below). Attaches `grade` onto each report.students[i].
+  // Grades (Absolute + Relative) per student. Attaches `grade` onto each
+  // report.students[i]. For TEL lab views we also need per-student theory
+  // section stats so Relative is computed against the student's own class.
   // Grade-publish gate: non-admin/non-CoE callers see '[—]' until grades are
   // published for this (course, slot, employee) by admin/CoE.
+  let perStudentRelativeStats = null;
+  const isTelCourse = report.assessment_type === "UG_INTEGRATED" ||
+                      report.assessment_type === "PG_INTEGRATED";
+  const isLabView = info.component_type === "LAB";
+  if (isTelCourse && isLabView) {
+    perStudentRelativeStats = await marksController._fetchTelLabViewRelativeStats({
+      slot_year, semester_type, course_code, labRoster: roster,
+    });
+  }
   const isGradePub = await marksController._isGradePublished({
     slot_year, semester_type, course_code,
     employee_id: info.employee_id, slot_name, venue,
@@ -1915,6 +1925,9 @@ async function buildConsolidatedSheetForItem({ slot_year, semester_type, course_
     grading_header: gradingResult.header,
     is_grade_published: isGradePub,
     caller_role,
+    view_mean: report.stats.avg,
+    view_sigma: report.stats.stddev_pop != null ? report.stats.stddev_pop : report.stats.stddev,
+    per_student_relative_stats: perStudentRelativeStats,
   });
 
   // Build worksheet rows.
