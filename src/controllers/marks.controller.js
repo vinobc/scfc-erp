@@ -1453,22 +1453,23 @@ async function computeGradingType({
   return { header: "N/A", per_student: null };
 }
 
-// Compute the Absolute Grade for ONE student. Returns:
-//   • A letter grade string: 'S' / 'A' / 'B' / 'C' / 'D' / 'E' / 'F'
-//   • null, when grade cannot (or should not) be assigned yet — caller will
-//     render '[—]'. Reasons for null:
-//       - student's effective grading mode is not Absolute (Relative/N/A/other)
-//       - some component is still pending (not yet entered/published);
-//         we only award a grade once the picture is complete, to avoid
-//         prematurely assigning F to someone whose CAs just haven't been
-//         entered yet.
-//
-// Policy references: SCFAS Grading System document, Section 11.10 (Pass/Fail)
-// and Section 11.11 (Absolute Grading cutoffs).
-function computeStudentAbsoluteGrade({ student, course_type, assessment_type, grading_mode }) {
-  if (grading_mode !== "Absolute") return null;
-  if (Array.isArray(student.pending) && student.pending.length > 0) return null;
+// Round UP to 2 decimal places. Per CoE policy (VC clarification 4-Nov-2026):
+// "comparison is made up to two decimal point accuracy, by rounding up the
+// third decimal value" → always-ceiling, not half-up.
+function ceil2(x) {
+  const n = Number(x);
+  if (!Number.isFinite(n)) return 0;
+  return Math.ceil(n * 100) / 100;
+}
 
+// Pass/Fail sub-condition check — shared by Absolute and Relative grading.
+// Returns "F" if any sub-condition fails, else null (sub-conditions passed).
+// Checked in order per Section 11.10; first failure short-circuits.
+//   #1 — CA1+CA2+CA3 (or CA1+CA2 for PG) ≥ 40% of CA weightage
+//   #2 — Lab marks ≥ 50% of lab weightage (TEL only)
+//   #3 — Grand Total ≥ passBoundary (40 for Absolute; min(40, μ-2σ) for Relative)
+// For Lab/PRJ/NC: only #3 is checked.
+function checkPassFailSubConditions({ student, course_type, assessment_type, passBoundary }) {
   const components = student.components || {};
   const isTheoryLike = course_type === "T" || course_type === "TEL" ||
                        assessment_type === "UG_THEORY" || assessment_type === "PG_THEORY" ||
@@ -1476,7 +1477,6 @@ function computeStudentAbsoluteGrade({ student, course_type, assessment_type, gr
   const isTEL = course_type === "TEL" ||
                 assessment_type === "UG_INTEGRATED" || assessment_type === "PG_INTEGRATED";
 
-  // Sub-conditions (checked in order, first failure = F).
   if (isTheoryLike) {
     // #1 — CA1 + CA2 + CA3 (UG) or CA1 + CA2 (PG) must be ≥ 40% of CA weightage.
     let caSum = 0;
@@ -1498,16 +1498,34 @@ function computeStudentAbsoluteGrade({ student, course_type, assessment_type, gr
         if (earned / Number(lab.weightage) < 0.5) return "F";
       }
     }
-
-    // #3 — Grand Total ≥ 40.
-    if (Number(student.grand_total) < 40) return "F";
-  } else {
-    // Lab-only (P), Project (PRJ), Non-credit (NC) → only Grand Total ≥ 40.
-    if (Number(student.grand_total) < 40) return "F";
   }
+  // #3 — Grand Total ≥ passBoundary. Compare ceiled values per CoE rounding.
+  if (ceil2(student.grand_total) < ceil2(passBoundary)) return "F";
+  return null;
+}
 
-  // Letter grade from the Absolute cutoff table.
-  const gt = Number(student.grand_total);
+// Compute the Absolute Grade for ONE student. Returns:
+//   • A letter grade string: 'S' / 'A' / 'B' / 'C' / 'D' / 'E' / 'F'
+//   • null, when grade cannot (or should not) be assigned yet — caller will
+//     render '[—]'. Reasons for null:
+//       - student's effective grading mode is not Absolute (Relative/N/A/other)
+//       - some component is still pending (not yet entered/published);
+//         we only award a grade once the picture is complete, to avoid
+//         prematurely assigning F to someone whose CAs just haven't been
+//         entered yet.
+//
+// Policy references: SCFAS Grading System document, Section 11.10 (Pass/Fail)
+// and Section 11.11 (Absolute Grading cutoffs).
+function computeStudentAbsoluteGrade({ student, course_type, assessment_type, grading_mode }) {
+  if (grading_mode !== "Absolute") return null;
+  if (Array.isArray(student.pending) && student.pending.length > 0) return null;
+
+  // Absolute pass boundary is a fixed 40.
+  const subFailed = checkPassFailSubConditions({ student, course_type, assessment_type, passBoundary: 40 });
+  if (subFailed) return subFailed;
+
+  // Letter grade from the Absolute cutoff table (apply ceil2 for parity with Relative).
+  const gt = ceil2(student.grand_total);
   if (gt >= 90) return "S";
   if (gt >= 80) return "A";
   if (gt >= 70) return "B";
@@ -1516,42 +1534,366 @@ function computeStudentAbsoluteGrade({ student, course_type, assessment_type, gr
   return "E"; // 40 ≤ gt < 50 (student is already past the Grand-Total ≥ 40 check above)
 }
 
+// Compute the Relative Grade for ONE student. Returns letter or null (same
+// deferral semantics as Absolute: pending components / wrong mode / N/A).
+//
+// Caller passes the Mean (μ) and Standard Deviation (σ) of the student's
+// "class" — which, per CoE policy (VC clarification 4-Nov-2026), is the
+// student's **theory section** for any TEL course, regardless of which view
+// (theory or lab) is being rendered.
+//
+// Policy references: SCFAS Grading System document, Section 11.11 (Relative
+// Grading formula, E-grade pass-boundary adjustment, S-grade floor at 90).
+//   E/F pass boundary = min(40, μ − 2σ)
+//   S award requires: grand_total ≥ max(μ + 1.5σ, 90)
+//   Bands: A ≥ μ+0.5σ; B ≥ μ−0.5σ; C ≥ μ−1.0σ; D ≥ μ−1.5σ; E ≥ pass-boundary
+//   S Consolation is NOT applied here (it needs class-wide state) — see
+//     applySConsolationForClass() in applyGradesToReport.
+function computeStudentRelativeGrade({ student, course_type, assessment_type, grading_mode, mean, sigma }) {
+  if (grading_mode !== "Relative") return null;
+  if (Array.isArray(student.pending) && student.pending.length > 0) return null;
+  if (mean == null || sigma == null) return null; // no class stats → can't grade
+  if (Number(sigma) <= 0) return null; // degenerate class (everyone identical, or N=1) → can't curve
+
+  // Relative pass boundary: whichever is LOWER between 40 and μ-2σ. Policy
+  // examples: μ=55,σ=7 → pass=min(40, 41)=40; μ=55,σ=8 → pass=min(40, 39)=39.
+  const rawLowerF = Number(mean) - 2 * Number(sigma);
+  const passBoundary = Math.min(40, rawLowerF);
+
+  const subFailed = checkPassFailSubConditions({ student, course_type, assessment_type, passBoundary });
+  if (subFailed) return subFailed;
+
+  // Cutoffs (all ceil-to-2dp for consistent comparison).
+  const μ = Number(mean), σ = Number(sigma);
+  const cutS       = Math.max(ceil2(μ + 1.5 * σ), 90);   // S floor is absolute 90
+  const cutA       = ceil2(μ + 0.5 * σ);
+  const cutB       = ceil2(μ - 0.5 * σ);
+  const cutC       = ceil2(μ - 1.0 * σ);
+  const cutD       = ceil2(μ - 1.5 * σ);
+  const cutE       = ceil2(passBoundary); // E's lower edge = pass boundary
+  const gt         = ceil2(student.grand_total);
+
+  if (gt >= cutS) return "S";
+  if (gt >= cutA) return "A";
+  if (gt >= cutB) return "B";
+  if (gt >= cutC) return "C";
+  if (gt >= cutD) return "D";
+  if (gt >= cutE) return "E";
+  return "F";
+}
+
+// S Consolation rule — policy allows awarding S to the "top three" ranks
+// (by marks, ties included) when NO student in the class got S via the
+// formula, provided every one of those three ranks is ≥ 90. Operates on
+// a class group AFTER per-student bands have been applied. Mutates the
+// matched students' .grade to "S".
+//
+// VC clarification 4-Nov-2026: threshold is 90 (not the doc's 91). The
+// rule "if S range starts below 90, no S" is already enforced by the
+// formula's cutS = max(..., 90). This function just adds consolation on top.
+function applySConsolationForClass(classStudents) {
+  if (!Array.isArray(classStudents) || classStudents.length === 0) return;
+
+  // Only consider students with a per-formula grade already assigned.
+  // Pending / null grades aren't part of the class picture yet.
+  const eligible = classStudents.filter((s) => s.grade);
+  if (eligible.length === 0) return;
+
+  // If any student already got S via formula, consolation does not apply.
+  if (eligible.some((s) => s.grade === "S")) return;
+
+  // Top 3 UNIQUE ceiled Grand Totals in the class.
+  const uniqMarks = Array.from(new Set(eligible.map((s) => ceil2(s.grand_total))))
+    .sort((a, b) => b - a)
+    .slice(0, 3);
+  if (uniqMarks.length < 3) return;        // class too small to have 3 ranks
+  if (!uniqMarks.every((m) => m >= 90)) return; // all 3 must be ≥ 90
+
+  const awardSet = new Set(uniqMarks);
+  for (const s of eligible) {
+    if (awardSet.has(ceil2(s.grand_total))) {
+      s.grade = "S";
+    }
+  }
+}
+
 // Apply grades to every student in a computed report. Mutates each student
 // object by adding `.grade` (letter) and leaves it null when the policy
-// defers (Relative, N/A, pending components). Centralised so both endpoints
-// and the XLSX builder share identical semantics.
+// defers (N/A, pending components). Centralised so both endpoints and the
+// XLSX builder share identical semantics.
+//
+// Relative grading inputs:
+//   • `view_mean` / `view_sigma` — the current view's class stats (used when
+//     the student's mode is Relative and they don't have per-student stats).
+//     For a pure Theory or TEL theory view, this is correct — the view's
+//     roster IS the student's class.
+//   • `per_student_relative_stats` — optional map
+//     { enrollment_number → { mean, sigma, classKey } }. Used on TEL LAB views
+//     where each student is graded against their own theory section's stats
+//     (per CoE policy, VC clarification 4-Nov-2026). `classKey` groups
+//     students for the S Consolation rule (students sharing a theory section
+//     share consolation outcomes).
 //
 // Grade-publish gate: once computed, grades are hidden from faculty & students
 // until admin/CoE explicitly publishes grades for the (course, slot, employee)
 // combination. Admin and CoE always see them. When hidden, the student's
 // `.grade` is nulled AND `.grade_hidden_reason` is set to 'pending_coe_publish'
 // so the frontend can distinguish "waiting for CoE" from "components pending".
-function applyGradesToReport({ report, course_type, grading_header, is_grade_published, caller_role }) {
+function applyGradesToReport({
+  report,
+  course_type,
+  grading_header,
+  is_grade_published,
+  caller_role,
+  view_mean,
+  view_sigma,
+  per_student_relative_stats,
+}) {
   if (!report || !Array.isArray(report.students)) return;
   const privileged = caller_role === "admin" || caller_role === "coe";
   const gated = !privileged && !is_grade_published;
+
+  // Phase 1 — compute per-student formula grade based on mode.
   for (const s of report.students) {
     const mode = s.grading_type || grading_header; // per-student (TEL lab) or header-level
-    const computed = computeStudentAbsoluteGrade({
-      student: s,
-      course_type,
-      assessment_type: report.assessment_type,
-      grading_mode: mode,
-    });
-    if (gated && computed) {
-      // Only hide when there IS a grade to hide. If computed is null because
+    let computed = null;
+    if (mode === "Absolute") {
+      computed = computeStudentAbsoluteGrade({
+        student: s,
+        course_type,
+        assessment_type: report.assessment_type,
+        grading_mode: mode,
+      });
+    } else if (mode === "Relative") {
+      // Per-student stats win (TEL lab view). Else fall back to view stats
+      // (pure theory view, TEL theory view).
+      const ps = per_student_relative_stats && per_student_relative_stats[s.enrollment_number];
+      const mean = ps ? ps.mean : view_mean;
+      const sigma = ps ? ps.sigma : view_sigma;
+      computed = computeStudentRelativeGrade({
+        student: s,
+        course_type,
+        assessment_type: report.assessment_type,
+        grading_mode: mode,
+        mean,
+        sigma,
+      });
+    }
+    s.grade = computed;
+  }
+
+  // Phase 2 — S Consolation. Applied PER CLASS.
+  //   • TEL lab view (per_student_relative_stats present): group by classKey
+  //     (students in the same theory section share consolation).
+  //     IMPORTANT: for correctness, consolation should see the FULL theory
+  //     section's students, not just those in the lab view. The caller is
+  //     responsible for seeding stats such that the full-class grade picture
+  //     has already been computed upstream — see getConsolidatedReport. For
+  //     the lab-view-only case, consolation is best-effort (operates only on
+  //     students visible in the view); this is a documented limitation, and
+  //     in practice matters only for the narrow edge-case where the full
+  //     theory section has no S awardees via formula. Acceptable for MVP.
+  //   • Non-TEL / single-class view: treat the entire roster as one class.
+  if (per_student_relative_stats) {
+    const groups = new Map();
+    for (const s of report.students) {
+      if (!s.grade) continue;
+      const mode = s.grading_type || grading_header;
+      if (mode !== "Relative") continue;
+      const ps = per_student_relative_stats[s.enrollment_number];
+      const key = ps ? ps.classKey : null;
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+    for (const classStudents of groups.values()) {
+      applySConsolationForClass(classStudents);
+    }
+  } else if ((grading_header === "Relative")) {
+    applySConsolationForClass(report.students);
+  }
+
+  // Phase 3 — apply the grade-publish gate (Admin/CoE bypass).
+  for (const s of report.students) {
+    if (gated && s.grade) {
+      // Only hide when there IS a grade to hide. If grade is null because
       // of pending components / N/A grading mode, let the pre-existing
       // '[—]' rendering continue (not a publish issue).
       s.grade = null;
       s.grade_hidden_reason = "pending_coe_publish";
-    } else {
-      s.grade = computed;
     }
   }
-  // Also surface the publish state at the report-level so UIs can show
-  // a banner / button appropriately.
+  // Surface publish state at the report-level so UIs can show a banner / button.
   report.stats = report.stats || {};
   report.stats.grades_published = !!is_grade_published;
+}
+
+// For a TEL course's LAB view, build per-student Relative stats: each student's
+// Mean/σ comes from THEIR theory section (per CoE policy, VC clarification
+// 4-Nov-2026 — "theory class will be taken as a basic unit of calculation").
+//
+// Returns a map { enrollment_number → { mean, sigma, classKey } }. Students
+// whose theory section has <30 strength are omitted (they'll be Absolute per
+// per-student grading_type, no Relative stats needed). Students whose theory
+// section can't be resolved are also omitted.
+//
+// Algorithm:
+//   1. From the lab roster, find each student's theory section (slot_name,
+//      venue, faculty_name) from student_registrations.
+//   2. For each distinct theory section referenced:
+//      a. Fetch its FULL roster.
+//      b. If roster <30 → section is Absolute, skip (no Relative stats needed).
+//      c. Else fetch the theory-section's THEORY config + any LAB configs its
+//         students are registered in (sibling lookup, same algorithm as
+//         getConsolidatedReport).
+//      d. Call computeConsolidatedReport to get per-student Grand Totals and
+//         the section's Mean/σ.
+//      e. Store {mean, sigma, classKey} for every enrollment in that section.
+//   3. Return the per-student map, keyed only by lab-view-visible students.
+//
+// Note on S Consolation on TEL lab views: because this helper only returns
+// stats (not full-class grade decisions), S consolation in Phase 2 of
+// applyGradesToReport operates on the lab-view-visible subset of each theory
+// section, not the full section. This is a best-effort approximation for the
+// narrow edge-case where no one in a theory section would meet the S formula.
+// For 100% correct consolation, open the theory slot view directly — the view
+// roster IS the class, and consolation runs on the full picture.
+async function fetchTelLabViewRelativeStats({ slot_year, semester_type, course_code, labRoster }) {
+  const result = {};
+  if (!Array.isArray(labRoster) || labRoster.length === 0) return result;
+
+  const enrollments = labRoster.map((r) => r.enrollment_number);
+
+  // Step 1 — map each lab student to their theory section.
+  const regsRes = await db.query(
+    `SELECT sr.enrollment_number, sr.slot_name AS theory_slot,
+            sr.venue AS theory_venue, sr.faculty_name AS theory_faculty
+     FROM student_registrations sr
+     JOIN assessment_config ac
+       ON  ac.slot_year     = sr.slot_year
+       AND ac.semester_type = sr.semester_type
+       AND ac.course_code   = sr.course_code
+       AND ac.slot_name     = sr.slot_name
+       AND ac.venue         = sr.venue
+       AND ac.component_type = 'THEORY'
+     WHERE sr.slot_year = $1 AND sr.semester_type = $2
+       AND sr.course_code = $3
+       AND sr.enrollment_number = ANY($4::text[])
+       AND (sr.withdrawn IS NULL OR sr.withdrawn = false)`,
+    [slot_year, semester_type, course_code, enrollments]
+  );
+  const studentToTheory = new Map();
+  for (const r of regsRes.rows) {
+    studentToTheory.set(
+      r.enrollment_number,
+      { slot: r.theory_slot, venue: r.theory_venue, faculty: r.theory_faculty }
+    );
+  }
+
+  // Step 2 — for each distinct theory section, compute Mean/σ.
+  const sectionCache = new Map(); // classKey → { mean, sigma }
+  for (const { slot, venue, faculty } of studentToTheory.values()) {
+    const classKey = `${slot}|${venue}|${faculty}`;
+    if (sectionCache.has(classKey)) continue;
+
+    // 2a — theory section's full roster.
+    const sectionRosterRes = await db.query(
+      `SELECT DISTINCT sr.enrollment_number, sr.student_name, sr.program_code,
+              sc.school_short_name AS school
+       FROM student_registrations sr
+       LEFT JOIN student st ON sr.enrollment_number = st.enrollment_no
+       LEFT JOIN program p ON st.program_id = p.program_id
+       LEFT JOIN school sc ON p.school_id = sc.school_id
+       WHERE sr.slot_year = $1 AND sr.semester_type = $2
+         AND sr.course_code = $3
+         AND sr.slot_name = $4 AND sr.venue = $5 AND sr.faculty_name = $6
+         AND (sr.withdrawn IS NULL OR sr.withdrawn = false)
+       ORDER BY sr.enrollment_number`,
+      [slot_year, semester_type, course_code, slot, venue, faculty]
+    );
+    const sectionRoster = sectionRosterRes.rows;
+    if (sectionRoster.length < 30) {
+      // Theory section would be Absolute — skip; no Relative stats needed.
+      sectionCache.set(classKey, null);
+      continue;
+    }
+
+    // 2c — fetch the theory config + sibling lab configs for this section.
+    // THEORY config first.
+    const theoryConfigRes = await db.query(
+      `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+              f.name as faculty_name
+       FROM assessment_config ac
+       JOIN course c ON ac.course_code = c.course_code
+       JOIN faculty f ON ac.employee_id = f.employee_id
+       WHERE ac.slot_year = $1 AND ac.semester_type = $2
+         AND ac.course_code = $3 AND ac.slot_name = $4 AND ac.venue = $5
+         AND f.name = $6 AND ac.component_type = 'THEORY'
+       LIMIT 1`,
+      [slot_year, semester_type, course_code, slot, venue, faculty]
+    );
+    if (!theoryConfigRes.rows.length) {
+      sectionCache.set(classKey, null);
+      continue;
+    }
+    let sectionConfigs = [theoryConfigRes.rows[0]];
+
+    // Sibling lab configs — same algorithm as in getConsolidatedReport.
+    const sectionEnrollments = sectionRoster.map((r) => r.enrollment_number);
+    const siblingRegsRes = await db.query(
+      `SELECT DISTINCT sr.slot_name, sr.venue, sr.faculty_name
+       FROM student_registrations sr
+       WHERE sr.slot_year = $1 AND sr.semester_type = $2
+         AND sr.course_code = $3
+         AND sr.enrollment_number = ANY($4::text[])
+         AND (sr.withdrawn IS NULL OR sr.withdrawn = false)`,
+      [slot_year, semester_type, course_code, sectionEnrollments]
+    );
+    const siblingTuples = siblingRegsRes.rows.filter(
+      (t) => !(t.slot_name === slot && t.venue === venue && t.faculty_name === faculty)
+    );
+    if (siblingTuples.length) {
+      const slotNames = siblingTuples.map((t) => t.slot_name);
+      const venues = siblingTuples.map((t) => t.venue);
+      const facultyNames = siblingTuples.map((t) => t.faculty_name);
+      const siblingConfigsRes = await db.query(
+        `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
+                f.name as faculty_name
+         FROM assessment_config ac
+         JOIN course c ON ac.course_code = c.course_code
+         JOIN faculty f ON ac.employee_id = f.employee_id
+         JOIN UNNEST($4::text[], $5::text[], $6::text[]) AS t(sn, vn, fn)
+           ON ac.slot_name = t.sn AND ac.venue = t.vn AND f.name = t.fn
+         WHERE ac.slot_year = $1 AND ac.semester_type = $2
+           AND ac.course_code = $3`,
+        [slot_year, semester_type, course_code, slotNames, venues, facultyNames]
+      );
+      const seenIds = new Set(sectionConfigs.map((c) => c.id));
+      for (const cfg of siblingConfigsRes.rows) {
+        if (!seenIds.has(cfg.id)) {
+          sectionConfigs.push(cfg);
+          seenIds.add(cfg.id);
+        }
+      }
+    }
+
+    // 2d — compute the section's report to get Mean/σ.
+    const sectionReport = await computeConsolidatedReport(sectionConfigs, sectionRoster);
+    sectionCache.set(classKey, {
+      mean: sectionReport.stats.avg,
+      sigma: sectionReport.stats.stddev_pop != null ? sectionReport.stats.stddev_pop : sectionReport.stats.stddev,
+    });
+  }
+
+  // Step 3 — build the per-student result map (only students whose section has stats).
+  for (const [enrollment, section] of studentToTheory.entries()) {
+    const classKey = `${section.slot}|${section.venue}|${section.faculty}`;
+    const stats = sectionCache.get(classKey);
+    if (stats) {
+      result[enrollment] = { mean: stats.mean, sigma: stats.sigma, classKey };
+    }
+  }
+  return result;
 }
 
 // Check whether grades are grade-published for a (course, slot, employee)
@@ -2076,10 +2418,22 @@ exports.getConsolidatedReport = async (req, res) => {
       }
     }
 
-    // Absolute Grades (SCFAS Grading System section 11.11). Students whose
-    // effective mode is Relative or who have pending components stay null
-    // (frontend renders '[—]'). Relative grades will land on a separate branch.
+    // Grades (SCFAS Grading System section 11.11) — Absolute AND Relative.
     //
+    // Per-student stats for TEL lab views: each student is graded against
+    // THEIR theory section's Mean/σ (per CoE/VC clarification). For pure
+    // theory views (and TEL theory views), the view's own stats are the
+    // student's class stats.
+    let perStudentRelativeStats = null;
+    const isTelCourse = report.assessment_type === "UG_INTEGRATED" ||
+                        report.assessment_type === "PG_INTEGRATED";
+    const isLabView = info.component_type === "LAB";
+    if (isTelCourse && isLabView) {
+      perStudentRelativeStats = await fetchTelLabViewRelativeStats({
+        slot_year, semester_type, course_code, labRoster: roster,
+      });
+    }
+
     // Grade-publish gate: hide computed grades from faculty until admin/CoE
     // publishes grades for this course-slot-faculty. Admin and CoE always see.
     const isGradePub = await isGradePublished({
@@ -2092,6 +2446,9 @@ exports.getConsolidatedReport = async (req, res) => {
       grading_header: gradingResult.header,
       is_grade_published: isGradePub,
       caller_role: req.userRole,
+      view_mean: report.stats.avg,
+      view_sigma: report.stats.stddev_pop != null ? report.stats.stddev_pop : report.stats.stddev,
+      per_student_relative_stats: perStudentRelativeStats,
     });
 
     // Sibling info surfaced so the UI can inform faculty which slots were merged.
@@ -2269,7 +2626,16 @@ exports.getMyConsolidatedReport = async (req, res) => {
       report.stats.grading_type = theoryStrength >= 30 ? "Relative" : "Absolute";
     }
 
-    // Absolute grade for the student (null if Relative / pending / N/A).
+    // Grades (Absolute + Relative). For the student endpoint, the "view
+    // roster" is just themselves (1 student), so view_mean/view_sigma from
+    // report.stats are meaningless for Relative. Fetch the student's theory
+    // section's stats instead — same helper as the TEL lab view uses, called
+    // with a 1-student "roster".
+    const stuRelativeStats = await fetchTelLabViewRelativeStats({
+      slot_year, semester_type, course_code,
+      labRoster: [{ enrollment_number: enrollmentNo }],
+    });
+
     // Grade-publish gate: student never bypasses — always subject to publish state.
     // Use the student's own registration (reg.reg_slot_name / reg.venue) and the
     // config's employee_id, since that's the (course, slot, faculty) their
@@ -2288,6 +2654,7 @@ exports.getMyConsolidatedReport = async (req, res) => {
       grading_header: report.stats.grading_type,
       is_grade_published: stuIsGradePub,
       caller_role: req.userRole,
+      per_student_relative_stats: stuRelativeStats,
     });
 
     return res.status(200).json({
@@ -2316,6 +2683,7 @@ exports.getMyConsolidatedReport = async (req, res) => {
 exports._computeConsolidatedReport = computeConsolidatedReport;
 exports._computeGradingType = computeGradingType;
 exports._applyGradesToReport = applyGradesToReport;
+exports._fetchTelLabViewRelativeStats = fetchTelLabViewRelativeStats;
 exports._decomposeSlot = decomposeSlot;
 
 // Reset marks for a specific component (delete marks when resetting config)
