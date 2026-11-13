@@ -1857,13 +1857,22 @@ async function fetchTelLabViewRelativeStats({ slot_year, semester_type, course_c
       const venues = siblingTuples.map((t) => t.venue);
       const facultyNames = siblingTuples.map((t) => t.faculty_name);
       const siblingConfigsRes = await db.query(
+        // SUMMER-tolerant slot match: when a sibling tuple's slot_name is
+        // compound (e.g. "L17+L18,L37+L38" from student_registrations), match
+        // every assessment_config whose un-compounded slot_name is contained
+        // in it. This mirrors the pattern used in the roster lookup elsewhere.
         `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
                 f.name as faculty_name
          FROM assessment_config ac
          JOIN course c ON ac.course_code = c.course_code
          JOIN faculty f ON ac.employee_id = f.employee_id
          JOIN UNNEST($4::text[], $5::text[], $6::text[]) AS t(sn, vn, fn)
-           ON ac.slot_name = t.sn AND ac.venue = t.vn AND f.name = t.fn
+           ON  ac.venue = t.vn AND f.name = t.fn
+           AND (
+                 ac.slot_name = t.sn
+              OR ',' || REPLACE(t.sn, ' ', '') || ','
+                    LIKE '%,' || REPLACE(ac.slot_name, ' ', '') || ',%'
+           )
          WHERE ac.slot_year = $1 AND ac.semester_type = $2
            AND ac.course_code = $3`,
         [slot_year, semester_type, course_code, slotNames, venues, facultyNames]
@@ -2374,13 +2383,22 @@ exports.getConsolidatedReport = async (req, res) => {
         const venues = siblingTuples.map((t) => t.venue);
         const facultyNames = siblingTuples.map((t) => t.faculty_name);
         const siblingConfigsRes = await db.query(
+          // SUMMER-tolerant slot match: sibling tuple's slot_name may be a
+          // compound like "L17+L18,L37+L38" (student_registrations), while
+          // assessment_config rows carry un-compounded slot_names. Match any
+          // config whose slot_name appears as a pair-component of the sibling.
           `SELECT ac.*, c.course_name, c.course_type, c.theory, c.practical, c.credits,
                   f.name as faculty_name
            FROM assessment_config ac
            JOIN course c ON ac.course_code = c.course_code
            JOIN faculty f ON ac.employee_id = f.employee_id
            JOIN UNNEST($4::text[], $5::text[], $6::text[]) AS t(sn, vn, fn)
-             ON ac.slot_name = t.sn AND ac.venue = t.vn AND f.name = t.fn
+             ON  ac.venue = t.vn AND f.name = t.fn
+             AND (
+                   ac.slot_name = t.sn
+                OR ',' || REPLACE(t.sn, ' ', '') || ','
+                      LIKE '%,' || REPLACE(ac.slot_name, ' ', '') || ',%'
+             )
            WHERE ac.slot_year = $1 AND ac.semester_type = $2
              AND ac.course_code = $3`,
           [slot_year, semester_type, course_code, slotNames, venues, facultyNames]
