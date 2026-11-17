@@ -403,31 +403,6 @@ exports.getStudentRegistrations = async (req, res) => {
       conditions.push(`sr.venue = $${params.length}`);
     }
 
-    // Faculty can only see their own courses
-    if (req.userRole === "faculty") {
-      const userResult = await db.query(
-        'SELECT employee_id FROM "user" WHERE user_id = $1',
-        [req.userId]
-      );
-      if (userResult.rows.length && userResult.rows[0].employee_id) {
-        // Join to faculty_allocation to match by employee_id
-        if (!query.includes("JOIN faculty_allocation")) {
-          query = query.replace(
-            "FROM student_registrations sr",
-            `FROM student_registrations sr
-             JOIN faculty_allocation fa ON sr.course_code = fa.course_code
-               AND sr.slot_year = fa.slot_year AND sr.semester_type = fa.semester_type
-               AND sr.venue = fa.venue
-               AND (sr.slot_name = fa.slot_name
-                    OR (',' || REPLACE(sr.slot_name, ' ', '') || ',')
-                       LIKE ('%,' || REPLACE(fa.slot_name, ' ', '') || ',%'))`
-          );
-        }
-        params.push(userResult.rows[0].employee_id);
-        conditions.push(`fa.employee_id = $${params.length}`);
-      }
-    }
-
     if (conditions.length) {
       query += " WHERE " + conditions.join(" AND ");
     }
