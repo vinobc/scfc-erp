@@ -455,6 +455,66 @@ exports.saveAssessmentConfig = async (req, res) => {
       [slot_year, semester_type, course_code, employee_id, slot_name, venue, compType]
     );
 
+    // Pre-flight: reject the save if lowering a lab session's maxMarks below any
+    // currently-entered marks_obtained would violate chk_marks_valid. Must happen
+    // BEFORE the config_json upsert so we don't leave config and marks half-applied
+    // on rejection.
+    if (existingConfig.rows.length > 0) {
+      const existingId = existingConfig.rows[0].id;
+      const prevConfig = typeof existingConfig.rows[0].config_json === "string"
+        ? JSON.parse(existingConfig.rows[0].config_json)
+        : existingConfig.rows[0].config_json;
+      const prevSessions = Array.isArray(prevConfig.labSessions) ? prevConfig.labSessions : [];
+      const nextSessions = Array.isArray(config_json?.labSessions) ? config_json.labSessions : [];
+
+      const prevDateToMax = new Map();
+      prevSessions.forEach((s) => {
+        if (s && s.date) prevDateToMax.set(s.date, s.maxMarks);
+      });
+
+      const maxReductions = [];
+      for (const nextSess of nextSessions) {
+        if (!nextSess || !nextSess.date) continue;
+        if (!prevDateToMax.has(nextSess.date)) continue;
+        const prevMax = prevDateToMax.get(nextSess.date);
+        const normPrev = (prevMax === null || prevMax === undefined) ? null : Number(prevMax);
+        const normNext = (nextSess.maxMarks === null || nextSess.maxMarks === undefined) ? null : Number(nextSess.maxMarks);
+        if (normNext === null) continue; // can't sync to NULL; we skip these later
+        if (normPrev !== null && normNext >= normPrev) continue; // no reduction
+        maxReductions.push({ date: nextSess.date, newMax: normNext });
+      }
+
+      const offending = [];
+      for (const r of maxReductions) {
+        const check = await db.query(
+          `SELECT enrollment_number, marks_obtained
+           FROM student_marks
+           WHERE assessment_config_id = $1
+             AND assessment_type = 'LAB_SESSION'
+             AND question_id = $2
+             AND marks_obtained > $3::numeric`,
+          [existingId, r.date, r.newMax]
+        );
+        for (const row of check.rows) {
+          offending.push({
+            date: r.date,
+            new_max: r.newMax,
+            enrollment_number: row.enrollment_number,
+            marks_obtained: Number(row.marks_obtained),
+          });
+        }
+      }
+      if (offending.length > 0) {
+        return res.status(400).json({
+          message:
+            "Cannot reduce the max marks for one or more lab sessions below a " +
+            "student's currently entered marks. Lower those students' marks first, " +
+            "then retry.",
+          offending_rows: offending,
+        });
+      }
+    }
+
     // Upsert the configuration (slot-specific)
     const result = await db.query(
       `INSERT INTO assessment_config
@@ -575,6 +635,60 @@ exports.saveAssessmentConfig = async (req, res) => {
             params
           );
           console.log(`Lab session reorder in config ${configId}: ${positionChanges.length} session(s) moved, ${updated.rowCount} mark rows remapped`);
+        }
+
+        // Max-marks sync for sessions whose max value changed. config_json's
+        // maxMarks per session is the source of truth for the UI, but
+        // student_marks.max_marks is captured on insert and never updated by
+        // saveMarks. When a faculty edits just the max (date unchanged), the
+        // report's denominator ends up disagreeing with the UI's display — the
+        // UI shows the new config max while aggregation reads stale stored max.
+        // Keyed by question_id (date) because any position reorder has already
+        // been applied above. NULL-max sessions are skipped (student_marks.max_marks
+        // has NOT NULL) and lowering max below an existing marks_obtained triggers
+        // a 400 (chk_marks_valid would reject it anyway — surface a clear message
+        // instead of leaving a half-applied save).
+        const oldDateToMax = new Map();
+        oldLabSessions.forEach((s) => {
+          if (s && s.date) oldDateToMax.set(s.date, s.maxMarks);
+        });
+
+        const maxChanges = [];
+        for (const newSess of newLabSessions) {
+          if (!newSess || !newSess.date) continue;
+          if (!oldDateToMax.has(newSess.date)) continue; // brand-new session
+          const oldMax = oldDateToMax.get(newSess.date);
+          const normOld = (oldMax === null || oldMax === undefined) ? null : Number(oldMax);
+          const normNew = (newSess.maxMarks === null || newSess.maxMarks === undefined) ? null : Number(newSess.maxMarks);
+          if (normOld === normNew) continue;
+          if (normNew === null) continue; // can't sync to NULL; column is NOT NULL
+          maxChanges.push({ date: newSess.date, newMax: normNew });
+        }
+
+        if (maxChanges.length > 0) {
+          // Any reduction that would violate chk_marks_valid was already caught
+          // by the pre-flight check above the upsert — safe to apply the sync now.
+          const params = [configId];
+          let p = 2;
+          const caseBranches = [];
+          const whereOrs = [];
+          for (const ch of maxChanges) {
+            const dateParam = p++;
+            const maxParam  = p++;
+            params.push(ch.date, ch.newMax);
+            caseBranches.push(`WHEN question_id = $${dateParam} THEN $${maxParam}::numeric`);
+            whereOrs.push(`question_id = $${dateParam}`);
+          }
+          const updated = await db.query(
+            `UPDATE student_marks
+             SET max_marks = CASE ${caseBranches.join(' ')} ELSE max_marks END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE assessment_config_id = $1
+               AND assessment_type = 'LAB_SESSION'
+               AND (${whereOrs.join(' OR ')})`,
+            params
+          );
+          console.log(`Lab session max sync in config ${configId}: ${maxChanges.length} session(s) changed, ${updated.rowCount} mark rows updated`);
         }
       }
     }
