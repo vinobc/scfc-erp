@@ -506,6 +506,77 @@ exports.saveAssessmentConfig = async (req, res) => {
           console.log(`Cleaned up ${deleted.rowCount} old marks for CA${newCA.number} (config ${configId}) due to question structure change`);
         }
       }
+
+      // Lab-session reconciliation. When attendance is marked for a new date,
+      // that date auto-populates into the lab config and can land anywhere in
+      // the chronological list — silently renumbering already-saved sessions.
+      // student_marks stores assessment_number (position) and question_id (date);
+      // without this reconciliation, a position shift leaves rows attached to
+      // their old assessment_number while the config reports a new session at
+      // that position. The aggregator then double-counts both rows and the
+      // report shows inflated denominators (e.g. "11/11" when both current and
+      // orphan rows exist for the same student+session).
+      const oldLabSessions = Array.isArray(oldConfig.labSessions) ? oldConfig.labSessions : [];
+      const newLabSessions = Array.isArray(newConfig.labSessions) ? newConfig.labSessions : [];
+      if (oldLabSessions.length > 0) {
+        const newDateToPosition = new Map();
+        newLabSessions.forEach((s, idx) => {
+          if (s && s.date) newDateToPosition.set(s.date, idx + 1);
+        });
+
+        const positionChanges = [];
+        for (let oldIdx = 0; oldIdx < oldLabSessions.length; oldIdx++) {
+          const oldDate = oldLabSessions[oldIdx] && oldLabSessions[oldIdx].date;
+          if (!oldDate) continue;
+          const oldPos = oldIdx + 1;
+          const newPos = newDateToPosition.get(oldDate);
+          if (newPos === undefined) {
+            // Date dropped from config entirely → delete its marks.
+            const deleted = await db.query(
+              `DELETE FROM student_marks
+               WHERE assessment_config_id = $1
+                 AND assessment_type = 'LAB_SESSION'
+                 AND assessment_number = $2
+                 AND question_id = $3`,
+              [configId, oldPos, oldDate]
+            );
+            if (deleted.rowCount > 0) {
+              console.log(`Lab session ${oldDate} (was pos ${oldPos}) removed from config ${configId}; deleted ${deleted.rowCount} marks`);
+            }
+          } else if (newPos !== oldPos) {
+            positionChanges.push({ date: oldDate, oldPos, newPos });
+          }
+        }
+
+        if (positionChanges.length > 0) {
+          // Single atomic UPDATE with dynamic CASE. PostgreSQL checks unique
+          // constraints at statement end, so simultaneous swaps (e.g. two dates
+          // trading positions) are safe as long as the final state has no
+          // duplicate (assessment_number, question_id) per student.
+          const params = [configId];
+          let p = 2;
+          const caseBranches = [];
+          const whereOrs = [];
+          for (const ch of positionChanges) {
+            const oldPosParam = p++;
+            const dateParam   = p++;
+            const newPosParam = p++;
+            params.push(ch.oldPos, ch.date, ch.newPos);
+            caseBranches.push(`WHEN assessment_number = $${oldPosParam} AND question_id = $${dateParam} THEN $${newPosParam}`);
+            whereOrs.push(`(assessment_number = $${oldPosParam} AND question_id = $${dateParam})`);
+          }
+          const updated = await db.query(
+            `UPDATE student_marks
+             SET assessment_number = CASE ${caseBranches.join(' ')} ELSE assessment_number END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE assessment_config_id = $1
+               AND assessment_type = 'LAB_SESSION'
+               AND (${whereOrs.join(' OR ')})`,
+            params
+          );
+          console.log(`Lab session reorder in config ${configId}: ${positionChanges.length} session(s) moved, ${updated.rowCount} mark rows remapped`);
+        }
+      }
     }
 
     res.status(200).json({
