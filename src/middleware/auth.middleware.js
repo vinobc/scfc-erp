@@ -123,6 +123,10 @@ exports.canManageFacultyAllocations = (req, res, next) => {
 // DSW is identified by username '316690@blr.amity.edu' (staff user)
 exports.isDSWOrAdmin = async (req, res, next) => {
   if (req.userRole === "admin") return next();
+  // CoE office handles exam-related OD (CA-clash OD, re-exam OD). Allowing the
+  // coe role here lets the Controller of Examinations (and delegated Asst.
+  // Registrar) create OD events without needing admin-level access.
+  if (req.userRole === "coe") return next();
   if (req.userRole !== "staff") {
     return res.status(403).json({ message: "Require DSW or Admin Role" });
   }

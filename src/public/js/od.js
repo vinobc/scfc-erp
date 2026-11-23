@@ -14,7 +14,9 @@ function initializeOD() {
   const userRole = (currentUser && currentUser.role) || "";
   const isDSW = currentUser && currentUser.username === "316690@blr.amity.edu";
 
-  if (userRole === "admin" || isDSW) {
+  if (userRole === "admin" || isDSW || userRole === "coe") {
+    // CoE office uses the same event-creation flow as DSW (for CA-clash and
+    // re-exam OD). Backend isDSWOrAdmin middleware already allows coe.
     showDSWInterface();
   } else if (userRole === "faculty" || userRole === "staff" || userRole === "timetable_coordinator") {
     showCoordinatorInterface();
@@ -30,10 +32,26 @@ window.initializeOD = initializeOD;
 
 function showDSWInterface() {
   const odContent = document.getElementById("od-content");
+  const isCoe = currentUser && currentUser.role === "coe";
+
+  // CoE users auto-coordinate their own events (backend fills coordinator from
+  // the user's own employee_id). Hide the picker + widen the event-name field.
+  const coordinatorField = isCoe
+    ? ""
+    : `
+            <div class="col-md-6 position-relative">
+              <label for="od-coordinator-search" class="form-label">Faculty Coordinator</label>
+              <input type="text" id="od-coordinator-search" class="form-control" placeholder="Start typing faculty name or employee ID..." autocomplete="off">
+              <div id="od-coordinator-dropdown" class="list-group position-absolute w-100" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;"></div>
+              <input type="hidden" id="od-coordinator-id">
+              <small id="od-coordinator-selected" class="text-success d-none"></small>
+            </div>`;
+
+  const headerLabel = isCoe ? "OD Management (CoE)" : "OD Management (DSW)";
 
   odContent.innerHTML = `
     <div class="container-fluid">
-      <h4 class="mb-4">OD Management (DSW)</h4>
+      <h4 class="mb-4">${headerLabel}</h4>
 
       <!-- Create Event Form -->
       <div class="card mb-4">
@@ -61,13 +79,7 @@ function showDSWInterface() {
               <label for="od-event-name" class="form-label">Event Name</label>
               <input type="text" id="od-event-name" class="form-control" placeholder="Enter event name">
             </div>
-            <div class="col-md-6 position-relative">
-              <label for="od-coordinator-search" class="form-label">Faculty Coordinator</label>
-              <input type="text" id="od-coordinator-search" class="form-control" placeholder="Start typing faculty name or employee ID..." autocomplete="off">
-              <div id="od-coordinator-dropdown" class="list-group position-absolute w-100" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;"></div>
-              <input type="hidden" id="od-coordinator-id">
-              <small id="od-coordinator-selected" class="text-success d-none"></small>
-            </div>
+            ${coordinatorField}
             <div class="col-md-6 d-flex align-items-end">
               <button class="btn btn-primary" onclick="createODEvent()">
                 <i class="fas fa-plus me-2"></i>Create Event
@@ -106,7 +118,7 @@ function showDSWInterface() {
   `;
 
   populateODAcademicYears();
-  setupCoordinatorAutocomplete();
+  if (!isCoe) setupCoordinatorAutocomplete();
   loadODEvents();
 }
 
@@ -205,12 +217,28 @@ async function createODEvent() {
   const slotYear = document.getElementById("od-slot-year").value;
   const semester = document.getElementById("od-semester").value;
   const eventName = document.getElementById("od-event-name").value.trim();
-  const coordinatorId = document.getElementById("od-coordinator-id").value;
+  const isCoe = currentUser && currentUser.role === "coe";
+  // CoE skips the coordinator picker — backend auto-fills from their own
+  // employee_id. For every other role, coordinator is still required.
+  const coordinatorInput = document.getElementById("od-coordinator-id");
+  const coordinatorId = isCoe ? null : (coordinatorInput ? coordinatorInput.value : "");
 
-  if (!slotYear || !semester || !eventName || !coordinatorId) {
-    showODAlert("Please fill in all fields and select a faculty coordinator", "warning");
+  if (!slotYear || !semester || !eventName || (!isCoe && !coordinatorId)) {
+    showODAlert(
+      isCoe
+        ? "Please fill in all fields"
+        : "Please fill in all fields and select a faculty coordinator",
+      "warning"
+    );
     return;
   }
+
+  const body = {
+    event_name: eventName,
+    slot_year: slotYear,
+    semester_type: semester,
+  };
+  if (!isCoe) body.coordinator_employee_id = parseInt(coordinatorId);
 
   try {
     const response = await fetch(`${window.API_URL}/od/events`, {
@@ -219,12 +247,7 @@ async function createODEvent() {
         "Content-Type": "application/json",
         "x-access-token": localStorage.getItem("token"),
       },
-      body: JSON.stringify({
-        event_name: eventName,
-        slot_year: slotYear,
-        semester_type: semester,
-        coordinator_employee_id: parseInt(coordinatorId),
-      }),
+      body: JSON.stringify(body),
     });
 
     const data = await response.json();
@@ -233,9 +256,12 @@ async function createODEvent() {
     showODAlert("Event created successfully!", "success");
     // Clear form
     document.getElementById("od-event-name").value = "";
-    document.getElementById("od-coordinator-search").value = "";
-    document.getElementById("od-coordinator-id").value = "";
-    document.getElementById("od-coordinator-selected").classList.add("d-none");
+    const coordSearch = document.getElementById("od-coordinator-search");
+    const coordIdInput = document.getElementById("od-coordinator-id");
+    const coordSelected = document.getElementById("od-coordinator-selected");
+    if (coordSearch) coordSearch.value = "";
+    if (coordIdInput) coordIdInput.value = "";
+    if (coordSelected) coordSelected.classList.add("d-none");
     loadODEvents();
   } catch (error) {
     showODAlert(error.message || "Error creating event", "danger");
@@ -289,7 +315,10 @@ async function loadODEvents() {
           <td>${event.coordinator_name} ${event.coordinator_school ? "(" + event.coordinator_school + ")" : ""}</td>
           <td>${event.activity_count || 0}</td>
           <td>
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteODEvent(${event.event_id}, '${event.event_name.replace(/'/g, "\\'")}')">
+            <button class="btn btn-sm btn-outline-primary me-1" title="Manage Activities" onclick="viewEventDetails(${event.event_id})">
+              <i class="fas fa-folder-open"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger" title="Delete Event" onclick="deleteODEvent(${event.event_id}, '${event.event_name.replace(/'/g, "\\'")}')">
               <i class="fas fa-trash"></i>
             </button>
           </td>

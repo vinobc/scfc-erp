@@ -278,9 +278,10 @@ function updateNavigationByRole(userRole) {
       break;
 
     case "coe":
-      // Controller of Examinations sees: Dashboard, Marks (lock controls only),
-      // Download Reports, Courses View, Change Password, Logout
-      [navItems.dashboard, navItems.marks, navItems.downloadReports, navItems.coursesView, navItems.changePassword, navItems.logout].forEach((item) => {
+      // Controller of Examinations sees: Dashboard, OD Management (for CA-clash
+      // / re-exam OD workflow), Marks (lock controls only), Download Reports,
+      // Courses View, Change Password, Logout
+      [navItems.dashboard, navItems.od, navItems.marks, navItems.downloadReports, navItems.coursesView, navItems.changePassword, navItems.logout].forEach((item) => {
         if (item && item.parentElement) {
           item.parentElement.style.display = "block";
         }
