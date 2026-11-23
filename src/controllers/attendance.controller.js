@@ -901,7 +901,12 @@ exports.getStudentAttendanceReport = async (req, res) => {
 
     const course = courseResult.rows[0];
 
-    // Build query with optional slot_name filter
+    // Build query with optional slot_name filter.
+    // Phantom OD filter: a pure OD row (status IS NULL, is_od=TRUE) counts only
+    // if the faculty has also marked a non-OD row for the same class on the
+    // same date — otherwise the class was never conducted and the OD is
+    // "phantom". This mirrors getAttendanceReport (faculty view) so student
+    // and faculty dashboards show the same numbers.
     let attendanceQuery = `
       SELECT
         a.attendance_date,
@@ -918,6 +923,21 @@ exports.getStudentAttendanceReport = async (req, res) => {
         AND a.course_code = $2
         AND a.slot_year = $3
         AND a.semester_type = $4
+        AND (
+          a.status IS NOT NULL
+          OR EXISTS (
+            SELECT 1 FROM attendance a2
+            WHERE a2.course_code     = a.course_code
+              AND a2.slot_year       = a.slot_year
+              AND a2.semester_type   = a.semester_type
+              AND a2.employee_id     = a.employee_id
+              AND a2.venue           = a.venue
+              AND a2.slot_name       = a.slot_name
+              AND a2.slot_time       = a.slot_time
+              AND a2.attendance_date = a.attendance_date
+              AND a2.status IS NOT NULL
+          )
+        )
     `;
     const attendanceParams = [studentId, course_code, slot_year, semester_type];
 
@@ -931,10 +951,13 @@ exports.getStudentAttendanceReport = async (req, res) => {
 
     const attendanceResult = await db.query(attendanceQuery, attendanceParams);
 
-    // Calculate summary statistics
+    // Calculate summary statistics.
+    // Present = status='present' OR is_od=true (matches faculty view).
+    // Absent  = everything else (total − present) → prevents the earlier
+    // double-count where an "absent+OD" row was counted in both buckets.
     const totalClasses = attendanceResult.rows.length;
     const presentClasses = attendanceResult.rows.filter(r => r.status === 'present' || r.is_od === true).length;
-    const absentClasses = attendanceResult.rows.filter(r => r.status === 'absent').length;
+    const absentClasses = totalClasses - presentClasses;
     const attendancePercentage = totalClasses > 0 ? Math.round((presentClasses / totalClasses) * 100 * 100) / 100 : 0;
 
     // Determine component label if slot_name was provided
