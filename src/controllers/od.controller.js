@@ -151,8 +151,25 @@ async function removeAllODRecordsForActivity(activityId) {
 // Create an OD event
 exports.createEvent = async (req, res) => {
   try {
-    const { event_name, slot_year, semester_type, coordinator_employee_id } =
-      req.body;
+    const { event_name, slot_year, semester_type } = req.body;
+    let { coordinator_employee_id } = req.body;
+
+    // CoE self-service: skip the coordinator picker. The coe user IS the
+    // event owner — auto-fill coordinator from their own user record. Requires
+    // a faculty row with matching employee_id (added at onboarding time).
+    if (req.userRole === "coe") {
+      const creator = await db.query(
+        'SELECT employee_id FROM "user" WHERE user_id = $1',
+        [req.userId]
+      );
+      coordinator_employee_id = creator.rows[0]?.employee_id;
+      if (!coordinator_employee_id) {
+        return res.status(400).json({
+          message:
+            "Your user account has no linked employee_id. Contact SCFAS admin to complete your profile before creating OD events.",
+        });
+      }
+    }
 
     if (
       !event_name ||
@@ -227,6 +244,13 @@ exports.getEvents = async (req, res) => {
       }
       conditions.push(`e.coordinator_employee_id = $${params.length + 1}`);
       params.push(userResult.rows[0].employee_id);
+    }
+
+    // CoE users only see events they themselves created. This matches the
+    // self-service model (they create + manage, no cross-visibility).
+    if (req.userRole === "coe") {
+      conditions.push(`e.created_by = $${params.length + 1}`);
+      params.push(req.userId);
     }
 
     if (slot_year) {
